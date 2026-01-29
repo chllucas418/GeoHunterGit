@@ -1,8 +1,5 @@
 import type { Route } from "./+types/home";
 import { Link } from "react-router";
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs } from "firebase/firestore/lite";
-import { getFirebaseConfig } from "~/lib/config.server";
 import type { Location } from "~/types/shared";
 
 export function meta({ }: Route.MetaArgs) {
@@ -14,17 +11,16 @@ export function meta({ }: Route.MetaArgs) {
 
 export async function loader({ context }: Route.LoaderArgs) {
   const env = context.cloudflare.env as any;
-  const FIREBASE_CONFIG = getFirebaseConfig(env);
+  const db = env.DB as D1Database;
 
-  const app = initializeApp(FIREBASE_CONFIG);
-  const db = getFirestore(app);
+  const { results } = await db.prepare("SELECT * FROM locations").all<any>();
 
-  const locationsCol = collection(db, "locations");
-  const snapshot = await getDocs(locationsCol);
-
-  const locations = snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
+  const locations = results.map(loc => ({
+    ...loc,
+    verifiedByGemini: !!loc.verified_by_gemini,
+    difficultyRating: loc.difficulty_rating,
+    qualityScore: loc.quality_score,
+    imageUrl: loc.image_url,
   })) as Location[];
 
   return { locations };

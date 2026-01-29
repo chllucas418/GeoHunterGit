@@ -1,36 +1,34 @@
 import { useRef, useState, useEffect } from "react";
-import type { Route } from "./+types/game.$locationId"; // RR7 Typegen
+import type { Route } from "./+types/game.$locationId";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc } from "firebase/firestore/lite";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
-import { getFirebaseConfig } from "~/lib/config.server";
-import type { BoxCoordinates, Location } from "~/types/shared"; // Import shared types
+import type { BoxCoordinates, Location } from "~/types/shared";
 
 // Loader to fetch location
 export async function loader({ params, context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as any;
-    const FIREBASE_CONFIG = getFirebaseConfig(env);
-    const MAPS_API_KEY = env.GOOGLE_MAPS_API_KEY; // Pass to client
+    const db = env.DB as D1Database;
+    const MAPS_API_KEY = env.GOOGLE_MAPS_API_KEY;
 
-    const app = initializeApp(FIREBASE_CONFIG);
-    const db = getFirestore(app);
+    const locationId = params.locationId;
+    const loc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(locationId).first<any>();
 
-    const locRef = doc(db, "locations", params.locationId as string);
-    const snap = await getDoc(locRef);
-
-    if (!snap.exists()) {
+    if (!loc) {
         throw new Response("Location Not Found", { status: 404 });
     }
 
-    // Serialize data (Firestore timestamps etc might need conversion)
-    return {
-        location: { id: snap.id, ...snap.data() } as Location,
-        mapsApiKey: MAPS_API_KEY,
-        firebaseConfig: FIREBASE_CONFIG
+    const location: Location = {
+        id: loc.id,
+        imageUrl: loc.image_url,
+        geoPoint: { lat: loc.lat, lng: loc.lng },
+        difficultyRating: loc.difficulty_rating,
+        qualityScore: loc.quality_score,
+        verifiedByGemini: !!loc.verified_by_gemini
     };
+
+    return { location, mapsApiKey: MAPS_API_KEY };
 }
 
 export default function GameRoute({ loaderData }: Route.ComponentProps) {
@@ -54,7 +52,6 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         });
 
         const initMap = async () => {
-            // Functional importLibrary approach
             const { Map } = await importLibrary("maps") as google.maps.MapsLibrary;
             const { Marker } = await importLibrary("marker") as google.maps.MarkerLibrary;
 
@@ -95,9 +92,8 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const handleSubmit = () => {
         if (!guess) return;
 
-        // Optimistic UI or wait?
         const formData = new FormData();
-        formData.append("userId", "test-user-uid"); // TODO: Real Auth
+        formData.append("userId", "test-user-uid"); // TODO: Real Auth Integration
         formData.append("locationId", location.id);
         formData.append("lat", guess.lat.toString());
         formData.append("lng", guess.lng.toString());
@@ -108,7 +104,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         fetcher.submit(formData, { method: "post", action: "/api/submit-turn" });
     };
 
-    const result = fetcher.data as any; // Typed response from action
+    const result = fetcher.data as any;
 
     return (
         <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-slate-900 text-slate-50">
@@ -129,20 +125,25 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         </h2>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <p className="text-slate-400 uppercase text-xs">Distance Score</p>
-                                <p className="text-xl">{Math.round(result.score - (result.aiFeedback?.validity > 0.7 ? 1000 : 0))}</p>
+                                <p className="text-slate-400 uppercase text-xs">Score</p>
+                                <p className="text-xl font-bold text-blue-400">{result.score}</p>
                             </div>
                             <div>
-                                <p className="text-slate-400 uppercase text-xs">AI Bonus</p>
-                                <p className="text-xl text-yellow-400">+{result.aiFeedback?.validity > 0.7 ? 1000 : 0}</p>
+                                <p className="text-slate-400 uppercase text-xs">Distance</p>
+                                <p className="text-xl">{Math.round(result.distance)}m</p>
                             </div>
                         </div>
                         {result.aiFeedback && (
                             <div className="mt-2 text-sm bg-slate-800 p-2 rounded border border-slate-700">
                                 <span className="text-blue-400 font-bold">Gemini: </span>
-                                {result.aiFeedback.explanation || result.aiFeedback.error}
+                                {result.aiFeedback.comment || result.aiFeedback.error}
                             </div>
                         )}
+                        <div className="mt-4">
+                            <Link to="/" className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1">
+                                ← Back to Discovery
+                            </Link>
+                        </div>
                     </div>
                 )}
             </div>
@@ -152,15 +153,17 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 <div ref={mapRef} className="w-full h-full" />
 
                 {/* Controls */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-64">
-                    <button
-                        onClick={handleSubmit}
-                        disabled={!guess || fetcher.state !== "idle" || !!result}
-                        className="w-full py-3 bg-[#4285F4] hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-full shadow-lg transition-transform active:scale-95"
-                    >
-                        {fetcher.state === "submitting" ? "Verifying..." : "Make Guess"}
-                    </button>
-                </div>
+                {!result && (
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-64">
+                        <button
+                            onClick={handleSubmit}
+                            disabled={!guess || fetcher.state !== "idle"}
+                            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-full shadow-lg transition-transform active:scale-95"
+                        >
+                            {fetcher.state === "submitting" ? "Verifying..." : "Make Guess"}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

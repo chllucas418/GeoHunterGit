@@ -15,7 +15,6 @@
 		"@google/generative-ai": "^0.24.1",
 		"@googlemaps/js-api-loader": "^2.0.2",
 		"clsx": "^2.1.1",
-		"firebase": "^12.8.0",
 		"isbot": "^5.1.31",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
