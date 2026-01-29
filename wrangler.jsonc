@@ -9,8 +9,8 @@
 	"main": "./workers/app.ts",
 	"vars": {
 		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-		"GEMINI_API_KEY": "",
-		"GOOGLE_MAPS_API_KEY": ""
+		"GEMINI_API_KEY": "<REDACTED_DRIVE_KEY>",
+		"GOOGLE_MAPS_API_KEY": "<REDACTED_MAPS_KEY>"
 	},
 	"d1_databases": [
 		{

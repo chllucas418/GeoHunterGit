@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import type { Route } from "./+types/game.$locationId";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, Link } from "react-router";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import type { BoxCoordinates, Location } from "~/types/shared";
