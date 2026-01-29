@@ -9,9 +9,9 @@
 	"main": "./workers/app.ts",
 	"vars": {
 		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-		"GEMINI_API_KEY": "",
-		"GOOGLE_MAPS_API_KEY": "",
-		"FIREBASE_CONFIG": ""
+		"GEMINI_API_KEY": "<REDACTED_DRIVE_KEY>",
+		"GOOGLE_MAPS_API_KEY": "<REDACTED_MAPS_KEY>",
+		"FIREBASE_CONFIG": "{"apiKey":"AIzaSyBcRGYIlrQUcjWq-V5lUcF1TlxTby202tg","authDomain":"geohunter-9321e.firebaseapp.com","projectId":"geohunter-9321e","storageBucket":"geohunter-9321e.firebasestorage.app","messagingSenderId":"594097275047","appId":"1:594097275047:web:3b61c253719611eb6b5b82","measurementId":"G-V06ZXXWP61"}"
 	},
 	"observability": {
 		"enabled": true
