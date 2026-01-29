@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, updateDoc, setDoc, increment, collection, addDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, updateDoc, setDoc, increment, collection, addDoc } from "firebase/firestore/lite";
 import { checkEvidenceWithGemini } from "~/lib/gemini.server";
 
 // Haversine Formula

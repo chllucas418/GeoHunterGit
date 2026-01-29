@@ -3,7 +3,7 @@ import type { Route } from "./+types/game.$locationId"; // RR7 Typegen
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc } from "firebase/firestore/lite";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import type { BoxCoordinates, Location } from "~/types/shared"; // Import shared types
