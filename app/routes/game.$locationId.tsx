@@ -6,12 +6,13 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc } from "firebase/firestore/lite";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
+import { getFirebaseConfig } from "~/lib/config.server";
 import type { BoxCoordinates, Location } from "~/types/shared"; // Import shared types
 
 // Loader to fetch location
 export async function loader({ params, context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as any;
-    const FIREBASE_CONFIG = JSON.parse(env.FIREBASE_CONFIG || '{}');
+    const FIREBASE_CONFIG = getFirebaseConfig(env);
     const MAPS_API_KEY = env.GOOGLE_MAPS_API_KEY; // Pass to client
 
     const app = initializeApp(FIREBASE_CONFIG);

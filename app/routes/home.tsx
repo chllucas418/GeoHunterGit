@@ -2,6 +2,7 @@ import type { Route } from "./+types/home";
 import { Link } from "react-router";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, getDocs } from "firebase/firestore/lite";
+import { getFirebaseConfig } from "~/lib/config.server";
 import type { Location } from "~/types/shared";
 
 export function meta({ }: Route.MetaArgs) {
@@ -13,7 +14,7 @@ export function meta({ }: Route.MetaArgs) {
 
 export async function loader({ context }: Route.LoaderArgs) {
   const env = context.cloudflare.env as any;
-  const FIREBASE_CONFIG = JSON.parse(env.FIREBASE_CONFIG || '{}');
+  const FIREBASE_CONFIG = getFirebaseConfig(env);
 
   const app = initializeApp(FIREBASE_CONFIG);
   const db = getFirestore(app);

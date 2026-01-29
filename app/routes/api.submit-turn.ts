@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, updateDoc, setDoc, increment, collection, addDoc } from "firebase/firestore/lite";
+import { getFirebaseConfig } from "~/lib/config.server";
 import { checkEvidenceWithGemini } from "~/lib/gemini.server";
 
 // Haversine Formula
@@ -30,7 +31,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // Environment from Context (Cloudflare)
     const env = context.cloudflare.env as any;
     const GEMINI_API_KEY = env.GEMINI_API_KEY;
-    const FIREBASE_CONFIG = JSON.parse(env.FIREBASE_CONFIG || '{}');
+    const FIREBASE_CONFIG = getFirebaseConfig(env);
 
     // Init Firebase (idempotent usually, but in workers might need check)
     // Note: Firebase JS SDK keeps state. In a worker, it's per-request or reused if hot.
