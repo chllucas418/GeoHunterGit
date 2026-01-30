@@ -1,7 +1,6 @@
-import { useState } from "react";
-import { Form, Link, useActionData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useNavigation, redirect } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
-import { hashPassword } from "~/lib/auth.server";
+import { hashPassword, createSession } from "~/lib/auth.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     const formData = await request.formData();
@@ -30,7 +29,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
             "INSERT INTO users (id, email, password_hash, display_name) VALUES (?, ?, ?, ?)"
         ).bind(userId, email, hashedPassword, displayName).run();
 
-        return { success: true, message: "Account created! Please log in." };
+        const cookie = await createSession(userId);
+        return redirect("/", {
+            headers: {
+                "Set-Cookie": cookie,
+            },
+        });
     } catch (e) {
         console.error("Signup error:", e);
         return { error: "Failed to create account" };

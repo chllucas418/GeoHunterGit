@@ -32,8 +32,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body>
-        {children}
+      <body className="flex flex-col min-h-screen bg-slate-950 text-slate-50">
+        <div className="flex-grow">
+          {children}
+        </div>
+        <footer className="py-8 text-center text-slate-500 text-xs border-t border-slate-900/50">
+          Made with ❤️ by Lucas Cheung
+        </footer>
         <ScrollRestoration />
         <Scripts />
       </body>

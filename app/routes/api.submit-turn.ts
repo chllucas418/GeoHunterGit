@@ -40,9 +40,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const imageUrl = loc.image_url;
     const currentDiff = loc.difficulty_rating || 5;
 
-    // 2. Calculate Score
+    // 2. Calculate Score (Exponential Decay for HK-scale)
     const distance = calculateDistance(userLat, userLng, actualLat, actualLng);
-    let score = Math.max(0, 5000 - Math.round(distance / 100)); // Adjusted scaling for meter-based haversine
+    // 5000 * e^(-distance/2000) -> 2km error is ~1840 points
+    let score = Math.round(5000 * Math.exp(-distance / 2000));
 
     // 3. AI Verification
     let aiBonus = 0;

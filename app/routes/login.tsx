@@ -1,6 +1,6 @@
 import { Form, Link, useActionData, useNavigation, redirect } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
-import { verifyPassword } from "~/lib/auth.server";
+import { verifyPassword, createSession } from "~/lib/auth.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     const formData = await request.formData();
@@ -20,11 +20,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
         return { error: "Invalid email or password" };
     }
 
-    // In a full implementation, we would set a session cookie here.
-    // For this prototype, we'll redirect to home.
-    // TODO: Implement session cookies.
+    const cookie = await createSession(user.id);
 
-    return redirect("/");
+    return redirect("/", {
+        headers: {
+            "Set-Cookie": cookie,
+        },
+    });
 }
 
 export default function Login() {

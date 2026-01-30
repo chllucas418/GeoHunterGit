@@ -1,3 +1,5 @@
+import { createCookieSessionStorage, redirect } from "react-router";
+
 /**
  * Authentication and Encryption Utilities for Cloudflare Workers
  * Uses Web Crypto API for password hashing and session management.
@@ -77,12 +79,45 @@ export async function verifyPassword(password: string, storedHash: string): Prom
 }
 
 /**
- * Simple Session Management using signed JWT-like cookies (stateless)
- * or we could use D1 for sessions. Let's use D1 for simpler logic and better security.
+ * Simple Session Management using signed cookies
  */
+const sessionSecret = "geohunter-secret-key"; // In production, this should be an environment variable
 
-export async function createSession(db: D1Database, userId: string) {
-    const sessionId = crypto.randomUUID();
-    // In a real app, we'd have a sessions table. For now, we'll just sign the userId in a cookie.
-    return sessionId;
+export const sessionStorage = createCookieSessionStorage({
+    cookie: {
+        name: "__session",
+        httpOnly: true,
+        path: "/",
+        sameSite: "lax",
+        secrets: [sessionSecret],
+        secure: true, // Only sends over HTTPS
+    },
+});
+
+export async function createSession(userId: string) {
+    const session = await sessionStorage.getSession();
+    session.set("userId", userId);
+    return await sessionStorage.commitSession(session);
+}
+
+export async function getUserId(request: Request) {
+    const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+    return session.get("userId") as string | undefined;
+}
+
+export async function requireUser(request: Request) {
+    const userId = await getUserId(request);
+    if (!userId) {
+        throw redirect("/login");
+    }
+    return userId;
+}
+
+export async function logout(request: Request) {
+    const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+    return redirect("/login", {
+        headers: {
+            "Set-Cookie": await sessionStorage.destroySession(session),
+        },
+    });
 }
