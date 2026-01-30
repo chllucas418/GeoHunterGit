@@ -45,10 +45,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const imageUrl = loc.image_url;
     const currentDiff = loc.difficulty_rating || 5;
 
-    // 2. Calculate Score (Exponential Decay for HK-scale)
+    // 2. Calculate Score (Linear 20km Slope)
     const distance = calculateDistance(userLat, userLng, actualLat, actualLng);
-    // 5000 * e^(-distance/2000) -> 2km error is ~1840 points
-    let score = Math.round(5000 * Math.exp(-distance / 2000));
+    // 5000 points at 0m, 0 points at 20,000m (20km)
+    let score = Math.max(0, Math.round(5000 * (1 - distance / 20000)));
 
     // 3. AI Verification
     let aiBonus = 0;
@@ -77,11 +77,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // 4. Dynamic Difficulty Adjustment (Non-linear Curve)
     // Baseline score is 2500. Deviations from this adjust the difficulty rating.
-    // The curve uses a power of 1.5 to be more sensitive to significant outliers.
-    const scoreDiff = (2500 - score) / 2500; // -1.0 (perfect) to 1.0 (total miss)
+    // Use the base distance-based score (excluding AI bonus) for difficulty balancing
+    const baseScore = score - aiBonus;
+    const scoreDiff = (2500 - baseScore) / 2500;
     const curveAdjustment = Math.sign(scoreDiff) * Math.pow(Math.abs(scoreDiff), 1.5) * 0.3;
 
     let newDiff = Math.max(1, Math.min(10, currentDiff + curveAdjustment));
+    newDiff = parseFloat(newDiff.toFixed(2));
 
     // 5. Update DB (Batch)
     const sessionId = crypto.randomUUID();
