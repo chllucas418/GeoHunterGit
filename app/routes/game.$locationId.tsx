@@ -42,6 +42,8 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const [selectedBox, setSelectedBox] = useState<BoxCoordinates | null>(null);
     const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
     const markerRef = useRef<google.maps.Marker | null>(null);
+    const actualMarkerRef = useRef<google.maps.Marker | null>(null);
+    const polylineRef = useRef<google.maps.Polyline | null>(null);
 
     // Load Maps
     useEffect(() => {
@@ -90,6 +92,44 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
         initMap();
     }, [mapsApiKey]);
+
+    const result = fetcher.data as any;
+
+    // Handle results visualization
+    useEffect(() => {
+        if (!result || !mapInstance || !guess) return;
+
+        const actualCoord = location.geoPoint;
+
+        // 1. Add Actual Marker (Red)
+        if (!actualMarkerRef.current) {
+            actualMarkerRef.current = new google.maps.Marker({
+                position: actualCoord,
+                map: mapInstance,
+                icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                title: "Actual Location"
+            });
+        }
+
+        // 2. Draw Polyline
+        if (!polylineRef.current) {
+            polylineRef.current = new google.maps.Polyline({
+                path: [guess, actualCoord],
+                geodesic: true,
+                strokeColor: "#3b82f6",
+                strokeOpacity: 0.8,
+                strokeWeight: 4,
+                map: mapInstance
+            });
+        }
+
+        // 3. Zoom to fit
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(guess);
+        bounds.extend(actualCoord);
+        mapInstance.fitBounds(bounds, { top: 100, bottom: 200, left: 100, right: 100 });
+
+    }, [result, mapInstance, guess, location.geoPoint]);
 
     const handleSubmit = () => {
         if (!guess) return;
@@ -141,10 +181,16 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                 <p className="text-xl">{Math.round(result.distance)}m</p>
                             </div>
                         </div>
-                        {result.aiFeedback && (
+                        {fetcher.state !== "idle" && !result && (
+                            <div className="mt-2 text-sm bg-slate-800 p-2 rounded border border-slate-700 animate-pulse">
+                                <span className="text-blue-400 font-bold">Gemini: </span>
+                                Analyzing your evidence...
+                            </div>
+                        )}
+                        {result?.aiFeedback && (
                             <div className="mt-2 text-sm bg-slate-800 p-2 rounded border border-slate-700">
                                 <span className="text-blue-400 font-bold">Gemini: </span>
-                                {result.aiFeedback.comment || result.aiFeedback.error}
+                                {result.aiFeedback.explanation || result.aiFeedback.comment || result.aiFeedback.error || "Analyzing..."}
                             </div>
                         )}
                         <div className="mt-4">

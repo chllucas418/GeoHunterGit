@@ -36,8 +36,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     try {
         await db.prepare(
-            "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, verified_by_gemini) VALUES (?, ?, ?, ?, ?, ?)"
-        ).bind(id, imageUrl, lat, lng, difficulty, 1).run(); // Auto-verify if developer adds it?
+            "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ).bind(id, imageUrl, lat, lng, difficulty, 100, 1).run(); // Auto-verify and 100 quality for developer adds
 
         // In a real app we'd store the evidence box too. For now, it's captured.
         return { success: true, message: `Location added! (ID: ${id})` };
@@ -54,6 +54,7 @@ export default function AddLocation() {
     const isSubmitting = navigation.state === "submitting";
 
     const mapRef = useRef<HTMLDivElement>(null);
+    const markerRef = useRef<any>(null);
     const [marker, setMarker] = useState<{ lat: number; lng: number } | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string>("");
     const [base64, setBase64] = useState<string>("");
@@ -86,6 +87,16 @@ export default function AddLocation() {
                         const lat = e.latLng.lat();
                         const lng = e.latLng.lng();
                         setMarker({ lat, lng });
+
+                        if (markerRef.current) {
+                            markerRef.current.position = e.latLng;
+                        } else {
+                            markerRef.current = new Marker({
+                                position: e.latLng,
+                                map: map,
+                                title: "Target Location",
+                            });
+                        }
                     }
                 });
             }
@@ -103,14 +114,21 @@ export default function AddLocation() {
                             Developer Protocol: Add Location
                         </h1>
                     </div>
-                    {previewUrl && (
-                        <button
-                            onClick={() => setEvidenceStep(!evidenceStep)}
-                            className="px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition-all"
-                        >
-                            {evidenceStep ? "Edit Details" : "Mark Evidence area"}
-                        </button>
-                    )}
+                    <div className="flex items-center gap-4">
+                        {selectedBox && (
+                            <span className="text-green-400 text-sm font-bold flex items-center gap-1">
+                                Evidence Marked ✅
+                            </span>
+                        )}
+                        {previewUrl && (
+                            <button
+                                onClick={() => setEvidenceStep(!evidenceStep)}
+                                className="px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition-all"
+                            >
+                                {evidenceStep ? "Edit Details" : "Mark Evidence area"}
+                            </button>
+                        )}
+                    </div>
                 </header>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
