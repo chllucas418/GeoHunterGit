@@ -56,7 +56,7 @@ export async function checkEvidenceWithGemini(
     // Using a likely valid model string. If 'gemini-3-flash-preview' is invalid, this will fail.
     // I will use 'gemini-2.0-flash-exp' as a proxy if I suspect 3 doesn't exist, OR just use their string.
     // I'll use their string.
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");

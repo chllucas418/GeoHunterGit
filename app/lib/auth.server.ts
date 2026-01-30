@@ -5,6 +5,14 @@ import { createCookieSessionStorage, redirect } from "react-router";
  * Uses Web Crypto API for password hashing and session management.
  */
 
+export function validatePassword(password: string): { valid: boolean; error?: string } {
+    if (password.length < 8) return { valid: false, error: "Password must be at least 8 characters long." };
+    if (!/[A-Z]/.test(password)) return { valid: false, error: "Password must contain at least one uppercase letter." };
+    if (!/[a-z]/.test(password)) return { valid: false, error: "Password must contain at least one lowercase letter." };
+    if (!/[0-9]/.test(password)) return { valid: false, error: "Password must contain at least one number." };
+    return { valid: true };
+}
+
 const ENCODER = new TextEncoder();
 
 /**
@@ -94,15 +102,25 @@ export const sessionStorage = createCookieSessionStorage({
     },
 });
 
-export async function createSession(userId: string) {
+export async function createSession(userId: string, isDeveloper: boolean = false) {
     const session = await sessionStorage.getSession();
     session.set("userId", userId);
+    session.set("isDeveloper", isDeveloper);
     return await sessionStorage.commitSession(session);
 }
 
+export async function getSession(request: Request) {
+    return await sessionStorage.getSession(request.headers.get("Cookie"));
+}
+
 export async function getUserId(request: Request) {
-    const session = await sessionStorage.getSession(request.headers.get("Cookie"));
+    const session = await getSession(request);
     return session.get("userId") as string | undefined;
+}
+
+export async function isDeveloper(request: Request) {
+    const session = await getSession(request);
+    return !!session.get("isDeveloper");
 }
 
 export async function requireUser(request: Request) {
@@ -113,9 +131,17 @@ export async function requireUser(request: Request) {
     return userId;
 }
 
+export async function requireDeveloper(request: Request) {
+    const session = await getSession(request);
+    if (!session.get("isDeveloper")) {
+        throw redirect("/login?developer=true");
+    }
+    return true;
+}
+
 export async function logout(request: Request) {
-    const session = await sessionStorage.getSession(request.headers.get("Cookie"));
-    return redirect("/login", {
+    const session = await getSession(request);
+    return redirect("/", {
         headers: {
             "Set-Cookie": await sessionStorage.destroySession(session),
         },

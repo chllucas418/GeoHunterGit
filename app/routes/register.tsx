@@ -1,6 +1,4 @@
-import { Form, Link, useActionData, useNavigation, redirect } from "react-router";
-import type { ActionFunctionArgs } from "react-router";
-import { hashPassword, createSession } from "~/lib/auth.server";
+import { hashPassword, createSession, validatePassword } from "~/lib/auth.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     const formData = await request.formData();
@@ -10,6 +8,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (!email || !password) {
         return { error: "Email and password are required" };
+    }
+
+    const { valid, error } = validatePassword(password);
+    if (!valid) {
+        return { error };
     }
 
     const env = context.cloudflare.env as any;
@@ -49,8 +52,11 @@ export default function Register() {
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
             <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
-                <header className="mb-8">
-                    <h1 className="text-3xl font-extrabold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
+                <header className="mb-8 relative">
+                    <Link to="/" className="absolute left-0 top-0 text-slate-500 hover:text-white text-xs transition-colors">
+                        ← Home
+                    </Link>
+                    <h1 className="text-3xl font-extrabold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent mt-8">
                         Join GeoHunter
                     </h1>
                     <p className="text-slate-500 mt-2">Create your account to start hunting.</p>

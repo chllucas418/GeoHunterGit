@@ -1,7 +1,4 @@
-import type { Route } from "./+types/home";
-import { Link, Form } from "react-router";
-import type { Location } from "~/types/shared";
-import { getUserId } from "~/lib/auth.server";
+import { getUserId, isDeveloper } from "~/lib/auth.server";
 
 export function meta({ }: Route.MetaArgs) {
   return [
@@ -14,6 +11,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env as any;
   const db = env.DB as D1Database;
   const userId = await getUserId(request);
+  const dev = await isDeveloper(request);
 
   const { results } = await db.prepare("SELECT * FROM locations").all<any>();
 
@@ -25,11 +23,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     imageUrl: loc.image_url,
   })) as Location[];
 
-  return { locations, isLoggedIn: !!userId };
+  return { locations, isLoggedIn: !!userId, isDeveloper: dev };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { locations, isLoggedIn } = loaderData;
+  const { locations, isLoggedIn, isDeveloper } = loaderData;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 p-8">
@@ -44,12 +42,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <nav className="flex items-center gap-4">
           {isLoggedIn ? (
             <>
-              <Link
-                to="/admin/add-location"
-                className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm font-medium hover:border-blue-500/50 transition-all text-blue-400"
-              >
-                Developer Tool
-              </Link>
+              {isDeveloper && (
+                <Link
+                  to="/admin/add-location"
+                  className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm font-medium hover:border-blue-500/50 transition-all text-blue-400"
+                >
+                  Developer Tool
+                </Link>
+              )}
               <Form method="post" action="/logout">
                 <button
                   type="submit"
@@ -123,6 +123,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           ))
         )}
       </main>
+
+      <footer className="mt-12 text-center opacity-50 text-xs">
+        <Link to="/privacy" className="hover:underline">Privacy Policy</Link>
+      </footer>
     </div>
   );
 }

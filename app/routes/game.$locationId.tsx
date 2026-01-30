@@ -4,10 +4,12 @@ import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher, Link } from "react-router";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
+import { requireUser } from "~/lib/auth.server";
 import type { BoxCoordinates, Location } from "~/types/shared";
 
 // Loader to fetch location
-export async function loader({ params, context }: LoaderFunctionArgs) {
+export async function loader({ params, request, context }: LoaderFunctionArgs) {
+    await requireUser(request);
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
     const MAPS_API_KEY = env.GOOGLE_MAPS_API_KEY;
@@ -93,7 +95,6 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         if (!guess) return;
 
         const formData = new FormData();
-        formData.append("userId", "test-user-uid"); // TODO: Real Auth Integration
         formData.append("locationId", location.id);
         formData.append("lat", guess.lat.toString());
         formData.append("lng", guess.lng.toString());
@@ -108,6 +109,13 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
     return (
         <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-slate-900 text-slate-50">
+            {/* Back Button */}
+            <Link
+                to="/"
+                className="absolute top-4 left-4 z-50 bg-slate-900/50 backdrop-blur px-3 py-2 rounded-full border border-slate-700 hover:bg-slate-800 transition-all text-xs font-bold"
+            >
+                ← Back
+            </Link>
             {/* Left: View (Evidence) */}
             <div className="flex-1 relative border-r border-slate-700">
                 <div className="absolute inset-0">

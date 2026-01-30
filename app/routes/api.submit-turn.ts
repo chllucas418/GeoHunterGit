@@ -1,5 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
-import { checkEvidenceWithGemini } from "~/lib/gemini.server";
+import { getUserId } from "~/lib/auth.server";
 
 // Haversine Formula
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -18,8 +17,12 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
+    const userId = await getUserId(request);
+    if (!userId) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const formData = await request.formData();
-    const userId = formData.get("userId") as string;
     const locationId = formData.get("locationId") as string;
     const userLat = parseFloat(formData.get("lat") as string);
     const userLng = parseFloat(formData.get("lng") as string);
