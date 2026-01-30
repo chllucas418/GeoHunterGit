@@ -5,6 +5,9 @@ import { useState } from "react";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
     const userId = await requireUser(request);
+    if (userId === "developer-admin") {
+        throw new Response(null, { status: 302, headers: { Location: "/" } });
+    }
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 

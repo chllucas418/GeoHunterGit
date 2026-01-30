@@ -72,10 +72,12 @@ export async function analyzeImageQuality(
     Analyze this image for a geography identification game. 
     1. Is the image clear enough to identify landmarks or locations?
     2. Suggest a "quality_score" from 0 to 100 based on clarity and uniqueness of the location.
-    3. Provide a brief "precontext" description of what you see.
+    3. Suggest a "difficulty_rating" from 1 to 10 based on how hard it would be to find this exact spot (1 is trivial/famous landmark, 10 is very generic street/texture).
+    4. Provide a brief "precontext" description of what you see.
     
     Return a JSON object with:
     - "quality_score": number
+    - "difficulty_rating": number
     - "precontext": string
     - "recommendation": string (e.g., "Ready for deployment" or "Too blurry")
   `;

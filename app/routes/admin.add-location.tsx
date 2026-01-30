@@ -103,6 +103,9 @@ export default function AddLocation() {
         if (analysis?.quality_score) {
             setQualityScore(analysis.quality_score);
         }
+        if (analysis?.difficulty_rating) {
+            setDifficulty(analysis.difficulty_rating);
+        }
     }, [analysis]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

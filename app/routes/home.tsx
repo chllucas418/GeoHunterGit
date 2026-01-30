@@ -51,12 +51,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </Link>
           {isLoggedIn ? (
             <>
-              <Link
-                to="/profile"
-                className="px-4 py-2 text-sm text-indigo-400 hover:text-indigo-300 transition-colors font-bold"
-              >
-                Profile
-              </Link>
+              {!isDeveloper && (
+                <Link
+                  to="/profile"
+                  className="px-4 py-2 text-sm text-indigo-400 hover:text-indigo-300 transition-colors font-bold"
+                >
+                  Profile
+                </Link>
+              )}
               {isDeveloper && (
                 <div className="flex gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
                   <Link
@@ -153,9 +155,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         )}
       </main>
 
-      <footer className="mt-12 text-center opacity-50 text-xs">
-        <Link to="/privacy" className="hover:underline">Privacy Policy</Link>
-      </footer>
-    </div>
+    </div >
   );
 }
