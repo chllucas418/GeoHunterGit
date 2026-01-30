@@ -41,7 +41,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function AdminLocations() {
-    const { locations } = useLoaderData<typeof loader>();
+    const { locations } = useLoaderData() as any;
     const fetcher = useFetcher();
 
     return (

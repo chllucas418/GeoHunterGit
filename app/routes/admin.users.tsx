@@ -39,7 +39,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function AdminUsers() {
-    const { users } = useLoaderData<typeof loader>();
+    const { users } = useLoaderData() as any;
     const fetcher = useFetcher();
 
     return (

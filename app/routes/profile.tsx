@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { getUserId, requireUser } from "~/lib/auth.server";
+import { requireUser } from "~/lib/auth.server";
 import { useLoaderData, Link } from "react-router";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
@@ -28,7 +28,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 }
 
 export default function Profile() {
-    const { user, rank, recentGames } = useLoaderData<typeof loader>();
+    const { user, rank, recentGames } = useLoaderData() as any;
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-50 p-8">

@@ -58,7 +58,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function AddLocation() {
-    const { mapsApiKey } = useLoaderData<typeof loader>();
+    const { mapsApiKey } = useLoaderData() as any;
     const actionData = useActionData() as any;
     const fetcher = useFetcher() as any;
     const navigation = useNavigation();

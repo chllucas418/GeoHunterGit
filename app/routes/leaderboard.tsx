@@ -12,7 +12,7 @@ export async function loader({ context }: LoaderFunctionArgs) {
 }
 
 export default function Leaderboard() {
-    const { topElo, topAccuracy } = useLoaderData<typeof loader>();
+    const { topElo, topAccuracy } = useLoaderData() as any;
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-50 p-8">
