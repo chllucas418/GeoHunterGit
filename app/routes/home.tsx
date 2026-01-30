@@ -1,6 +1,7 @@
 import type { Route } from "./+types/home";
-import { Link } from "react-router";
+import { Link, Form } from "react-router";
 import type { Location } from "~/types/shared";
+import { getUserId } from "~/lib/auth.server";
 
 export function meta({ }: Route.MetaArgs) {
   return [
@@ -9,9 +10,10 @@ export function meta({ }: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
   const env = context.cloudflare.env as any;
   const db = env.DB as D1Database;
+  const userId = await getUserId(request);
 
   const { results } = await db.prepare("SELECT * FROM locations").all<any>();
 
@@ -23,19 +25,57 @@ export async function loader({ context }: Route.LoaderArgs) {
     imageUrl: loc.image_url,
   })) as Location[];
 
-  return { locations };
+  return { locations, isLoggedIn: !!userId };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { locations } = loaderData;
+  const { locations, isLoggedIn } = loaderData;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 p-8">
-      <header className="max-w-7xl mx-auto mb-12">
-        <h1 className="text-4xl font-extrabold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-          GeoHunter Discovery
-        </h1>
-        <p className="text-slate-400 mt-2">Select a location and hunt for visual evidence.</p>
+      <header className="max-w-7xl mx-auto mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-extrabold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
+            GeoHunter Discovery
+          </h1>
+          <p className="text-slate-400 mt-2">Select a location and hunt for visual evidence.</p>
+        </div>
+
+        <nav className="flex items-center gap-4">
+          {isLoggedIn ? (
+            <>
+              <Link
+                to="/admin/add-location"
+                className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm font-medium hover:border-blue-500/50 transition-all text-blue-400"
+              >
+                Developer Tool
+              </Link>
+              <Form method="post" action="/logout">
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm text-slate-500 hover:text-white transition-colors"
+                >
+                  Log Out
+                </button>
+              </Form>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/login"
+                className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+              >
+                Log In
+              </Link>
+              <Link
+                to="/register"
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-blue-900/20"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
+        </nav>
       </header>
 
       <main className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
