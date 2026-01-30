@@ -1,3 +1,5 @@
+import type { ActionFunctionArgs } from "react-router";
+import { checkEvidenceWithGemini } from "~/lib/gemini.server";
 import { getUserId } from "~/lib/auth.server";
 
 // Haversine Formula
