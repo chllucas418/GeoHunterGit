@@ -145,8 +145,6 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         fetcher.submit(formData, { method: "post", action: "/api/submit-turn" });
     };
 
-    const result = fetcher.data as any;
-
     return (
         <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-slate-900 text-slate-50">
             {/* Back Button */}
