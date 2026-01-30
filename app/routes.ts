@@ -8,5 +8,9 @@ export default [
     route("api/submit-turn", "routes/api.submit-turn.ts"),
     route("game/:locationId", "routes/game.$locationId.tsx"),
     route("admin/add-location", "routes/admin.add-location.tsx"),
+    route("admin/users", "routes/admin.users.tsx"),
+    route("admin/locations", "routes/admin.locations.tsx"),
+    route("profile", "routes/profile.tsx"),
+    route("leaderboard", "routes/leaderboard.tsx"),
     route("privacy", "routes/privacy.tsx")
 ] satisfies RouteConfig;

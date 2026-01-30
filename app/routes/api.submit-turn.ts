@@ -75,12 +75,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
         }
     }
 
-    // 4. Dynamic Difficulty Adjustment
+    // 4. Dynamic Difficulty Adjustment (Decimal)
     let newDiff = currentDiff;
-    if (score > 4500 && currentDiff < 5) {
-        newDiff++;
-    } else if (score < 1000 && currentDiff > 5) {
-        newDiff--;
+    if (score > 4500) {
+        newDiff = Math.min(10, newDiff + 0.1);
+    } else if (score < 1000) {
+        newDiff = Math.max(1, newDiff - 0.1);
     }
 
     // 5. Update DB (Batch)

@@ -1,10 +1,11 @@
 import { useRef, useState, useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useNavigation, useLoaderData, Link } from "react-router";
+import { Form, useActionData, useNavigation, useLoaderData, Link, useFetcher } from "react-router";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import type { BoxCoordinates } from "~/types/shared";
 import { requireDeveloper } from "~/lib/auth.server";
+import { analyzeImageQuality } from "~/lib/gemini.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
     await requireDeveloper(request);
@@ -15,16 +16,26 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 export async function action({ request, context }: ActionFunctionArgs) {
     await requireDeveloper(request);
     const formData = await request.formData();
+    const intent = formData.get("intent");
 
-    // Support either direct URL or Base64 upload
-    let imageUrl = formData.get("imageUrl") as string;
-    const base64Image = formData.get("base64Image") as string;
-    if (base64Image) imageUrl = base64Image;
+    let imageUrl = (formData.get("imageUrl") || formData.get("base64Image")) as string;
+
+    if (intent === "analyze") {
+        const env = context.cloudflare.env as any;
+        try {
+            const analysis = await analyzeImageQuality(env.GEMINI_API_KEY, imageUrl);
+            return { analysis };
+        } catch (e) {
+            console.error("AI Analysis error:", e);
+            return { error: "AI analysis failed" };
+        }
+    }
 
     const lat = parseFloat(formData.get("lat") as string);
     const lng = parseFloat(formData.get("lng") as string);
-    const difficulty = parseInt(formData.get("difficulty") as string);
-    const evidenceJson = formData.get("evidence") as string; // marked area
+    const difficulty = parseFloat(formData.get("difficulty") as string);
+    const qualityScore = parseInt(formData.get("qualityScore") as string) || 100;
+    const evidenceJson = formData.get("evidence") as string;
 
     if (!imageUrl || isNaN(lat) || isNaN(lng)) {
         return { error: "Image and coordinates are required" };
@@ -37,9 +48,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
     try {
         await db.prepare(
             "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).bind(id, imageUrl, lat, lng, difficulty, 100, 1).run(); // Auto-verify and 100 quality for developer adds
+        ).bind(id, imageUrl, lat, lng, difficulty, qualityScore, 1).run();
 
-        // In a real app we'd store the evidence box too. For now, it's captured.
         return { success: true, message: `Location added! (ID: ${id})` };
     } catch (e) {
         console.error("Add location error:", e);
@@ -50,8 +60,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
 export default function AddLocation() {
     const { mapsApiKey } = useLoaderData<typeof loader>();
     const actionData = useActionData() as any;
+    const fetcher = useFetcher() as any;
     const navigation = useNavigation();
-    const isSubmitting = navigation.state === "submitting";
+
+    const isSubmitting = navigation.state === "submitting" && navigation.formData?.get("intent") === "deploy";
+    const isAnalyzing = fetcher.state === "submitting" || (fetcher.state === "loading" && fetcher.formData?.get("intent") === "analyze");
+    const analysis = fetcher.data?.analysis;
 
     const mapRef = useRef<HTMLDivElement>(null);
     const markerRef = useRef<any>(null);
@@ -145,7 +159,34 @@ export default function AddLocation() {
                                     <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" id="file-upload" />
                                     <label htmlFor="file-upload" className="cursor-pointer">
                                         {previewUrl ? (
-                                            <img src={previewUrl} className="max-h-48 mx-auto rounded-lg shadow-lg" alt="Preview" />
+                                            <div className="space-y-4">
+                                                <img src={previewUrl} className="max-h-48 mx-auto rounded-lg shadow-lg" alt="Preview" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const fd = new FormData();
+                                                        fd.append("intent", "analyze");
+                                                        fd.append("base64Image", base64);
+                                                        fetcher.submit(fd, { method: "post" });
+                                                    }}
+                                                    disabled={isAnalyzing}
+                                                    className="px-4 py-2 bg-blue-600/20 text-blue-400 rounded-lg border border-blue-500/30 text-xs hover:bg-blue-600/30 transition-all"
+                                                >
+                                                    {isAnalyzing ? "AI Analyzing..." : "✨ AI Pre-Check"}
+                                                </button>
+                                                {analysis && (
+                                                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 text-left space-y-2 animate-in fade-in slide-in-from-top-2">
+                                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">AI Insight</p>
+                                                        <p className="text-sm text-slate-200">{analysis.precontext}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px] font-bold">
+                                                                Score: {analysis.quality_score}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-500">{analysis.recommendation}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         ) : (
                                             <div className="py-8">
                                                 <p className="text-slate-500">Click to upload image</p>
@@ -161,9 +202,33 @@ export default function AddLocation() {
                             </div>
 
                             <div className="space-y-4">
-                                <label className="block text-sm font-medium text-slate-400">Step 3: Set Difficulty</label>
-                                <input name="difficulty" type="range" min="1" max="10" defaultValue="5" className="w-full accent-blue-500" />
+                                <label className="block text-sm font-medium text-slate-400">Step 3: Quality & Difficulty</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] uppercase text-slate-500 font-bold">Quality (0-100)</p>
+                                        <input
+                                            name="qualityScore"
+                                            type="number"
+                                            defaultValue={analysis?.quality_score ?? 100}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] uppercase text-slate-500 font-bold">Difficulty ({marker ? "Selectable" : "Locked"})</p>
+                                        <input
+                                            name="difficulty"
+                                            type="number"
+                                            step="0.1"
+                                            min="1"
+                                            max="10"
+                                            defaultValue="5"
+                                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
                             </div>
+
+                            <input type="hidden" name="intent" value="deploy" />
 
                             {actionData?.error && <p className="text-red-400 text-sm">{actionData.error}</p>}
                             {actionData?.success && <p className="text-green-400 text-sm">{actionData.message}</p>}

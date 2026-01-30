@@ -43,20 +43,46 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
 
         <nav className="flex items-center gap-4">
+          <Link
+            to="/leaderboard"
+            className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+          >
+            Leaderboard
+          </Link>
           {isLoggedIn ? (
             <>
+              <Link
+                to="/profile"
+                className="px-4 py-2 text-sm text-indigo-400 hover:text-indigo-300 transition-colors font-bold"
+              >
+                Profile
+              </Link>
               {isDeveloper && (
-                <Link
-                  to="/admin/add-location"
-                  className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm font-medium hover:border-blue-500/50 transition-all text-blue-400"
-                >
-                  Developer Tool
-                </Link>
+                <div className="flex gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
+                  <Link
+                    to="/admin/add-location"
+                    className="px-3 py-1.5 text-xs font-bold text-blue-400 hover:bg-slate-800 rounded-lg transition-all"
+                  >
+                    + Add
+                  </Link>
+                  <Link
+                    to="/admin/users"
+                    className="px-3 py-1.5 text-xs font-bold text-slate-400 hover:bg-slate-800 rounded-lg transition-all"
+                  >
+                    Users
+                  </Link>
+                  <Link
+                    to="/admin/locations"
+                    className="px-3 py-1.5 text-xs font-bold text-slate-400 hover:bg-slate-800 rounded-lg transition-all"
+                  >
+                    Manage
+                  </Link>
+                </div>
               )}
               <Form method="post" action="/logout">
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm text-slate-500 hover:text-white transition-colors"
+                  className="px-4 py-2 text-sm text-slate-500 hover:text-red-400 transition-colors"
                 >
                   Log Out
                 </button>

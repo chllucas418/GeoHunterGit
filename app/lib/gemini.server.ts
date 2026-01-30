@@ -54,3 +54,46 @@ export async function checkEvidenceWithGemini(
     }
     return { validity: 0, explanation: "Failed to parse AI response" };
 }
+
+export async function analyzeImageQuality(
+    apiKey: string,
+    imageUrl: string
+) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error("Failed to fetch image");
+
+    const arrayBuffer = await response.arrayBuffer();
+    const base64Data = arrayBufferToBase64(arrayBuffer);
+
+    const prompt = `
+    Analyze this image for a geography identification game. 
+    1. Is the image clear enough to identify landmarks or locations?
+    2. Suggest a "quality_score" from 0 to 100 based on clarity and uniqueness of the location.
+    3. Provide a brief "precontext" description of what you see.
+    
+    Return a JSON object with:
+    - "quality_score": number
+    - "precontext": string
+    - "recommendation": string (e.g., "Ready for deployment" or "Too blurry")
+  `;
+
+    const result = await model.generateContent([
+        prompt,
+        {
+            inlineData: {
+                data: base64Data,
+                mimeType: response.headers.get("content-type") || "image/jpeg",
+            },
+        },
+    ]);
+
+    const responseText = result.response.text();
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+    }
+    return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually" };
+}
