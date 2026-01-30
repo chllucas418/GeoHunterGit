@@ -1,3 +1,6 @@
+import type { Route } from "./+types/home";
+import { Link, Form } from "react-router";
+import type { Location } from "~/types/shared";
 import { getUserId, isDeveloper } from "~/lib/auth.server";
 
 export function meta({ }: Route.MetaArgs) {
