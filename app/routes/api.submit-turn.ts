@@ -75,13 +75,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
         }
     }
 
-    // 4. Dynamic Difficulty Adjustment (Decimal)
-    let newDiff = currentDiff;
-    if (score > 4500) {
-        newDiff = Math.min(10, newDiff + 0.1);
-    } else if (score < 1000) {
-        newDiff = Math.max(1, newDiff - 0.1);
-    }
+    // 4. Dynamic Difficulty Adjustment (Non-linear Curve)
+    // Baseline score is 2500. Deviations from this adjust the difficulty rating.
+    // The curve uses a power of 1.5 to be more sensitive to significant outliers.
+    const scoreDiff = (2500 - score) / 2500; // -1.0 (perfect) to 1.0 (total miss)
+    const curveAdjustment = Math.sign(scoreDiff) * Math.pow(Math.abs(scoreDiff), 1.5) * 0.3;
+
+    let newDiff = Math.max(1, Math.min(10, currentDiff + curveAdjustment));
 
     // 5. Update DB (Batch)
     const sessionId = crypto.randomUUID();
