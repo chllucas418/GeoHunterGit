@@ -85,17 +85,27 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // 5. Update DB (Batch)
     const sessionId = crypto.randomUUID();
+
+    // Check if user is a real user in the DB to avoid FK errors
+    let validUserId = null;
+    if (userId && userId !== "developer-admin") {
+        const userExists = await db.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
+        if (userExists) {
+            validUserId = userId;
+        }
+    }
+
     const statements = [
         db.prepare("UPDATE locations SET difficulty_rating = ? WHERE id = ?").bind(newDiff, locationId),
         db.prepare(
             "INSERT INTO game_sessions (id, user_id, location_id, guess_lat, guess_lng, score, ai_feedback) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).bind(sessionId, userId || null, locationId, userLat, userLng, score, JSON.stringify(aiFeedback))
+        ).bind(sessionId, validUserId, locationId, userLat, userLng, score, JSON.stringify(aiFeedback))
     ];
 
-    if (userId) {
+    if (validUserId) {
         statements.push(
             db.prepare("UPDATE users SET total_games = total_games + 1, current_elo = current_elo + ? WHERE id = ?")
-                .bind(Math.round(score / 10), userId)
+                .bind(Math.round(score / 10), validUserId)
         );
     }
 

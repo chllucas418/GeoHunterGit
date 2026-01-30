@@ -11,41 +11,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return btoa(binary);
 }
 
-export async function verifyEvidence(
-    apiKey: string,
-    imageUrl: string,
-    box: { x: number; y: number; w: number; h: number },
-    locationName: string = "Hong Kong"
-) {
-    try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        // NOTE: 'gemini-3-flash-preview' requested, but 1.5 is standard stable flash. 
-        // Will try to use the requested one if possible, but 1.5 is safer for now unless user confirms 3 is available in their project.
-        // User explicitly requested "gemini-3-flash-preview". I should use that string.
-
-        const targetModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" }); // approximation or use string literal
-        // Let's use string literal.
-        const specificModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
-        // Wait, Gemini 3 Flash does not exist yet publicly? Maybe user means 1.5 Flash or 2.0 Flash? 
-        // User said "Gemini 3 Flash". I will use the string they gave: "gemini-3-flash-preview".
-
-        const finalModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" }); // User might be referring to 2.0 Flash (confused with 3?) OR they have access to a preview.
-        // To be safe I will use a variable.
-
-        const PREFERRED_MODEL = "gemini-2.0-flash-exp"; // Safest bet for "next gen flash". 
-        // If user insists on "gemini-3-flash-preview", I will put that.
-
-        const realModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Fallback? 
-        // I will write the code to use the string provided by user in the Prompt?
-        // "Model: gemini-3-flash-preview"
-        // I'll use that string.
-
-    } catch (e) {
-        // ...
-    }
-}
-
 export async function checkEvidenceWithGemini(
     apiKey: string,
     imageUrl: string,
@@ -53,10 +18,8 @@ export async function checkEvidenceWithGemini(
     locationName: string
 ) {
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Using a likely valid model string. If 'gemini-3-flash-preview' is invalid, this will fail.
-    // I will use 'gemini-2.0-flash-exp' as a proxy if I suspect 3 doesn't exist, OR just use their string.
-    // I'll use their string.
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // User requested "gemini 3 flash strictly". 
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
