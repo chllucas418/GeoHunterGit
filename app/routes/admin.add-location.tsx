@@ -10,7 +10,19 @@ import { analyzeImageQuality } from "~/lib/gemini.server";
 export async function loader({ request, context }: LoaderFunctionArgs) {
     await requireDeveloper(request);
     const env = context.cloudflare.env as any;
-    return { mapsApiKey: env.GOOGLE_MAPS_API_KEY };
+    const db = env.DB as D1Database;
+
+    const url = new URL(request.url);
+    const id = url.searchParams.get("id");
+    let existingLocation = null;
+    if (id) {
+        existingLocation = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(id).first<any>();
+    }
+
+    return {
+        mapsApiKey: env.GOOGLE_MAPS_API_KEY,
+        existingLocation
+    };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -43,22 +55,29 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
-    const id = `loc_${Math.random().toString(36).substring(2, 9)}`;
+    const existingId = formData.get("existingId") as string;
 
     try {
-        await db.prepare(
-            "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).bind(id, imageUrl, lat, lng, difficulty, qualityScore, 1).run();
-
-        return { success: true, message: `Location added! (ID: ${id})` };
+        if (existingId) {
+            await db.prepare(
+                "UPDATE locations SET image_url = ?, lat = ?, lng = ?, difficulty_rating = ?, quality_score = ? WHERE id = ?"
+            ).bind(imageUrl, lat, lng, difficulty, qualityScore, existingId).run();
+            return { success: true, message: `Location updated!` };
+        } else {
+            const id = `loc_${Math.random().toString(36).substring(2, 9)}`;
+            await db.prepare(
+                "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            ).bind(id, imageUrl, lat, lng, difficulty, qualityScore, 1).run();
+            return { success: true, message: `Location added! (ID: ${id})` };
+        }
     } catch (e) {
-        console.error("Add location error:", e);
-        return { error: "Failed to add location" };
+        console.error("Save location error:", e);
+        return { error: "Failed to save location" };
     }
 }
 
 export default function AddLocation() {
-    const { mapsApiKey } = useLoaderData() as any;
+    const { mapsApiKey, existingLocation } = useLoaderData() as any;
     const actionData = useActionData() as any;
     const fetcher = useFetcher() as any;
     const navigation = useNavigation();
@@ -69,11 +88,22 @@ export default function AddLocation() {
 
     const mapRef = useRef<HTMLDivElement>(null);
     const markerRef = useRef<any>(null);
-    const [marker, setMarker] = useState<{ lat: number; lng: number } | null>(null);
-    const [previewUrl, setPreviewUrl] = useState<string>("");
-    const [base64, setBase64] = useState<string>("");
+    const [marker, setMarker] = useState<{ lat: number; lng: number } | null>(
+        existingLocation ? { lat: existingLocation.lat, lng: existingLocation.lng } : null
+    );
+    const [previewUrl, setPreviewUrl] = useState<string>(existingLocation?.image_url ?? "");
+    const [base64, setBase64] = useState<string>(existingLocation?.image_url ?? "");
+    const [qualityScore, setQualityScore] = useState<number>(existingLocation?.quality_score ?? 100);
+    const [difficulty, setDifficulty] = useState<number>(existingLocation?.difficulty_rating ?? 5);
     const [evidenceStep, setEvidenceStep] = useState(false);
     const [selectedBox, setSelectedBox] = useState<BoxCoordinates | null>(null);
+
+    // Sync status with AI
+    useEffect(() => {
+        if (analysis?.quality_score) {
+            setQualityScore(analysis.quality_score);
+        }
+    }, [analysis]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -95,7 +125,17 @@ export default function AddLocation() {
             const { Map } = await importLibrary("maps") as google.maps.MapsLibrary;
             const { Marker } = await importLibrary("marker") as google.maps.MarkerLibrary;
             if (mapRef.current) {
-                const map = new Map(mapRef.current, { center: { lat: 22.3193, lng: 114.1694 }, zoom: 11 });
+                const center = marker || { lat: 22.3193, lng: 114.1694 };
+                const map = new Map(mapRef.current, { center, zoom: marker ? 15 : 11 });
+
+                if (marker) {
+                    markerRef.current = new Marker({
+                        position: marker,
+                        map: map,
+                        title: "Target Location",
+                    });
+                }
+
                 map.addListener("click", (e: google.maps.MapMouseEvent) => {
                     if (e.latLng) {
                         const lat = e.latLng.lat();
@@ -152,6 +192,7 @@ export default function AddLocation() {
                             <input type="hidden" name="lat" value={marker?.lat ?? ""} />
                             <input type="hidden" name="lng" value={marker?.lng ?? ""} />
                             <input type="hidden" name="evidence" value={JSON.stringify(selectedBox)} />
+                            {existingLocation && <input type="hidden" name="existingId" value={existingLocation.id} />}
 
                             <div className="space-y-4">
                                 <label className="block text-sm font-medium text-slate-400">Step 1: Upload Image</label>
@@ -209,7 +250,8 @@ export default function AddLocation() {
                                         <input
                                             name="qualityScore"
                                             type="number"
-                                            defaultValue={analysis?.quality_score ?? 100}
+                                            value={qualityScore}
+                                            onChange={(e) => setQualityScore(parseInt(e.target.value))}
                                             className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
                                         />
                                     </div>
@@ -221,7 +263,8 @@ export default function AddLocation() {
                                             step="0.1"
                                             min="1"
                                             max="10"
-                                            defaultValue="5"
+                                            value={difficulty}
+                                            onChange={(e) => setDifficulty(parseFloat(e.target.value))}
                                             className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
                                         />
                                     </div>

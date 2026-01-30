@@ -103,9 +103,18 @@ export async function action({ request, context }: ActionFunctionArgs) {
     ];
 
     if (validUserId) {
+        const eloChange = Math.round((score - 2000) / 10);
+        const accuracyForTurn = Math.min(1.0, score / 5000);
+
         statements.push(
-            db.prepare("UPDATE users SET total_games = total_games + 1, current_elo = current_elo + ? WHERE id = ?")
-                .bind(Math.round(score / 10), validUserId)
+            db.prepare(`
+                UPDATE users 
+                SET 
+                    accuracy_avg = (accuracy_avg * total_games + ?) / (total_games + 1),
+                    current_elo = current_elo + ?,
+                    total_games = total_games + 1
+                WHERE id = ?
+            `).bind(accuracyForTurn, eloChange, validUserId)
         );
     }
 

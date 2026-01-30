@@ -36,8 +36,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex-grow">
           {children}
         </div>
-        <footer className="py-8 text-center text-slate-500 text-xs border-t border-slate-900/50">
-          Made with ❤️ by Lucas Cheung
+        <footer className="py-12 mt-auto text-center space-y-4 border-t border-slate-900/50 bg-slate-950/80 backdrop-blur-sm relative z-50">
+          <div className="flex justify-center gap-6 text-xs font-medium text-slate-500">
+            <a href="/privacy" className="hover:text-blue-400 transition-colors">Privacy Policy</a>
+            <span className="text-slate-800">|</span>
+            <a href="mailto:contact@geohunter.com" className="hover:text-blue-400 transition-colors">Support</a>
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.2em] font-black text-slate-600">
+            Made with ❤️ by <span className="text-slate-400">Lucas Cheung</span>
+          </div>
         </footer>
         <ScrollRestoration />
         <Scripts />

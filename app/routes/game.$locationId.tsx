@@ -146,7 +146,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     };
 
     return (
-        <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden bg-slate-900 text-slate-50">
+        <div className="h-[100dvh] w-screen flex flex-col md:flex-row overflow-hidden bg-slate-900 text-slate-50">
             {/* Back Button */}
             <Link
                 to="/"
@@ -155,7 +155,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 ← Back
             </Link>
             {/* Left: View (Evidence) */}
-            <div className="flex-1 relative border-r border-slate-700">
+            <div className="h-1/2 md:h-full md:flex-1 relative border-b md:border-b-0 md:border-r border-slate-700 overflow-hidden">
                 <div className="absolute inset-0">
                     <EvidenceCanvas
                         imageUrl={location.imageUrl}
@@ -201,7 +201,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             </div>
 
             {/* Right: Map */}
-            <div className="flex-1 relative">
+            <div className="h-1/2 md:h-full md:flex-1 relative">
                 <div ref={mapRef} className="w-full h-full" />
 
                 {/* Controls */}

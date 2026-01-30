@@ -75,25 +75,12 @@ export default function AdminLocations() {
                                     </div>
                                 </div>
                                 <div className="pt-4 flex items-center justify-between gap-2">
-                                    <button
-                                        onClick={() => {
-                                            const newLat = prompt("New Lat:", loc.lat);
-                                            const newLng = prompt("New Lng:", loc.lng);
-                                            if (newLat && newLng) {
-                                                const fd = new FormData();
-                                                fd.append("intent", "edit");
-                                                fd.append("locId", loc.id);
-                                                fd.append("lat", newLat);
-                                                fd.append("lng", newLng);
-                                                fd.append("diff", loc.difficulty_rating.toString());
-                                                fd.append("quality", loc.quality_score.toString());
-                                                fetcher.submit(fd, { method: "post" });
-                                            }
-                                        }}
-                                        className="flex-grow py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold transition-colors"
+                                    <Link
+                                        to={`/admin/add-location?id=${loc.id}`}
+                                        className="flex-grow py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold transition-colors text-center"
                                     >
-                                        Quick Edit
-                                    </button>
+                                        Edit Details
+                                    </Link>
                                     <button
                                         onClick={() => {
                                             if (confirm("Delete this location permanently?")) {
