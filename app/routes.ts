@@ -12,5 +12,6 @@ export default [
     route("admin/locations", "routes/admin.locations.tsx"),
     route("profile", "routes/profile.tsx"),
     route("leaderboard", "routes/leaderboard.tsx"),
-    route("privacy", "routes/privacy.tsx")
+    route("privacy", "routes/privacy.tsx"),
+    route("resources/image/:locationId", "routes/resources.image.$locationId.ts")
 ] satisfies RouteConfig;

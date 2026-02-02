@@ -14,10 +14,11 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
     headers.set("Cache-Control", "public, max-age=31536000, immutable");
 
     try {
-        const result = await db.prepare("SELECT image_url FROM locations WHERE id = ?").bind(locationId).first<any>();
+        const validId = locationId.trim();
+        const result = await db.prepare("SELECT image_url FROM locations WHERE id = ?").bind(validId).first<any>();
 
         if (!result || !result.image_url) {
-            return new Response("Image not found", { status: 404 });
+            return new Response(`Image not found. ID: "${locationId}". Result: ${JSON.stringify(result)}`, { status: 404 });
         }
 
         const imageUrl = result.image_url;
