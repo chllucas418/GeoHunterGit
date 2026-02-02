@@ -1,6 +1,4 @@
 import type { LoaderFunctionArgs } from "react-router";
-// @ts-expect-error Cloudflare Workers support node:buffer
-import { Buffer } from "node:buffer";
 
 export async function loader({ params, context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as any;
@@ -37,12 +35,20 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
             }
 
             const contentType = matches[1];
-            const buffer = Buffer.from(matches[2], "base64");
+            const base64Data = matches[2];
+
+            // Decode Base64 without Buffer (Web Standard)
+            const binaryString = atob(base64Data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
 
             headers.set("Content-Type", contentType);
-            headers.set("Content-Length", buffer.length.toString());
+            headers.set("Content-Length", bytes.length.toString());
 
-            return new Response(buffer, { headers });
+            return new Response(bytes, { headers });
         }
 
         return new Response("Unknown image format", { status: 500 });
