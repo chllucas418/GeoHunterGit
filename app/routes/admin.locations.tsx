@@ -7,8 +7,18 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 
-    const { results: locations } = await db.prepare("SELECT * FROM locations ORDER BY created_at DESC").all<any>();
-    return { locations };
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const limit = 12;
+    const offset = (page - 1) * limit;
+
+    const { results: locations } = await db.prepare("SELECT * FROM locations ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
+
+    const countResult = await db.prepare("SELECT COUNT(*) as count FROM locations").first<any>();
+    const totalLocations = countResult.count;
+    const totalPages = Math.ceil(totalLocations / limit);
+
+    return { locations, page, totalPages };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -41,7 +51,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function AdminLocations() {
-    const { locations } = useLoaderData() as any;
+    const { locations, page, totalPages } = useLoaderData() as any;
     const fetcher = useFetcher();
 
     return (
@@ -124,6 +134,23 @@ export default function AdminLocations() {
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-center items-center gap-4 mt-8">
+                    <Link
+                        to={`?page=${Math.max(1, page - 1)}`}
+                        className={`px-4 py-2 bg-slate-800 rounded-lg text-sm font-bold border border-slate-700 hover:bg-slate-700 transition ${page === 1 ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                        Previous
+                    </Link>
+                    <span className="text-sm font-mono text-slate-400">Page {page} of {totalPages}</span>
+                    <Link
+                        to={`?page=${Math.min(totalPages, page + 1)}`}
+                        className={`px-4 py-2 bg-slate-800 rounded-lg text-sm font-bold border border-slate-700 hover:bg-slate-700 transition ${page >= totalPages ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                        Next
+                    </Link>
                 </div>
             </div>
         </div>

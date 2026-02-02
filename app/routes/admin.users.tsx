@@ -7,8 +7,18 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 
-    const { results: users } = await db.prepare("SELECT id, email, display_name, current_elo, total_games, accuracy_avg FROM users ORDER BY created_at DESC").all<any>();
-    return { users };
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get("page") || "1");
+    const limit = 20;
+    const offset = (page - 1) * limit;
+
+    const { results: users } = await db.prepare("SELECT id, email, display_name, current_elo, total_games, accuracy_avg FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
+
+    const countResult = await db.prepare("SELECT COUNT(*) as count FROM users").first<any>();
+    const totalUsers = countResult.count;
+    const totalPages = Math.ceil(totalUsers / limit);
+
+    return { users, page, totalPages, totalUsers };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -38,7 +48,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function AdminUsers() {
-    const { users } = useLoaderData() as any;
+    const { users, page, totalPages, totalUsers } = useLoaderData() as any;
     const fetcher = useFetcher();
 
     return (
@@ -55,7 +65,7 @@ export default function AdminUsers() {
                         <p className="text-blue-200/60 font-mono mt-2">Database of active field operatives.</p>
                     </div>
                     <div className="glass-panel px-6 py-3 rounded-2xl border border-white/10 text-sm font-bold text-white/80 uppercase tracking-widest backdrop-blur-md">
-                        {users.length} Active Agents
+                        {totalUsers} Active Agents
                     </div>
                 </header>
 
@@ -126,6 +136,23 @@ export default function AdminUsers() {
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-center items-center gap-4 mt-8">
+                    <Link
+                        to={`?page=${Math.max(1, page - 1)}`}
+                        className={`px-4 py-2 bg-slate-800 rounded-lg text-sm font-bold border border-slate-700 hover:bg-slate-700 transition ${page === 1 ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                        Previous
+                    </Link>
+                    <span className="text-sm font-mono text-slate-400">Page {page} of {totalPages}</span>
+                    <Link
+                        to={`?page=${Math.min(totalPages, page + 1)}`}
+                        className={`px-4 py-2 bg-slate-800 rounded-lg text-sm font-bold border border-slate-700 hover:bg-slate-700 transition ${page >= totalPages ? 'opacity-50 pointer-events-none' : ''}`}
+                    >
+                        Next
+                    </Link>
                 </div>
             </div>
         </div>
