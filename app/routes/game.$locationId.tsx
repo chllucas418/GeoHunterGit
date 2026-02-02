@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import type { Route } from "./+types/game.$locationId";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher, Link } from "react-router";
+import { useLoaderData, useFetcher, Link, useNavigation } from "react-router";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import { requireUser } from "~/lib/auth.server";
@@ -36,6 +36,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const { location, mapsApiKey } = loaderData;
     const fetcher = useFetcher() as any;
+    const navigation = useNavigation();
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
     const [marker, setMarker] = useState<google.maps.Marker | null>(null);
@@ -47,6 +48,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
     const result = fetcher.data;
     const isSubmitting = fetcher.state !== "idle";
+    const isLoading = navigation.state === "loading";
 
     // Load Maps
     useEffect(() => {
@@ -63,8 +65,8 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     center: { lat: 22.3193, lng: 114.1694 }, // HK Center
                     zoom: 11,
                     disableDefaultUI: true, // Clean UI
-                    mapTypeId: "hybrid", // Use string literal for type safety if enum is not loaded
-                    mapId: "DEMO_MAP_ID", // Required for Advanced Markers
+                    mapTypeId: "hybrid",
+                    mapId: "DEMO_MAP_ID",
                     styles: [
                         { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
                         { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
@@ -86,7 +88,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             }
         };
 
-        initMap();
+        if (mapsApiKey) initMap();
     }, [mapsApiKey]);
 
     // Handle results visualization
@@ -118,7 +120,10 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         const bounds = new google.maps.LatLngBounds();
         bounds.extend(guess);
         bounds.extend(actualCoord);
-        mapInstance.fitBounds(bounds, { top: 100, bottom: 300, left: 100, right: 100 });
+        // Slightly delay fitting bounds to ensure map is ready
+        setTimeout(() => {
+            mapInstance.fitBounds(bounds, { top: 100, bottom: 300, left: 100, right: 100 });
+        }, 100);
 
     }, [result, mapInstance, guess, location.geoPoint]);
 
@@ -131,6 +136,19 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         if (selectedBox) formData.append("box", JSON.stringify(selectedBox));
         fetcher.submit(formData, { method: "post", action: "/api/submit-turn" });
     };
+
+    if (isLoading) {
+        return (
+            <div className="h-[100dvh] w-screen flex flex-col items-center justify-center bg-black text-white relative overflow-hidden">
+                <div className="absolute inset-0 bg-blue-900/10 animate-pulse" />
+                <div className="z-10 flex flex-col items-center gap-6">
+                    <div className="w-16 h-16 border-4 border-t-blue-500 border-r-transparent border-b-blue-500 border-l-transparent rounded-full animate-spin" />
+                    <h2 className="text-2xl font-black uppercase tracking-widest animate-pulse">Establishing Uplink...</h2>
+                    <p className="text-xs font-mono text-blue-400/60">Decrypting satellite telemetry</p>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white">
