@@ -63,11 +63,12 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     center: { lat: 22.3193, lng: 114.1694 }, // HK Center
                     zoom: 11,
                     disableDefaultUI: true, // Clean UI
+                    mapTypeId: "hybrid", // Use string literal for type safety if enum is not loaded
+                    mapId: "DEMO_MAP_ID", // Required for Advanced Markers
                     styles: [
                         { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
                         { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
                         { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-                        // ... dark mode map styles
                     ]
                 });
 

@@ -45,54 +45,80 @@ export default function AdminLocations() {
     const fetcher = useFetcher();
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-50 p-8">
-            <div className="max-w-6xl mx-auto space-y-8">
+        <div className="min-h-screen p-6 md:p-12 relative z-10">
+            <div className="max-w-7xl mx-auto space-y-12">
                 <header className="flex items-center justify-between">
                     <div>
-                        <Link to="/" className="text-blue-400 hover:underline text-sm mb-2 inline-block">← Back</Link>
-                        <h1 className="text-3xl font-black">Admin: Location Management</h1>
+                        <Link to="/" className="text-blue-300 hover:text-white text-xs uppercase tracking-widest font-bold mb-4 inline-block transition-colors">
+                            ← Control Center
+                        </Link>
+                        <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter text-glow">
+                            Target Logistics
+                        </h1>
+                        <p className="text-blue-200/60 font-mono mt-2">Manage deployment zones and intelligence assets.</p>
                     </div>
+                    <Link
+                        to="/admin/add-location"
+                        className="px-8 py-3 bg-blue-500 hover:bg-blue-400 text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-105"
+                    >
+                        + Deploy Asset
+                    </Link>
                 </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
                     {locations.map((loc: any) => (
-                        <div key={loc.id} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl flex flex-col hover:border-blue-500/50 transition-all group">
-                            <div className="aspect-video relative">
-                                <img src={loc.image_url} className="w-full h-full object-cover" alt="Location" />
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 p-4">
-                                    <p className="text-xs font-mono text-slate-400">{loc.id}</p>
+                        <div key={loc.id} className="glass-card rounded-[2rem] overflow-hidden flex flex-col group relative">
+                            {/* Image Header */}
+                            <div className="h-48 relative overflow-hidden">
+                                <img
+                                    src={loc.image_url}
+                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                    alt="Location Asset"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                                <div className="absolute bottom-4 left-4 font-mono text-xs text-blue-300">
+                                    ID: {loc.id.substring(0, 8)}...
+                                </div>
+                                <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md border border-white/10 ${loc.difficulty_rating > 7 ? 'bg-red-500/20 text-red-200' : 'bg-emerald-500/20 text-emerald-200'
+                                    }`}>
+                                    rating: {loc.difficulty_rating.toFixed(2)}
                                 </div>
                             </div>
-                            <div className="p-6 space-y-4 flex-grow">
-                                <div className="grid grid-cols-2 gap-4 text-xs">
-                                    <div>
-                                        <p className="text-slate-500 uppercase font-bold">Difficulty</p>
-                                        <p className="text-blue-400 font-black">{loc.difficulty_rating.toFixed(1)}</p>
+
+                            {/* Data Panel */}
+                            <div className="p-6 space-y-6 flex-grow flex flex-col justify-between">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                                        <p className="text-[9px] uppercase font-bold text-white/40 mb-1">Signal Quality</p>
+                                        <p className="text-2xl font-black text-white">{loc.quality_score}%</p>
                                     </div>
-                                    <div>
-                                        <p className="text-slate-500 uppercase font-bold">Quality</p>
-                                        <p className="text-purple-400 font-black">{loc.quality_score}%</p>
+                                    <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                                        <p className="text-[9px] uppercase font-bold text-white/40 mb-1">Coordinates</p>
+                                        <p className="text-xs font-mono text-white/60 truncate" title={`${loc.lat}, ${loc.lng}`}>
+                                            {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
+                                        </p>
                                     </div>
                                 </div>
-                                <div className="pt-4 flex items-center justify-between gap-2">
+
+                                <div className="flex gap-3 pt-2">
                                     <Link
                                         to={`/admin/add-location?id=${loc.id}`}
-                                        className="flex-grow py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold transition-colors text-center"
+                                        className="flex-1 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-bold uppercase tracking-wider text-center text-white transition-colors border border-white/10"
                                     >
-                                        Edit Details
+                                        Modify
                                     </Link>
                                     <button
                                         onClick={() => {
-                                            if (confirm("Delete this location permanently?")) {
+                                            if (confirm("WARNING: Confirm decommissioning of this asset? This cannot be undone.")) {
                                                 const fd = new FormData();
                                                 fd.append("intent", "delete");
                                                 fd.append("locId", loc.id);
                                                 fetcher.submit(fd, { method: "post" });
                                             }
                                         }}
-                                        className="px-4 py-2 bg-red-900/20 text-red-400 hover:bg-red-900/40 rounded-xl text-xs font-bold transition-colors"
+                                        className="px-4 py-3 bg-red-500/10 hover:bg-red-500/30 text-red-400 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors border border-red-500/20"
                                     >
-                                        Delete
+                                        Purge
                                     </button>
                                 </div>
                             </div>

@@ -52,77 +52,79 @@ export default function Register() {
     const isSubmitting = navigation.state === "submitting";
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
-            <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
-                <header className="mb-8 relative">
-                    <Link to="/" className="absolute left-0 top-0 text-slate-500 hover:text-white text-xs transition-colors">
-                        ← Home
-                    </Link>
-                    <h1 className="text-3xl font-extrabold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent mt-8">
-                        Join GeoHunter
-                    </h1>
-                    <p className="text-slate-500 mt-2">Create your account to start hunting.</p>
-                </header>
+        <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
+            <div className="w-full max-w-md glass-panel p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                {/* Background Decor */}
+                <div className="absolute top-[-20%] right-[-20%] w-64 h-64 bg-blue-500/20 rounded-full blur-[80px]" />
+                <div className="absolute bottom-[-20%] left-[-20%] w-64 h-64 bg-purple-500/20 rounded-full blur-[80px]" />
 
-                <Form method="post" className="space-y-6">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">Display Name</label>
-                        <input
-                            name="displayName"
-                            type="text"
-                            required
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                            placeholder="Alex Smith"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">Email</label>
-                        <input
-                            name="email"
-                            type="email"
-                            required
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                            placeholder="alex@example.com"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-2">Password</label>
-                        <input
-                            name="password"
-                            type="password"
-                            required
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                            placeholder="••••••••"
-                        />
-                    </div>
+                <div className="relative z-10">
+                    <header className="mb-10 text-center">
+                        <Link to="/" className="inline-block mb-6 px-4 py-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-all">
+                            ← Return to Base
+                        </Link>
+                        <h1 className="text-4xl font-black text-white tracking-tighter mb-2 text-glow">
+                            Initialize Protocol
+                        </h1>
+                        <p className="text-sm text-blue-200/60 font-mono">Create your agent identity</p>
+                    </header>
 
-                    {actionData?.error && (
-                        <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-sm rounded-xl">
-                            {actionData.error}
+                    <Form method="post" className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Codename</label>
+                            <input
+                                name="displayName"
+                                type="text"
+                                required
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20"
+                                placeholder="Agent X"
+                            />
                         </div>
-                    )}
-
-                    {actionData?.success && (
-                        <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-500 text-sm rounded-xl">
-                            {actionData.message}
+                        <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Comm Frequency</label>
+                            <input
+                                name="email"
+                                type="email"
+                                required
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20"
+                                placeholder="agent@geohunter.com"
+                            />
                         </div>
-                    )}
+                        <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Security Key</label>
+                            <input
+                                name="password"
+                                type="password"
+                                required
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20"
+                                placeholder="••••••••"
+                            />
+                        </div>
 
-                    <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-900/20 active:scale-[0.98]"
-                    >
-                        {isSubmitting ? "Creating Account..." : "Sign Up"}
-                    </button>
-                </Form>
+                        {actionData?.error && (
+                            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-2xl text-center">
+                                {actionData.error}
+                            </div>
+                        )}
 
-                <footer className="mt-8 text-center text-sm text-slate-500">
-                    Already have an account?{" "}
-                    <Link to="/login" className="text-blue-400 hover:underline">
-                        Log In
-                    </Link>
-                </footer>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="w-full py-5 bg-white text-black font-black uppercase tracking-widest rounded-2xl hover:bg-blue-50 transition-all shadow-lg active:scale-[0.98] mt-4"
+                        >
+                            {isSubmitting ? "Establishing Uplink..." : "Activate Agent Profile"}
+                        </button>
+                    </Form>
+
+                    <footer className="mt-8 text-center">
+                        <p className="text-xs text-white/40 font-bold">
+                            Already active?{" "}
+                            <Link to="/login" className="text-blue-400 hover:text-white transition-colors underline decoration-blue-500/30 underline-offset-4">
+                                Access Terminal
+                            </Link>
+                        </p>
+                    </footer>
+                </div>
             </div>
         </div>
     );
