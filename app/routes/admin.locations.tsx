@@ -12,7 +12,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const limit = 12;
     const offset = (page - 1) * limit;
 
-    const { results: locations } = await db.prepare("SELECT * FROM locations ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
+    const { results: locations } = await db.prepare("SELECT id, lat, lng, difficulty_rating, quality_score, created_at FROM locations ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
 
     const countResult = await db.prepare("SELECT COUNT(*) as count FROM locations").first<any>();
     const totalLocations = countResult.count;
@@ -81,9 +81,10 @@ export default function AdminLocations() {
                             {/* Image Header */}
                             <div className="h-48 relative overflow-hidden">
                                 <img
-                                    src={loc.image_url}
+                                    src={`/resources/image/${loc.id}`}
                                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                                     alt="Location Asset"
+                                    loading="lazy"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                                 <div className="absolute bottom-4 left-4 font-mono text-xs text-blue-300">

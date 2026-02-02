@@ -19,7 +19,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   // Defer the slow database query
   const locationsPromise = db.prepare(`
-    SELECT id, image_url, difficulty_rating, quality_score, verified_by_gemini 
+    SELECT id, difficulty_rating, quality_score, verified_by_gemini 
     FROM locations 
     ORDER BY created_at DESC
   `).all<any>()
@@ -28,7 +28,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       verifiedByGemini: !!loc.verified_by_gemini,
       difficultyRating: loc.difficulty_rating,
       qualityScore: loc.quality_score,
-      imageUrl: loc.image_url,
+      imageUrl: `/resources/image/${loc.id}`,
     })) as Location[]);
 
   return {
