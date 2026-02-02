@@ -35,7 +35,7 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
 
 export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const { location, mapsApiKey } = loaderData;
-    const fetcher = useFetcher();
+    const fetcher = useFetcher() as any;
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
     const [marker, setMarker] = useState<google.maps.Marker | null>(null);
@@ -45,15 +45,14 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const actualMarkerRef = useRef<google.maps.Marker | null>(null);
     const polylineRef = useRef<google.maps.Polyline | null>(null);
 
+    const result = fetcher.data;
+    const isSubmitting = fetcher.state !== "idle";
+
     // Load Maps
     useEffect(() => {
         if (!mapsApiKey) return;
 
-        // Initialize Loader Options
-        setOptions({
-            key: mapsApiKey,
-            v: "weekly"
-        });
+        setOptions({ key: mapsApiKey, v: "weekly" });
 
         const initMap = async () => {
             const { Map } = await importLibrary("maps") as google.maps.MapsLibrary;
@@ -63,25 +62,21 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 const map = new Map(mapRef.current, {
                     center: { lat: 22.3193, lng: 114.1694 }, // HK Center
                     zoom: 11,
-                    streetViewControl: false,
-                    mapTypeControl: false,
-                    clickableIcons: false // Hide POIs
+                    disableDefaultUI: true, // Clean UI
+                    styles: [
+                        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                        // ... dark mode map styles
+                    ]
                 });
 
-                // Click listener
                 map.addListener("click", (e: google.maps.MapMouseEvent) => {
-                    if (e.latLng) {
+                    if (e.latLng && !result) {
                         const lat = e.latLng.lat();
                         const lng = e.latLng.lng();
-
-                        // Remove old marker
                         if (markerRef.current) markerRef.current.setMap(null);
-
-                        const newMarker = new Marker({
-                            position: { lat, lng },
-                            map: map
-                        });
-                        markerRef.current = newMarker;
+                        markerRef.current = new Marker({ position: { lat, lng }, map: map });
                         setGuess({ lat, lng });
                     }
                 });
@@ -93,130 +88,132 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         initMap();
     }, [mapsApiKey]);
 
-    const result = fetcher.data as any;
-
     // Handle results visualization
     useEffect(() => {
         if (!result || !mapInstance || !guess) return;
 
         const actualCoord = location.geoPoint;
 
-        // 1. Add Actual Marker (Red)
         if (!actualMarkerRef.current) {
             actualMarkerRef.current = new google.maps.Marker({
                 position: actualCoord,
                 map: mapInstance,
-                icon: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                icon: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
                 title: "Actual Location"
             });
         }
 
-        // 2. Draw Polyline
         if (!polylineRef.current) {
             polylineRef.current = new google.maps.Polyline({
                 path: [guess, actualCoord],
                 geodesic: true,
-                strokeColor: "#3b82f6",
+                strokeColor: "#60a5fa", // Blue-400
                 strokeOpacity: 0.8,
                 strokeWeight: 4,
                 map: mapInstance
             });
         }
 
-        // 3. Zoom to fit
         const bounds = new google.maps.LatLngBounds();
         bounds.extend(guess);
         bounds.extend(actualCoord);
-        mapInstance.fitBounds(bounds, { top: 100, bottom: 200, left: 100, right: 100 });
+        mapInstance.fitBounds(bounds, { top: 100, bottom: 300, left: 100, right: 100 });
 
     }, [result, mapInstance, guess, location.geoPoint]);
 
     const handleSubmit = () => {
         if (!guess) return;
-
         const formData = new FormData();
         formData.append("locationId", location.id);
         formData.append("lat", guess.lat.toString());
         formData.append("lng", guess.lng.toString());
-        if (selectedBox) {
-            formData.append("box", JSON.stringify(selectedBox));
-        }
-
+        if (selectedBox) formData.append("box", JSON.stringify(selectedBox));
         fetcher.submit(formData, { method: "post", action: "/api/submit-turn" });
     };
 
     return (
-        <div className="h-[100dvh] w-screen flex flex-col md:flex-row overflow-hidden bg-slate-900 text-slate-50">
-            {/* Back Button */}
-            <Link
-                to="/"
-                className="absolute top-4 left-4 z-50 bg-slate-900/50 backdrop-blur px-3 py-2 rounded-full border border-slate-700 hover:bg-slate-800 transition-all text-xs font-bold"
-            >
-                ← Back
-            </Link>
-            {/* Left: View (Evidence) */}
-            <div className="h-1/2 md:h-full md:flex-1 relative border-b md:border-b-0 md:border-r border-slate-700 overflow-hidden">
-                <div className="absolute inset-0">
-                    <EvidenceCanvas
-                        imageUrl={location.imageUrl}
-                        onBoxChange={setSelectedBox}
-                        disabled={fetcher.state !== "idle" || !!result}
-                    />
-                </div>
-                {/* Overlay Result */}
-                {result && (
-                    <div className="absolute inset-x-0 bottom-0 bg-slate-900/90 p-6 backdrop-blur space-y-2 animate-slide-up">
-                        <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                            Turn Complete!
-                        </h2>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <p className="text-slate-400 uppercase text-xs">Score</p>
-                                <p className="text-xl font-bold text-blue-400">{result.score}</p>
-                            </div>
-                            <div>
-                                <p className="text-slate-400 uppercase text-xs">Distance</p>
-                                <p className="text-xl">{Math.round(result.distance)}m</p>
-                            </div>
-                        </div>
-                        {fetcher.state !== "idle" && !result && (
-                            <div className="mt-2 text-sm bg-slate-800 p-2 rounded border border-slate-700 animate-pulse">
-                                <span className="text-blue-400 font-bold">Gemini: </span>
-                                Analyzing your evidence...
-                            </div>
-                        )}
-                        {result?.aiFeedback && (
-                            <div className="mt-2 text-sm bg-slate-800 p-2 rounded border border-slate-700">
-                                <span className="text-blue-400 font-bold">Gemini: </span>
-                                {result.aiFeedback.explanation || result.aiFeedback.comment || result.aiFeedback.error || "Analyzing..."}
-                            </div>
-                        )}
-                        <div className="mt-4">
-                            <Link to="/" className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1">
-                                ← Back to Discovery
-                            </Link>
+        <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white">
+
+            {/* --- IMMERSIVE EVIDENCE LAYER --- */}
+            <div className={`absolute inset-0 transition-all duration-700 ${guess ? 'h-1/2 md:h-full md:w-1/2' : 'h-full w-full'}`}>
+                <EvidenceCanvas
+                    imageUrl={location.imageUrl}
+                    onBoxChange={setSelectedBox}
+                    disabled={!!result}
+                />
+                <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent">
+                    <div className="flex justify-between items-start">
+                        <Link to="/" className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-xs font-bold transition-all border border-white/10">
+                            ← ABORT MISSION
+                        </Link>
+                        <div className="text-right">
+                            <h1 className="text-3xl font-black tracking-tighter">TARGET #{location.id.slice(-4).toUpperCase()}</h1>
+                            <p className="text-xs font-mono text-blue-300 opacity-80">LAT-UNKNOWN // LNG-UNKNOWN</p>
                         </div>
                     </div>
-                )}
+                </div>
             </div>
 
-            {/* Right: Map */}
-            <div className="h-1/2 md:h-full md:flex-1 relative">
-                <div ref={mapRef} className="w-full h-full" />
+            {/* --- TACTICAL MAP LAYER --- */}
+            <div className={`absolute bottom-0 right-0 transition-all duration-700 shadow-2xl z-20 overflow-hidden border-t-2 md:border-t-0 md:border-l-2 border-white/10 
+                ${guess ? 'h-1/2 w-full md:h-full md:w-1/2' : 'h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105'}
+            `}>
+                <div ref={mapRef} className="w-full h-full bg-slate-800" />
 
-                {/* Controls */}
+                {/* Floating Map Controls */}
                 {!result && (
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-64">
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
                         <button
                             onClick={handleSubmit}
-                            disabled={!guess || fetcher.state !== "idle"}
-                            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-full shadow-lg transition-transform active:scale-95"
+                            disabled={!guess || isSubmitting}
+                            className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl
+                                ${guess
+                                    ? 'bg-blue-600 hover:bg-blue-500 text-white translate-y-0 opacity-100'
+                                    : 'bg-black/40 text-white/20 translate-y-10 opacity-0 pointer-events-none'
+                                }
+                            `}
                         >
-                            {fetcher.state === "submitting" ? "Verifying..." : "Make Guess"}
+                            {isSubmitting ? "CALCULATING..." : "CONFIRM COORDINATES"}
                         </button>
                     </div>
                 )}
             </div>
+
+            {/* --- HUD RESULT OVERLAY --- */}
+            {result && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-md animate-in fade-in zoom-in duration-300">
+                    <div className="bg-black/80 border border-white/10 p-8 md:p-12 rounded-[3rem] max-w-2xl w-full shadow-2xl space-y-8 relative overflow-hidden">
+                        {/* Glow effect */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
+
+                        <div className="relative text-center space-y-2">
+                            <p className="text-xs font-mono text-blue-400 uppercase tracking-[0.3em]">Mission Debrief</p>
+                            <h2 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50">
+                                {result.score}
+                            </h2>
+                            <div className="flex items-center justify-center gap-4 text-sm font-bold text-white/60">
+                                <span>{Math.round(result.distance)}m Deviation</span>
+                                <span>•</span>
+                                <span>{result.aiFeedback?.validity > 0.5 ? "+AI BONUS" : "NO AI LOCK"}</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative">
+                            <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
+                                <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Tactical Assessment</p>
+                                <p className="text-sm leading-relaxed text-white/80">
+                                    {result.aiFeedback?.explanation || "Accessing satellite imagery..."}
+                                </p>
+                            </div>
+                            <div className="p-6 rounded-3xl bg-white/5 border border-white/10 flex flex-col justify-center items-center">
+                                <Link to="/" className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-center rounded-xl hover:bg-blue-50 transition-colors">
+                                    Next Target
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
