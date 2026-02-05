@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from "react-router";
-import { checkEvidenceWithGemini } from "~/lib/gemini.server";
+import { checkEvidenceListWithGemini } from "~/lib/gemini.server";
 import { getUserId } from "~/lib/auth.server";
 
 // Haversine Formula
@@ -28,46 +28,68 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const locationId = formData.get("locationId") as string;
     const userLat = parseFloat(formData.get("lat") as string);
     const userLng = parseFloat(formData.get("lng") as string);
-    const boxJson = formData.get("box") as string; // JSON string or null
+    const evidenceListJson = formData.get("evidenceList") as string;
 
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
     const GEMINI_API_KEY = env.GEMINI_API_KEY;
 
-    // 1. Fetch Location Data
+    // 1. Fetch Location
     const loc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(locationId).first<any>();
     if (!loc) {
         return Response.json({ error: "Location not found" }, { status: 404 });
     }
 
-    const actualLat = loc.lat;
-    const actualLng = loc.lng;
-    const imageUrl = loc.image_url;
-    const currentDiff = loc.difficulty_rating || 5;
-
-    // 2. Calculate Score (Linear 20km Slope)
-    const distance = calculateDistance(userLat, userLng, actualLat, actualLng);
-    // 5000 points at 0m, 0 points at 20,000m (20km)
+    // 2. Calculate Distance Score
+    const distance = calculateDistance(userLat, userLng, loc.lat, loc.lng);
     let score = Math.max(0, Math.round(5000 * (1 - distance / 20000)));
 
-    // 3. AI Verification
+    // 3. Evidence Processing & AI Verification
     let aiBonus = 0;
-    let aiFeedback = null;
+    let aiFeedback: any = { status: "no_evidence_submitted" };
 
-    if (boxJson) {
-        const box = JSON.parse(boxJson);
+    if (evidenceListJson) {
+        const evidenceList = JSON.parse(evidenceListJson);
+
         try {
-            const verification = await checkEvidenceWithGemini(
+            // Check against Gemini
+            const verification = await checkEvidenceListWithGemini(
                 GEMINI_API_KEY,
-                imageUrl,
-                box,
+                loc.image_url,
+                evidenceList,
                 "Hong Kong"
             );
 
             aiFeedback = verification;
-            if (verification.validity > 0.7) {
-                aiBonus = 1000;
+
+            // Score Calculation
+            if (verification.results) {
+                const validItems = verification.results.filter((r: any) => r.validity > 0.7);
+                aiBonus = validItems.length * 500; // 500 points per valid clue
                 score += aiBonus;
+
+                // Auto-Add Novel Evidence to DB
+                // Only if highly valid and marked as novel
+                const novelItems = validItems.filter((r: any) => r.is_novel && r.validity > 0.85);
+
+                if (novelItems.length > 0) {
+                    const insertStmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, created_by_user_id) VALUES (?, ?, ?, ?, 1, ?)");
+                    const batch = [];
+
+                    for (const item of novelItems) {
+                        const originalEvidence = evidenceList[item.index];
+                        if (originalEvidence) {
+                            batch.push(insertStmt.bind(
+                                `ev_${Math.random().toString(36).substring(2, 9)}`,
+                                locationId,
+                                JSON.stringify(originalEvidence.box),
+                                originalEvidence.description,
+                                userId
+                            ));
+                        }
+                    }
+                    if (batch.length > 0) await db.batch(batch);
+                }
             }
         } catch (e) {
             console.error("Gemini Error:", e);
@@ -75,26 +97,19 @@ export async function action({ request, context }: ActionFunctionArgs) {
         }
     }
 
-    // 4. Dynamic Difficulty Adjustment (Non-linear Curve)
-    // Baseline score is 2500. Deviations from this adjust the difficulty rating.
-    // Use the base distance-based score (excluding AI bonus) for difficulty balancing
+    // 4. Dynamic Difficulty Adjustment
     const baseScore = score - aiBonus;
     const scoreDiff = (2500 - baseScore) / 2500;
     const curveAdjustment = Math.sign(scoreDiff) * Math.pow(Math.abs(scoreDiff), 1.5) * 0.3;
-
-    let newDiff = Math.max(1, Math.min(10, currentDiff + curveAdjustment));
+    let newDiff = Math.max(1, Math.min(10, (loc.difficulty_rating || 5) + curveAdjustment));
     newDiff = parseFloat(newDiff.toFixed(2));
 
-    // 5. Update DB (Batch)
+    // 5. Update DB
     const sessionId = crypto.randomUUID();
-
-    // Check if user is a real user in the DB to avoid FK errors
     let validUserId = null;
     if (userId && userId !== "developer-admin") {
         const userExists = await db.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
-        if (userExists) {
-            validUserId = userId;
-        }
+        if (userExists) validUserId = userId;
     }
 
     const statements = [
@@ -106,13 +121,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (validUserId) {
         const eloChange = Math.round((score - 2000) / 10);
-        const accuracyForTurn = Math.min(1.0, score / 5000);
-
+        const accuracyForTurn = Math.min(1.0, score / 5000); // Only count distance score for accuracy stat
         statements.push(
             db.prepare(`
                 UPDATE users 
-                SET 
-                    accuracy_avg = (accuracy_avg * total_games + ?) / (total_games + 1),
+                SET accuracy_avg = (accuracy_avg * total_games + ?) / (total_games + 1),
                     current_elo = current_elo + ?,
                     total_games = total_games + 1
                 WHERE id = ?
@@ -120,17 +133,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         );
     }
 
-    try {
-        await db.batch(statements);
-    } catch (e) {
-        console.error("D1 Update Error:", e);
-    }
+    try { await db.batch(statements); } catch (e) { console.error("D1 Update Error:", e); }
 
     return Response.json({
         score,
         distance,
-        aiFeedback,
+        aiFeedback: aiFeedback?.explanation || "Evidence analyzed", // Simplify feedback for UI for now, or send full obj
+        fullFeedback: aiFeedback, // Send full obj for detailed UI
         newDifficulty: newDiff,
-        message: "Turn processed"
+        aiBonus
     });
 }

@@ -11,15 +11,14 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return btoa(binary);
 }
 
-export async function checkEvidenceWithGemini(
+export async function checkEvidenceListWithGemini(
     apiKey: string,
     imageUrl: string,
-    box: { x: number; y: number; w: number; h: number },
+    evidenceList: { box: { x: number; y: number; w: number; h: number }; description: string }[],
     locationName: string
 ) {
     const genAI = new GoogleGenerativeAI(apiKey);
-    // User requested "gemini 3 flash strictly". 
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
@@ -28,12 +27,19 @@ export async function checkEvidenceWithGemini(
     const base64Data = arrayBufferToBase64(arrayBuffer);
 
     const prompt = `
-    Analyze the image inside the bounding box defined by: x=${box.x}, y=${box.y}, w=${box.w}, h=${box.h} (coordinates are relative to image dimensions).
-    Does this area contain valid visual evidence (text, landmarks, distinct architecture) that helps identify the location "${locationName}"?
+    Analyze the image and the following list of marked evidence regions (Box coordinates are on a 0-1000 scale relative to image size).
+    Location context: "${locationName}".
     
-    Return a JSON object with:
+    For each item, verify if the visual feature found in the box MATCHES the user's description and is a VALID clue for identifying this location.
+    
+    Evidence List:
+    ${JSON.stringify(evidenceList, null, 2)}
+    
+    Return a JSON object with a "results" array containing:
+    - "index": number (matching input array index)
     - "validity": number (0.0 to 1.0)
-    - "explanation": string
+    - "explanation": string (short reason)
+    - "is_novel": boolean (true if this seems like a unique/distinct landmark feature worth noting)
   `;
 
     const result = await model.generateContent([
@@ -47,20 +53,24 @@ export async function checkEvidenceWithGemini(
     ]);
 
     const responseText = result.response.text();
-    // Clean markdown json
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
     }
-    return { validity: 0, explanation: "Failed to parse AI response" };
+    return { results: [] };
 }
 
 export async function analyzeImageQuality(
     apiKey: string,
-    imageUrl: string
+    imageUrl: string,
+    context?: {
+        lat?: number;
+        lng?: number;
+        evidenceList?: any[]; // optional pre-filled evidence
+    }
 ) {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
@@ -68,12 +78,22 @@ export async function analyzeImageQuality(
     const arrayBuffer = await response.arrayBuffer();
     const base64Data = arrayBufferToBase64(arrayBuffer);
 
+    let contextStr = "";
+    if (context?.lat && context?.lng) {
+        contextStr += `\nLocation Coordinates: ${context.lat}, ${context.lng}`;
+    }
+    if (context?.evidenceList && context.evidenceList.length > 0) {
+        contextStr += `\nPre-identified Visual Evidence:\n${JSON.stringify(context.evidenceList, null, 2)}`;
+    }
+
     const prompt = `
-    Analyze this image for a geography identification game. 
+    Analyze this image for a geography identification game. ${contextStr}
+    
     1. Is the image clear enough to identify landmarks or locations?
-    2. Suggest a "quality_score" from 0 to 100 based on clarity and uniqueness of the location.
-    3. Suggest a "difficulty_rating" from 1 to 10 based on how hard it would be to find this exact spot (1 is trivial/famous landmark, 10 is very generic street/texture).
+    2. Suggest a "quality_score" from 0 to 100 based on clarity and uniqueness.
+    3. Suggest a "difficulty_rating" from 1 to 10 based on how hard it would be to find this exact spot.
     4. Provide a brief "precontext" description of what you see.
+    ${context?.lat ? "5. Verify if the visual environment matches the provided coordinates." : ""}
     
     Return a JSON object with:
     - "quality_score": number

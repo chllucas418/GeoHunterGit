@@ -37,11 +37,16 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const { location, mapsApiKey } = loaderData;
     const fetcher = useFetcher() as any;
     const navigation = useNavigation();
+    const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; description: string; id: string }[]>([]);
+    const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null);
+    const [showDescModal, setShowDescModal] = useState(false);
+    const [tempDesc, setTempDesc] = useState("");
+    const [isEvidenceMode, setIsEvidenceMode] = useState(false);
+
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
-    const [marker, setMarker] = useState<google.maps.Marker | null>(null);
-    const [selectedBox, setSelectedBox] = useState<BoxCoordinates | null>(null);
     const [guess, setGuess] = useState<{ lat: number; lng: number } | null>(null);
+
     const markerRef = useRef<google.maps.Marker | null>(null);
     const actualMarkerRef = useRef<google.maps.Marker | null>(null);
     const polylineRef = useRef<google.maps.Polyline | null>(null);
@@ -49,6 +54,26 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const result = fetcher.data;
     const isSubmitting = fetcher.state !== "idle";
     const isLoading = navigation.state === "loading";
+
+    // Handle evidence box drawing
+    const handleBoxDrawn = (box: BoxCoordinates | null) => {
+        if (box) {
+            setCurrentBox(box);
+            setTempDesc("");
+            setShowDescModal(true);
+        }
+    };
+
+    const saveEvidenceItem = () => {
+        if (currentBox && tempDesc.trim()) {
+            setEvidenceList(prev => [
+                ...prev,
+                { box: currentBox, description: tempDesc.trim(), id: Math.random().toString(36).substr(2, 9) }
+            ]);
+            setShowDescModal(false);
+            setCurrentBox(null);
+        }
+    };
 
     // Load Maps
     useEffect(() => {
@@ -67,6 +92,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     disableDefaultUI: true, // Clean UI
                     mapTypeId: "hybrid",
                     mapId: "DEMO_MAP_ID",
+                    gestureHandling: "greedy", // Enable 1-finger pan
                     styles: [
                         { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
                         { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
@@ -133,7 +159,10 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         formData.append("locationId", location.id);
         formData.append("lat", guess.lat.toString());
         formData.append("lng", guess.lng.toString());
-        if (selectedBox) formData.append("box", JSON.stringify(selectedBox));
+        // Submit full evidence list
+        if (evidenceList.length > 0) {
+            formData.append("evidenceList", JSON.stringify(evidenceList));
+        }
         fetcher.submit(formData, { method: "post", action: "/api/submit-turn" });
     };
 
@@ -155,13 +184,130 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
             {/* --- IMMERSIVE EVIDENCE LAYER --- */}
             <div className={`absolute inset-0 transition-all duration-700 ${guess ? 'h-1/2 md:h-full md:w-1/2' : 'h-full w-full'}`}>
-                <EvidenceCanvas
-                    imageUrl={location.imageUrl}
-                    onBoxChange={setSelectedBox}
-                    disabled={!!result}
-                />
-                <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent">
-                    <div className="flex justify-between items-start">
+                {/* Mode Toggle Button */}
+                {!result && !isSubmitting && (
+                    <div className="absolute top-24 right-6 z-30 flex flex-col items-end gap-2">
+                        <button
+                            onClick={() => setIsEvidenceMode(!isEvidenceMode)}
+                            className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md
+                                ${isEvidenceMode
+                                    ? 'bg-green-500/20 text-green-400 border-green-500/50 hover:bg-green-500/30'
+                                    : 'bg-white/10 text-white border-white/10 hover:bg-white/20'
+                                }`}
+                        >
+                            {isEvidenceMode ? "Scanning Mode Active" : "Enable Scanner"}
+                        </button>
+                        {evidenceList.length > 0 && (
+                            <div className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-xs font-mono text-green-400 animate-in slide-in-from-right">
+                                {evidenceList.length} Clues Logged
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className={`w-full h-full relative ${isEvidenceMode ? 'cursor-crosshair' : ''}`}>
+                    <EvidenceCanvas
+                        imageUrl={location.imageUrl}
+                        onBoxChange={isEvidenceMode ? handleBoxDrawn : () => { }}
+                        disabled={!!result || !isEvidenceMode}
+                    />
+
+                    {/* Overlay Player Boxes */}
+                    {evidenceList.map((ev, index) => {
+                        let borderColor = "border-green-400";
+                        let bgColor = "bg-green-400/10";
+                        let statusIcon = "";
+                        let statusText = null;
+
+                        // Identify result status if game is over
+                        if (result?.fullFeedback?.results) {
+                            const feedback = result.fullFeedback.results.find((r: any) => r.index === index);
+                            if (feedback) {
+                                if (feedback.validity > 0.7) {
+                                    borderColor = "border-blue-400 shadow-[0_0_15px_rgba(96,165,250,0.6)]";
+                                    bgColor = "bg-blue-400/20";
+                                    statusIcon = "✓";
+                                    statusText = feedback.is_novel ? "NOVEL DATA ACQUIRED" : "CONFIRMED";
+                                } else {
+                                    borderColor = "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]";
+                                    bgColor = "bg-red-500/10";
+                                    statusIcon = "✕";
+                                    statusText = "INVALID DATA";
+                                }
+                            }
+                        }
+
+                        return (
+                            <div
+                                key={ev.id}
+                                className={`absolute border-2 ${borderColor} ${bgColor} transition-all duration-500 flex flex-col items-end p-1 animate-in zoom-in-50 cursor-pointer group hover:bg-green-400/20`}
+                                style={{
+                                    left: `${ev.box.x / 10}%`,
+                                    top: `${ev.box.y / 10}%`,
+                                    width: `${ev.box.w / 10}%`,
+                                    height: `${ev.box.h / 10}%`
+                                }}
+                            >
+                                {result && statusText && (
+                                    <div className={`text-[10px] font-black px-2 py-0.5 rounded-sm backdrop-blur-md uppercase tracking-wider
+                                        ${statusIcon === "✓" ? "bg-blue-500 text-white" : "bg-red-500 text-white"}`}>
+                                        {statusIcon} {statusText}
+                                    </div>
+                                )}
+                                {/* Delete Button (Only in edit mode) */}
+                                {!result && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEvidenceList(prev => prev.filter(item => item.id !== ev.id));
+                                        }}
+                                        className="bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs font-bold rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="Remove Evidence"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })}
+
+                    {/* Description Modal */}
+                    {showDescModal && (
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+                            <div className="bg-slate-900/90 p-6 rounded-2xl border border-white/20 w-full max-w-sm space-y-4 shadow-2xl backdrop-blur-xl">
+                                <h4 className="text-lg font-bold text-white uppercase tracking-widest">Identify Feature</h4>
+                                <p className="text-xs text-slate-400 font-mono">
+                                    Describe this visual evidence for analysis.
+                                </p>
+                                <textarea
+                                    autoFocus
+                                    value={tempDesc}
+                                    onChange={(e) => setTempDesc(e.target.value)}
+                                    className="w-full h-24 bg-black/50 border border-white/10 rounded-xl p-3 text-sm focus:border-blue-500 outline-none resize-none text-white font-mono"
+                                    placeholder="Blue sign reading 'Kowloon'..."
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setShowDescModal(false); setCurrentBox(null); }}
+                                        className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold uppercase"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={saveEvidenceItem}
+                                        disabled={!tempDesc.trim()}
+                                        className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-sm font-bold uppercase"
+                                    >
+                                        Log Data
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+                    <div className="flex justify-between items-start pointer-events-auto">
                         <Link to="/" className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-xs font-bold transition-all border border-white/10">
                             ← ABORT MISSION
                         </Link>
@@ -201,7 +347,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             {/* --- HUD RESULT OVERLAY --- */}
             {result && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-                    <div className="bg-black/80 border border-white/10 p-8 md:p-12 rounded-[3rem] max-w-2xl w-full shadow-2xl space-y-8 relative overflow-hidden">
+                    <div className="bg-black/80 border border-white/10 p-8 md:p-12 rounded-[3rem] text-white max-w-2xl w-full shadow-2xl space-y-8 relative overflow-hidden">
                         {/* Glow effect */}
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
 
@@ -213,7 +359,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             <div className="flex items-center justify-center gap-4 text-sm font-bold text-white/60">
                                 <span>{Math.round(result.distance)}m Deviation</span>
                                 <span>•</span>
-                                <span>{result.aiFeedback?.validity > 0.5 ? "+AI BONUS" : "NO AI LOCK"}</span>
+                                <span>{result.aiFeedback?.validity > 0.5 ? "+AI BONUS" : (result.aiBonus > 0 ? `+${result.aiBonus} INTEL` : "NO AI LOCK")}</span>
                             </div>
                         </div>
 
@@ -221,7 +367,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
                                 <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Tactical Assessment</p>
                                 <p className="text-sm leading-relaxed text-white/80">
-                                    {result.aiFeedback?.explanation || "Accessing satellite imagery..."}
+                                    {result.aiFeedback?.explanation || (Array.isArray(result.fullFeedback?.results) ? `${result.fullFeedback.results.length} clue(s) analyzed.` : "Accessing satellite imagery...")}
                                 </p>
                             </div>
                             <div className="p-6 rounded-3xl bg-white/5 border border-white/10 flex flex-col justify-center items-center">

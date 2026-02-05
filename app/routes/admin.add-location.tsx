@@ -34,8 +34,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (intent === "analyze") {
         const env = context.cloudflare.env as any;
+        const lat = parseFloat(formData.get("lat") as string);
+        const lng = parseFloat(formData.get("lng") as string);
+        const evidenceListJson = formData.get("evidenceList") as string;
+
         try {
-            const analysis = await analyzeImageQuality(env.GEMINI_API_KEY, imageUrl);
+            const contextData = {
+                lat: isNaN(lat) ? undefined : lat,
+                lng: isNaN(lng) ? undefined : lng,
+                evidenceList: evidenceListJson ? JSON.parse(evidenceListJson) : []
+            };
+            const analysis = await analyzeImageQuality(env.GEMINI_API_KEY, imageUrl, contextData);
             return { analysis };
         } catch (e) {
             console.error("AI Analysis error:", e);
@@ -47,7 +56,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const lng = parseFloat(formData.get("lng") as string);
     const difficulty = parseFloat(formData.get("difficulty") as string);
     const qualityScore = parseInt(formData.get("qualityScore") as string) || 100;
-    const evidenceJson = formData.get("evidence") as string;
+    const evidenceListJson = formData.get("evidenceList") as string;
+    const hints = formData.get("hints") as string;
+    const photographer = formData.get("photographer") as string;
 
     if (!imageUrl || isNaN(lat) || isNaN(lng)) {
         return { error: "Image and coordinates are required" };
@@ -57,19 +68,44 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const db = env.DB as D1Database;
     const existingId = formData.get("existingId") as string;
 
+    const metadata = photographer ? JSON.stringify({ photographer }) : null;
+
     try {
+        let locationId = existingId;
+
         if (existingId) {
             await db.prepare(
-                "UPDATE locations SET image_url = ?, lat = ?, lng = ?, difficulty_rating = ?, quality_score = ? WHERE id = ?"
-            ).bind(imageUrl, lat, lng, difficulty, qualityScore, existingId).run();
-            return { success: true, message: `Location updated!` };
+                "UPDATE locations SET image_url = ?, lat = ?, lng = ?, difficulty_rating = ?, quality_score = ?, hints = ?, image_metadata = ? WHERE id = ?"
+            ).bind(imageUrl, lat, lng, difficulty, qualityScore, hints, metadata, existingId).run();
         } else {
-            const id = `loc_${Math.random().toString(36).substring(2, 9)}`;
+            locationId = `loc_${Math.random().toString(36).substring(2, 9)}`;
             await db.prepare(
-                "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini) VALUES (?, ?, ?, ?, ?, ?, ?)"
-            ).bind(id, imageUrl, lat, lng, difficulty, qualityScore, 1).run();
-            return { success: true, message: `Location added! (ID: ${id})` };
+                "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini, hints, image_metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            ).bind(locationId, imageUrl, lat, lng, difficulty, qualityScore, 1, hints, metadata).run();
         }
+
+        // Handle Evidence
+        if (evidenceListJson) {
+            const evidenceList = JSON.parse(evidenceListJson);
+
+            // Should properly clear old evidence if updating, but for now we just add new ones or ignore?
+            // Better to clear old ones for this location if we are in "Edit Mode" fully, but for "Add" it's fine.
+            // Let's safe-guard: delete all existing dev-evidence for this location and re-insert.
+            await db.prepare("DELETE FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(locationId).run();
+
+            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified) VALUES (?, ?, ?, ?, 1)");
+            const batch = evidenceList.map((ev: any) =>
+                stmt.bind(
+                    `ev_${Math.random().toString(36).substring(2, 9)}`,
+                    locationId,
+                    JSON.stringify(ev.box),
+                    ev.description
+                )
+            );
+            if (batch.length > 0) await db.batch(batch);
+        }
+
+        return { success: true, message: `Location saved with ${evidenceListJson ? JSON.parse(evidenceListJson).length : 0} evidence points!` };
     } catch (e) {
         console.error("Save location error:", e);
         return { error: "Failed to save location" };
@@ -91,12 +127,21 @@ export default function AddLocation() {
     const [marker, setMarker] = useState<{ lat: number; lng: number } | null>(
         existingLocation ? { lat: existingLocation.lat, lng: existingLocation.lng } : null
     );
+    // Parse metadata safely (it might be JSON string or null)
+    const initialMetadata = existingLocation?.image_metadata ? JSON.parse(existingLocation.image_metadata) : {};
+
     const [previewUrl, setPreviewUrl] = useState<string>(existingLocation?.image_url ?? "");
     const [base64, setBase64] = useState<string>(existingLocation?.image_url ?? "");
     const [qualityScore, setQualityScore] = useState<number>(existingLocation?.quality_score ?? 100);
     const [difficulty, setDifficulty] = useState<number>(existingLocation?.difficulty_rating ?? 5);
+    const [hints, setHints] = useState<string>(existingLocation?.hints ?? "");
+    const [photographer, setPhotographer] = useState<string>(initialMetadata.photographer ?? "");
+
     const [evidenceStep, setEvidenceStep] = useState(false);
-    const [selectedBox, setSelectedBox] = useState<BoxCoordinates | null>(null);
+    const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; description: string; id: string }[]>([]);
+    const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null);
+    const [showDescModal, setShowDescModal] = useState(false);
+    const [tempDesc, setTempDesc] = useState("");
 
     // Sync status with AI
     useEffect(() => {
@@ -108,6 +153,8 @@ export default function AddLocation() {
         }
     }, [analysis]);
 
+    // Load existing evidence if needed (Future improvement: Fetch from DB)
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -118,6 +165,25 @@ export default function AddLocation() {
                 setBase64(result);
             };
             reader.readAsDataURL(file);
+        }
+    };
+
+    const handleBoxDrawn = (box: BoxCoordinates | null) => {
+        if (box) {
+            setCurrentBox(box);
+            setTempDesc("");
+            setShowDescModal(true);
+        }
+    };
+
+    const saveEvidenceItem = () => {
+        if (currentBox && tempDesc.trim()) {
+            setEvidenceList(prev => [
+                ...prev,
+                { box: currentBox, description: tempDesc.trim(), id: Math.random().toString(36).substr(2, 9) }
+            ]);
+            setShowDescModal(false);
+            setCurrentBox(null);
         }
     };
 
@@ -172,17 +238,17 @@ export default function AddLocation() {
                         </h1>
                     </div>
                     <div className="flex items-center gap-4">
-                        {selectedBox && (
+                        {evidenceList.length > 0 && (
                             <span className="text-green-400 text-sm font-bold flex items-center gap-1">
-                                Evidence Marked ✅
+                                {evidenceList.length} Evidence Points ✅
                             </span>
                         )}
                         {previewUrl && (
                             <button
                                 onClick={() => setEvidenceStep(!evidenceStep)}
-                                className="px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition-all"
+                                className="px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition-all font-bold"
                             >
-                                {evidenceStep ? "Edit Details" : "Mark Evidence area"}
+                                {evidenceStep ? "Return to Editor" : "Manage Evidence"}
                             </button>
                         )}
                     </div>
@@ -194,11 +260,13 @@ export default function AddLocation() {
                             <input type="hidden" name="base64Image" value={base64} />
                             <input type="hidden" name="lat" value={marker?.lat ?? ""} />
                             <input type="hidden" name="lng" value={marker?.lng ?? ""} />
-                            <input type="hidden" name="evidence" value={JSON.stringify(selectedBox)} />
+                            {/* Send flattened evidence list */}
+                            <input type="hidden" name="evidenceList" value={JSON.stringify(evidenceList)} />
                             {existingLocation && <input type="hidden" name="existingId" value={existingLocation.id} />}
 
                             <div className="space-y-4">
                                 <label className="block text-sm font-medium text-slate-400">Step 1: Upload Image</label>
+                                {/* ... Image Upload (Same) ... */}
                                 <div className="border-2 border-dashed border-slate-800 rounded-2xl p-4 text-center hover:border-slate-700 transition-colors">
                                     <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" id="file-upload" />
                                     <label htmlFor="file-upload" className="cursor-pointer">
@@ -211,6 +279,13 @@ export default function AddLocation() {
                                                         const fd = new FormData();
                                                         fd.append("intent", "analyze");
                                                         fd.append("base64Image", base64);
+                                                        if (marker) {
+                                                            fd.append("lat", marker.lat.toString());
+                                                            fd.append("lng", marker.lng.toString());
+                                                        }
+                                                        if (evidenceList.length > 0) {
+                                                            fd.append("evidenceList", JSON.stringify(evidenceList));
+                                                        }
                                                         fetcher.submit(fd, { method: "post" });
                                                     }}
                                                     disabled={isAnalyzing}
@@ -245,6 +320,27 @@ export default function AddLocation() {
                                 <div className="h-64 rounded-2xl overflow-hidden border border-slate-800" ref={mapRef} />
                             </div>
 
+                            {/* Evidence List Preview */}
+                            {evidenceList.length > 0 && (
+                                <div className="space-y-2 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Recorded Evidence</label>
+                                    <div className="space-y-2">
+                                        {evidenceList.map((ev) => (
+                                            <div key={ev.id} className="flex justify-between items-center text-sm p-2 bg-slate-800 rounded-lg">
+                                                <span className="truncate flex-1 font-mono text-slate-300 pr-2">{ev.description}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEvidenceList(prev => prev.filter(e => e.id !== ev.id))}
+                                                    className="text-red-400 hover:text-red-300 text-xs font-bold"
+                                                >
+                                                    REMOVE
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="space-y-4">
                                 <label className="block text-sm font-medium text-slate-400">Step 3: Quality & Difficulty</label>
                                 <div className="grid grid-cols-2 gap-4">
@@ -273,6 +369,32 @@ export default function AddLocation() {
                                     </div>
                                 </div>
                             </div>
+                            <div className="space-y-4 pt-4 border-t border-slate-800">
+                                <label className="block text-sm font-medium text-slate-400">Extra Data</label>
+                                <div className="grid grid-cols-1 gap-4">
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] uppercase text-slate-500 font-bold">Hints (Markdown supported)</p>
+                                        <textarea
+                                            name="hints"
+                                            value={hints}
+                                            onChange={(e) => setHints(e.target.value)}
+                                            className="w-full h-24 bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:border-blue-500 outline-none resize-none"
+                                            placeholder="Example: Look for the blue sign..."
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] uppercase text-slate-500 font-bold">Photographer Attribute</p>
+                                        <input
+                                            name="photographer"
+                                            type="text"
+                                            value={photographer}
+                                            onChange={(e) => setPhotographer(e.target.value)}
+                                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
+                                            placeholder="e.g. Unsplash / @username"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
 
                             <input type="hidden" name="intent" value="deploy" />
 
@@ -288,20 +410,89 @@ export default function AddLocation() {
                             </button>
                         </Form>
                     ) : (
-                        <div className="lg:col-span-2 bg-slate-900 p-8 rounded-3xl border border-slate-800 min-h-[600px] flex flex-col">
-                            <div className="mb-4">
-                                <h3 className="text-xl font-bold">Mark Identification Area</h3>
-                                <p className="text-slate-500 text-sm">Draw a box over landmarks or text that confirm this location.</p>
+                        <div className="lg:col-span-2 bg-slate-900 p-8 rounded-3xl border border-slate-800 min-h-[600px] flex flex-col relative">
+                            <div className="mb-4 flex justify-between items-start">
+                                <div>
+                                    <h3 className="text-xl font-bold">Mark Identification Area</h3>
+                                    <p className="text-slate-500 text-sm">Draw a box around a distinct visual feature (sign, mountain, architecture).</p>
+                                </div>
+                                <button
+                                    onClick={() => setEvidenceStep(false)}
+                                    className="text-sm text-blue-400 hover:text-blue-300 font-bold"
+                                >
+                                    Done & Return
+                                </button>
                             </div>
-                            <div className="flex-grow relative bg-black rounded-2xl overflow-hidden">
-                                <EvidenceCanvas imageUrl={previewUrl} onBoxChange={setSelectedBox} />
+
+                            <div className="flex-grow relative bg-black rounded-2xl overflow-hidden shadow-2xl">
+                                <EvidenceCanvas imageUrl={previewUrl} onBoxChange={handleBoxDrawn} />
+
+                                {/* Overlay existing boxes */}
+                                {evidenceList.map(ev => (
+                                    <div
+                                        key={ev.id}
+                                        className="absolute border-2 border-green-400 bg-green-400/10 pointer-events-none"
+                                        style={{
+                                            left: `${ev.box.x / 10}%`,
+                                            top: `${ev.box.y / 10}%`,
+                                            width: `${ev.box.w / 10}%`,
+                                            height: `${ev.box.h / 10}%`
+                                        }}
+                                        title={ev.description}
+                                    />
+                                ))}
+
+                                {/* Description Prompt Modal */}
+                                {showDescModal && (
+                                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
+                                        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 w-full max-w-sm space-y-4 shadow-2xl">
+                                            <h4 className="text-lg font-bold text-white">Describe this Evidence</h4>
+                                            <p className="text-xs text-slate-400">
+                                                How does this feature help identify the location? (e.g., "Unique red roof tiling", "Partial shop sign reading 'Cafe'")
+                                            </p>
+                                            <textarea
+                                                autoFocus
+                                                value={tempDesc}
+                                                onChange={(e) => setTempDesc(e.target.value)}
+                                                className="w-full h-24 bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm focus:border-blue-500 outline-none resize-none"
+                                                placeholder="Enter description..."
+                                            />
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => setShowDescModal(false)}
+                                                    className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-bold"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={saveEvidenceItem}
+                                                    disabled={!tempDesc.trim()}
+                                                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold"
+                                                >
+                                                    Add Evidence
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                            <button
-                                onClick={() => setEvidenceStep(false)}
-                                className="mt-6 w-full py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold"
-                            >
-                                Save Area and Return
-                            </button>
+
+                            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {evidenceList.map((ev) => (
+                                    <div key={ev.id} className="p-3 bg-slate-800 rounded-xl border border-slate-700 flex flex-col gap-2 relative group">
+                                        <div className="flex justify-between items-start">
+                                            <span className="text-xs font-bold text-green-400">EVIDENCE</span>
+                                            <button
+                                                onClick={() => setEvidenceList(prev => prev.filter(e => e.id !== ev.id))}
+                                                className="text-slate-500 hover:text-red-400 transition-colors"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                        <p className="text-sm text-slate-300 leading-tight">{ev.description}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
@@ -313,13 +504,18 @@ export default function AddLocation() {
                                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent" />
                                 <div className="absolute bottom-4 left-4">
                                     <p className="text-xl font-bold">Mystery Location</p>
-                                    <p className="text-sm text-slate-400">{marker?.lat.toFixed(4)}, {marker?.lng.toFixed(4)}</p>
+                                    <div className="text-xs text-green-400 font-mono mt-1 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 relative">
+                                            <span className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-50" />
+                                        </span>
+                                        {evidenceList.length} VERIFIED CLUES
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
                 </div>
-            </div>
+            </div >
         </div>
     );
 }

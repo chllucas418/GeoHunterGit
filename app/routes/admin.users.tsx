@@ -134,6 +134,12 @@ export default function AdminUsers() {
                                     ✕
                                 </button>
                             </div>
+                            <Link
+                                to={`/admin/users/${user.id}`}
+                                className="w-full py-3 mt-2 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 rounded-xl text-xs font-bold uppercase tracking-wider text-center transition-all border border-indigo-500/20 hover:border-indigo-500/40 block relative z-10"
+                            >
+                                View Service Record
+                            </Link>
                         </div>
                     ))}
                 </div>
