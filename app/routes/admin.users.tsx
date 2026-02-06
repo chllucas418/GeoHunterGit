@@ -64,8 +64,13 @@ export default function AdminUsers() {
                         </h1>
                         <p className="text-blue-200/60 font-mono mt-2">Database of active field operatives.</p>
                     </div>
-                    <div className="glass-panel px-6 py-3 rounded-2xl border border-white/10 text-sm font-bold text-white/80 uppercase tracking-widest backdrop-blur-md">
-                        {totalUsers} Active Agents
+                    <div className="flex items-center gap-4">
+                        <Link to="/admin/create-teacher" className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest px-6 py-3 rounded-2xl transition-all shadow-lg hover:shadow-blue-500/20">
+                            + Provision Teacher
+                        </Link>
+                        <div className="glass-panel px-6 py-3 rounded-2xl border border-white/10 text-sm font-bold text-white/80 uppercase tracking-widest backdrop-blur-md">
+                            {totalUsers} Active Agents
+                        </div>
                     </div>
                 </header>
 

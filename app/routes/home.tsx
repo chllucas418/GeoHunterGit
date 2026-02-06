@@ -86,6 +86,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 {isDeveloper && (
                   <div className="flex gap-1 border-l border-white/10 pl-2 ml-2">
                     <Link to="/admin/add-location" className="w-10 h-10 flex items-center justify-center bg-blue-500/20 hover:bg-blue-500/40 rounded-lg text-blue-300 transition-colors" title="Deploy">+L</Link>
+                    <Link to="/admin/create-teacher" className="w-10 h-10 flex items-center justify-center bg-yellow-500/20 hover:bg-yellow-500/40 rounded-lg text-yellow-300 transition-colors" title="Add Teacher">+T</Link>
                     <Link to="/admin/users" className="w-10 h-10 flex items-center justify-center bg-purple-500/20 hover:bg-purple-500/40 rounded-lg text-purple-300 transition-colors" title="Agents">A</Link>
                     <Link to="/admin/locations" className="w-10 h-10 flex items-center justify-center bg-emerald-500/20 hover:bg-emerald-500/40 rounded-lg text-emerald-300 transition-colors" title="Manage">M</Link>
                   </div>
