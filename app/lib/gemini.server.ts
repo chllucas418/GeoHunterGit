@@ -18,7 +18,7 @@ export async function checkEvidenceListWithGemini(
     locationName: string
 ) {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
@@ -26,20 +26,29 @@ export async function checkEvidenceListWithGemini(
     const arrayBuffer = await response.arrayBuffer();
     const base64Data = arrayBufferToBase64(arrayBuffer);
 
+    // Prompt updated to GENERATE descriptions for boxes, as users no longer input them.
     const prompt = `
     Analyze the image and the following list of marked evidence regions (Box coordinates are on a 0-1000 scale relative to image size).
     Location context: "${locationName}".
     
-    For each item, verify if the visual feature found in the box MATCHES the user's description and is a VALID clue for identifying this location.
+    For each item:
+    1. Analyze the visual content within the bounding box.
+    2. Determine if it contains a DISTINCTIVE visual clue usable for geolocation (e.g., signage, unique architecture, landmark, specific vegetation).
+    3. If VALID:
+       - Generate a short, precise description of the clue.
+       - Set "validity" to high (0.8-1.0).
+    4. If INVALID (empty sky, generic road, too blurry):
+       - Set "validity" to low (0.0-0.3).
+       - Explanation: "Generic feature" or similar.
     
-    Evidence List:
-    ${JSON.stringify(evidenceList, null, 2)}
+    Evidence List (Boxes only):
+    ${JSON.stringify(evidenceList.map(e => ({ box: e.box })), null, 2)}
     
     Return a JSON object with a "results" array containing:
     - "index": number (matching input array index)
     - "validity": number (0.0 to 1.0)
-    - "explanation": string (short reason)
-    - "is_novel": boolean (true if this seems like a unique/distinct landmark feature worth noting)
+    - "description": string (AI generated description of the feature)
+    - "explanation": string (reason for validity score)
   `;
 
     const result = await model.generateContent([

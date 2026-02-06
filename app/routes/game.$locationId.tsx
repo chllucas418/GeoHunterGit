@@ -37,10 +37,8 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const { location, mapsApiKey } = loaderData;
     const fetcher = useFetcher() as any;
     const navigation = useNavigation();
-    const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; description: string; id: string }[]>([]);
+    const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; id: string }[]>([]);
     const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null);
-    const [showDescModal, setShowDescModal] = useState(false);
-    const [tempDesc, setTempDesc] = useState("");
     const [isEvidenceMode, setIsEvidenceMode] = useState(false);
 
     const mapRef = useRef<HTMLDivElement>(null);
@@ -55,23 +53,13 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const isSubmitting = fetcher.state !== "idle";
     const isLoading = navigation.state === "loading";
 
-    // Handle evidence box drawing
+    // Handle evidence box drawing (Auto-save without description)
     const handleBoxDrawn = (box: BoxCoordinates | null) => {
         if (box) {
-            setCurrentBox(box);
-            setTempDesc("");
-            setShowDescModal(true);
-        }
-    };
-
-    const saveEvidenceItem = () => {
-        if (currentBox && tempDesc.trim()) {
             setEvidenceList(prev => [
                 ...prev,
-                { box: currentBox, description: tempDesc.trim(), id: Math.random().toString(36).substr(2, 9) }
+                { box, id: Math.random().toString(36).substr(2, 9) }
             ]);
-            setShowDescModal(false);
-            setCurrentBox(null);
         }
     };
 
@@ -220,19 +208,25 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         let statusText = null;
 
                         // Identify result status if game is over
-                        if (result?.fullFeedback?.results) {
-                            const feedback = result.fullFeedback.results.find((r: any) => r.index === index);
-                            if (feedback) {
-                                if (feedback.validity > 0.7) {
+                        if (result?.matchedEvidenceIds && result.adminEvidence) {
+                            // Check if this user box matched an admin box
+                            // This logic is tricky because we don't know EXACTLY which user box mapped to which admin box 
+                            // unless we returned that mapping. 
+                            // But for now, let's just show Valid/Invalid based on AI feedback if available.
+
+                            // Simplification: Just style based on if it was considered "valid" by AI
+                            if (result.fullFeedback?.results) {
+                                const feedback = result.fullFeedback.results.find((r: any) => r.index === index);
+                                if (feedback && feedback.validity > 0.7) {
                                     borderColor = "border-blue-400 shadow-[0_0_15px_rgba(96,165,250,0.6)]";
                                     bgColor = "bg-blue-400/20";
                                     statusIcon = "✓";
-                                    statusText = feedback.is_novel ? "NOVEL DATA ACQUIRED" : "CONFIRMED";
+                                    statusText = "VALID CLUE";
                                 } else {
                                     borderColor = "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]";
                                     bgColor = "bg-red-500/10";
                                     statusIcon = "✕";
-                                    statusText = "INVALID DATA";
+                                    statusText = "IGNORED";
                                 }
                             }
                         }
@@ -271,39 +265,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         );
                     })}
 
-                    {/* Description Modal */}
-                    {showDescModal && (
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-                            <div className="bg-slate-900/90 p-6 rounded-2xl border border-white/20 w-full max-w-sm space-y-4 shadow-2xl backdrop-blur-xl">
-                                <h4 className="text-lg font-bold text-white uppercase tracking-widest">Identify Feature</h4>
-                                <p className="text-xs text-slate-400 font-mono">
-                                    Describe this visual evidence for analysis.
-                                </p>
-                                <textarea
-                                    autoFocus
-                                    value={tempDesc}
-                                    onChange={(e) => setTempDesc(e.target.value)}
-                                    className="w-full h-24 bg-black/50 border border-white/10 rounded-xl p-3 text-sm focus:border-blue-500 outline-none resize-none text-white font-mono"
-                                    placeholder="Blue sign reading 'Kowloon'..."
-                                />
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => { setShowDescModal(false); setCurrentBox(null); }}
-                                        className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-bold uppercase"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={saveEvidenceItem}
-                                        disabled={!tempDesc.trim()}
-                                        className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-sm font-bold uppercase"
-                                    >
-                                        Log Data
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+
                 </div>
 
                 <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -320,8 +282,17 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             </div>
 
             {/* --- TACTICAL MAP LAYER --- */}
-            <div className={`absolute bottom-0 right-0 transition-all duration-700 shadow-2xl z-20 overflow-hidden border-t-2 md:border-t-0 md:border-l-2 border-white/10 
-                ${guess ? 'h-1/2 w-full md:h-full md:w-1/2' : 'h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105'}
+            {/* When result is present, we move this map to the result view via CSS layout or we ensure it persists visually? 
+                React Portals or just CSS classes.
+                Let's use CSS classes to change its position from "bottom-right corner" to "fullscreen result container left".
+            */}
+            <div className={`transition-all duration-700 shadow-2xl z-20 overflow-hidden border border-white/10 
+                ${result
+                    ? 'absolute inset-0 z-40 m-6 mb-24 md:mr-[26rem] md:mb-6 rounded-3xl' // Result Mode: Fill screen minus sidebar
+                    : guess
+                        ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2' // Split Mode
+                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105' // Mini Mode
+                }
             `}>
                 <div ref={mapRef} className="w-full h-full bg-slate-800" />
 
@@ -344,37 +315,74 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 )}
             </div>
 
-            {/* --- HUD RESULT OVERLAY --- */}
+            {/* --- NEW POST-GAME RESULTS LAYER --- */}
             {result && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-                    <div className="bg-black/80 border border-white/10 p-8 md:p-12 rounded-[3rem] text-white max-w-2xl w-full shadow-2xl space-y-8 relative overflow-hidden">
-                        {/* Glow effect */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-blue-500/10 blur-[100px] rounded-full pointer-events-none" />
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md animate-in fade-in zoom-in duration-300 overflow-hidden">
 
-                        <div className="relative text-center space-y-2">
-                            <p className="text-xs font-mono text-blue-400 uppercase tracking-[0.3em]">Mission Debrief</p>
-                            <h2 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50">
+                    {/* Top Stats Bar */}
+                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-10 pointer-events-none">
+                        <div>
+                            <h2 className="text-6xl font-black text-white leading-none">
                                 {result.score}
                             </h2>
-                            <div className="flex items-center justify-center gap-4 text-sm font-bold text-white/60">
-                                <span>{Math.round(result.distance)}m Deviation</span>
-                                <span>•</span>
-                                <span>{result.aiFeedback?.validity > 0.5 ? "+AI BONUS" : (result.aiBonus > 0 ? `+${result.aiBonus} INTEL` : "NO AI LOCK")}</span>
-                            </div>
+                            <p className="text-sm font-mono text-green-400 uppercase tracking-widest">Mission Score</p>
                         </div>
+                        <div className="text-right">
+                            <h3 className="text-2xl font-bold text-white">{Math.round(result.distance)}<span className="text-sm text-slate-400 font-normal">m</span></h3>
+                            <p className="text-xs font-mono text-slate-400 uppercase">Deviation</p>
+                        </div>
+                    </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative">
-                            <div className="p-6 rounded-3xl bg-white/5 border border-white/10">
-                                <p className="text-[10px] uppercase font-bold text-white/40 mb-2">Tactical Assessment</p>
-                                <p className="text-sm leading-relaxed text-white/80">
-                                    {result.aiFeedback?.explanation || (Array.isArray(result.fullFeedback?.results) ? `${result.fullFeedback.results.length} clue(s) analyzed.` : "Accessing satellite imagery...")}
+                    {/* Split View: Map & Intel */}
+                    <div className="flex flex-col md:flex-row w-full h-full pt-28 pb-6 px-6 gap-6 pointer-events-none">
+
+                        {/* LEFT: Map Visualization - Spacer */}
+                        {/* The real map is positioned via CSS in the <div ref={mapRef}> above. 
+                            We use this spacer to push the sidebar to the right. 
+                        */}
+                        <div className="flex-1 hidden md:block" />
+
+                        {/* RIGHT: Evidence Intel */}
+                        <div className="w-full md:w-96 flex flex-col gap-4 overflow-y-auto pr-2 pointer-events-auto items-stretch h-full z-50">
+                            <div className="p-5 bg-white/5 rounded-2xl border border-white/10">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Geographic Intel</h4>
+                                <div className="space-y-2">
+                                    {result.adminEvidence && result.adminEvidence.length > 0 ? (
+                                        result.adminEvidence.map((ev: any) => {
+                                            const isFound = result.matchedEvidenceIds?.includes(ev.id);
+                                            return (
+                                                <div key={ev.id} className={`p-3 rounded-xl border ${isFound ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-white/5'} transition-all`}>
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className={`text-[10px] font-black uppercase ${isFound ? 'text-green-400' : 'text-slate-500'}`}>
+                                                            {isFound ? "ACQUIRED" : "MISSED"}
+                                                        </span>
+                                                    </div>
+                                                    <p className={`text-xs ${isFound ? 'text-white' : 'text-slate-500'}`}>{ev.description}</p>
+                                                </div>
+                                            )
+                                        })
+                                    ) : (
+                                        <p className="text-xs text-slate-500 italic">No intelligence data available for this sector.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="p-5 bg-white/5 rounded-2xl border border-white/10 flex-grow">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">AI Analysis</h4>
+                                <p className="text-xs leading-relaxed text-slate-300">
+                                    {result.aiFeedback?.explanation || "Evidence correlation complete."}
                                 </p>
+                                {result.aiBonus > 0 && (
+                                    <div className="mt-3 py-2 px-3 bg-blue-500/20 rounded-lg border border-blue-500/30 flex justify-between items-center">
+                                        <span className="text-xs font-bold text-blue-300">New Discovery Bonus</span>
+                                        <span className="font-mono text-blue-400 font-bold">+{result.aiBonus}</span>
+                                    </div>
+                                )}
                             </div>
-                            <div className="p-6 rounded-3xl bg-white/5 border border-white/10 flex flex-col justify-center items-center">
-                                <Link to="/" className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-center rounded-xl hover:bg-blue-50 transition-colors">
-                                    Next Target
-                                </Link>
-                            </div>
+
+                            <Link to="/" className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-center rounded-xl hover:bg-slate-200 transition-colors shadow-lg">
+                                Next Deployment
+                            </Link>
                         </div>
                     </div>
                 </div>

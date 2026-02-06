@@ -44,51 +44,68 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const distance = calculateDistance(userLat, userLng, loc.lat, loc.lng);
     let score = Math.max(0, Math.round(5000 * (1 - distance / 20000)));
 
-    // 3. Evidence Processing & AI Verification
+    // 3. Evidence Processing (Hybrid: Geometry Match + AI Validation)
     let aiBonus = 0;
+    let evidenceScore = 0;
     let aiFeedback: any = { status: "no_evidence_submitted" };
+    const matchedEvidenceIds: string[] = [];
+
+    // Fetch Admin Evidence
+    const adminEvidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(locationId).all<any>();
+    const adminBoxes = adminEvidence.results.map((ae: any) => ({
+        id: ae.id,
+        box: JSON.parse(ae.bounding_box),
+        description: ae.description
+    }));
 
     if (evidenceListJson) {
-        const evidenceList = JSON.parse(evidenceListJson);
+        const userEvidenceList = JSON.parse(evidenceListJson);
 
         try {
-            // Check against Gemini
+            // A. AI Analysis (Generates descriptions & validity)
             const verification = await checkEvidenceListWithGemini(
                 GEMINI_API_KEY,
                 loc.image_url,
-                evidenceList,
+                userEvidenceList,
                 "Hong Kong"
             );
 
             aiFeedback = verification;
 
-            // Score Calculation
             if (verification.results) {
-                const validItems = verification.results.filter((r: any) => r.validity > 0.7);
-                aiBonus = validItems.length * 500; // 500 points per valid clue
-                score += aiBonus;
+                for (const item of verification.results) {
+                    // Safety check index
+                    const userBox = userEvidenceList[item.index]?.box;
+                    if (!userBox) continue;
 
-                // Auto-Add Novel Evidence to DB
-                // Only if highly valid and marked as novel
-                const novelItems = validItems.filter((r: any) => r.is_novel && r.validity > 0.85);
+                    // B. Geometry Match with Admin Evidence (Simple overlap check)
+                    let matchedAdminId = null;
+                    for (const adminEv of adminBoxes) {
+                        // Simple center-point check or rough overlap. 
+                        // Let's check if centers are close (within 10% of image size)
+                        const userCx = userBox.x + userBox.w / 2;
+                        const userCy = userBox.y + userBox.h / 2;
+                        const adminCx = adminEv.box.x + adminEv.box.w / 2;
+                        const adminCy = adminEv.box.y + adminEv.box.h / 2;
 
-                if (novelItems.length > 0) {
-                    const insertStmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, created_by_user_id) VALUES (?, ?, ?, ?, 1, ?)");
-                    const batch = [];
-
-                    for (const item of novelItems) {
-                        const originalEvidence = evidenceList[item.index];
-                        if (originalEvidence) {
-                            batch.push(insertStmt.bind(
-                                `ev_${Math.random().toString(36).substring(2, 9)}`,
-                                locationId,
-                                JSON.stringify(originalEvidence.box),
-                                originalEvidence.description,
-                                userId
-                            ));
+                        const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
+                        if (dist < 100) { // 100 units on 1000 scale = 10% tolerance
+                            matchedAdminId = adminEv.id;
+                            break;
                         }
                     }
-                    if (batch.length > 0) await db.batch(batch);
+
+                    // Scoring Logic
+                    if (item.validity > 0.7) {
+                        if (matchedAdminId) {
+                            // User found a known clue!
+                            evidenceScore += 1000;
+                            matchedEvidenceIds.push(matchedAdminId);
+                        } else {
+                            // User found a NEW valid clue (AI confirmed)
+                            aiBonus += 250;
+                        }
+                    }
                 }
             }
         } catch (e) {
@@ -98,8 +115,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     // 4. Dynamic Difficulty Adjustment
-    const baseScore = score - aiBonus;
-    const scoreDiff = (2500 - baseScore) / 2500;
+    const baseScore = score + evidenceScore; // Base now includes evidence score?
+    // Actually, user requested "independent" scoring. 
+    // Let's combine them for the session total, but UI can show split.
+    score = score + evidenceScore + aiBonus;
+
+    const scoreDiff = (3000 - score) / 3000; // Adjusted target score higher
     const curveAdjustment = Math.sign(scoreDiff) * Math.pow(Math.abs(scoreDiff), 1.5) * 0.3;
     let newDiff = Math.max(1, Math.min(10, (loc.difficulty_rating || 5) + curveAdjustment));
     newDiff = parseFloat(newDiff.toFixed(2));
@@ -141,6 +162,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
         aiFeedback: aiFeedback?.explanation || "Evidence analyzed", // Simplify feedback for UI for now, or send full obj
         fullFeedback: aiFeedback, // Send full obj for detailed UI
         newDifficulty: newDiff,
-        aiBonus
+        aiBonus,
+        evidenceScore,
+        matchedEvidenceIds,
+        adminEvidence: adminBoxes // Send back all admin evidence for the UI to reveal
     });
 }
