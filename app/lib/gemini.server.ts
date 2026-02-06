@@ -15,9 +15,18 @@ async function callGeminiApi(
     modelName: string,
     prompt: string,
     imageData: { mimeType: string; data: string },
-    baseUrl: string = "https://generativelanguage.googleapis.com"
+    baseUrl: string = "https://generativelanguage.googleapis.com",
+    gatewayToken?: string
 ) {
     const url = `${baseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json"
+    };
+
+    if (gatewayToken) {
+        headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
+    }
 
     const payload = {
         contents: [{
@@ -35,7 +44,7 @@ async function callGeminiApi(
 
     const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload)
     });
 
@@ -54,7 +63,8 @@ export async function checkEvidenceListWithGemini(
     evidenceList: { box: { x: number; y: number; w: number; h: number }; description?: string }[],
     locationName: string,
     adminEvidence: any[] = [],
-    baseUrl?: string
+    baseUrl?: string,
+    gatewayToken?: string
 ) {
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
@@ -115,7 +125,8 @@ export async function checkEvidenceListWithGemini(
             "gemini-1.5-flash", // Updated to stable model name
             prompt,
             { mimeType, data: base64Data },
-            baseUrl
+            baseUrl,
+            gatewayToken
         );
 
         console.log("Gemini Raw Response:", responseText);
@@ -153,7 +164,8 @@ export async function analyzeImageQuality(
         lng?: number;
         evidenceList?: any[]; // optional pre-filled evidence
     },
-    baseUrl?: string
+    baseUrl?: string,
+    gatewayToken?: string
 ) {
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
@@ -201,7 +213,8 @@ export async function analyzeImageQuality(
             "gemini-1.5-flash",
             prompt,
             { mimeType, data: base64Data },
-            baseUrl
+            baseUrl,
+            gatewayToken
         );
 
         const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();

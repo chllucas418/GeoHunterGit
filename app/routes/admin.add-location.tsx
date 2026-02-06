@@ -44,7 +44,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 lng: isNaN(lng) ? undefined : lng,
                 evidenceList: evidenceListJson ? JSON.parse(evidenceListJson) : []
             };
-            const analysis = await analyzeImageQuality(env.GEMINI_API_KEY, imageUrl, contextData, env.GEMINI_BASE_URL);
+            const analysis = await analyzeImageQuality(
+                env.GEMINI_API_KEY,
+                imageUrl,
+                contextData,
+                env.GEMINI_BASE_URL,
+                env.GEMINI_GATEWAY_TOKEN
+            );
             return { analysis };
         } catch (e) {
             console.error("AI Analysis error:", e);

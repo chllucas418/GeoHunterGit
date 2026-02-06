@@ -71,6 +71,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     try {
         // 5. AI Analysis (with Admin Context)
         const GEMINI_BASE_URL = context.cloudflare.env.GEMINI_BASE_URL;
+        const GEMINI_GATEWAY_TOKEN = context.cloudflare.env.GEMINI_GATEWAY_TOKEN; // Optional Token
 
         const fullFeedback = await checkEvidenceListWithGemini(
             GEMINI_API_KEY,
@@ -78,7 +79,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
             userEvidenceList, // User's boxes (can be empty)
             loc.name,
             adminBoxes, // Pass Admin Evidence for context
-            GEMINI_BASE_URL
+            GEMINI_BASE_URL,
+            GEMINI_GATEWAY_TOKEN
         );
 
         aiFeedback = fullFeedback;
