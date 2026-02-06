@@ -53,6 +53,13 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const isSubmitting = fetcher.state !== "idle";
     const isLoading = navigation.state === "loading";
 
+    // --- LAYOUT STATE ---
+    // Determine the current layout mode
+    // "initial": Image Full, Map Floating
+    // "guessing": Image 50%, Map 50% (When user clicks map to guess)
+    // "result": Image 40%, Map 40%, Panel 20% (After submission)
+    const layoutMode = result ? "result" : guess ? "guessing" : "initial";
+
     // Handle evidence box drawing (Auto-save without description)
     const handleBoxDrawn = (box: BoxCoordinates | null) => {
         if (box) {
@@ -90,6 +97,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         const lng = e.latLng.lng();
                         if (markerRef.current) markerRef.current.setMap(null);
                         markerRef.current = new Marker({ position: { lat, lng }, map: map });
+                        // Transition to guessing mode on first click if not already
                         setGuess({ lat, lng });
                     }
                 });
@@ -137,50 +145,46 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
     }, [result, mapInstance, guess, location.geoPoint]);
 
-    // Force Map Resize when switching to Result View
+    // Force Map Resize when switching layout modes
     useEffect(() => {
-        if (result && mapInstance) {
+        if (mapInstance) {
             const timer = setTimeout(() => {
                 google.maps.event.trigger(mapInstance, "resize");
 
-                if (guess) {
-                    const bounds = new google.maps.LatLngBounds();
-                    bounds.extend(guess);
-                    bounds.extend(location.geoPoint);
-                    mapInstance.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
-                }
-                mapInstance.setCenter(location.geoPoint);
-                mapInstance.setZoom(16);
-
-                // --- RESULT MODE: RENDER EVIDENCE & CONNECTIONS ---
-                if (result && mapInstance && window.google) {
-                    const bounds = new window.google.maps.LatLngBounds();
-                    bounds.extend(location.geoPoint);
-                    if (guess) bounds.extend(guess);
-
-                    // Draw Connection Line
+                if (result) {
+                    // Result Mode adjustments
                     if (guess) {
-                        new window.google.maps.Polyline({
-                            path: [guess, location.geoPoint],
-                            map: mapInstance,
-                            geodesic: true,
-                            strokeColor: "#3b82f6", // Blue-500
-                            strokeOpacity: 0.8,
-                            strokeWeight: 4,
-                            icons: [{
-                                icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW },
-                                offset: '100%'
-                            }]
-                        });
+                        const bounds = new google.maps.LatLngBounds();
+                        bounds.extend(guess);
+                        bounds.extend(location.geoPoint);
+                        mapInstance.fitBounds(bounds, { top: 100, bottom: 100, left: 100, right: 100 });
+
+                        // Draw Result Connection Line
+                        if (window.google) {
+                            new window.google.maps.Polyline({
+                                path: [guess, location.geoPoint],
+                                map: mapInstance,
+                                geodesic: true,
+                                strokeColor: "#3b82f6", // Blue-500
+                                strokeOpacity: 0.8,
+                                strokeWeight: 4,
+                                icons: [{
+                                    icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW },
+                                    offset: '100%'
+                                }]
+                            });
+                        }
                     }
-
-                    mapInstance.fitBounds(bounds, { top: 100, bottom: 100, left: 100, right: 100 });
+                } else if (guess) {
+                    // Guessing Mode adjustments
+                    // Center on guess or keep current view? 
+                    // mapInstance.panTo(guess); 
                 }
-
             }, 500); // Wait for transition animation
             return () => clearTimeout(timer);
         }
-    }, [result, mapInstance, guess, location, evidenceList]);
+    }, [layoutMode, mapInstance, result, guess, location]);
+
 
     const handleSubmit = () => {
         if (!guess) return;
@@ -209,21 +213,19 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     }
 
     return (
-        <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white">
+        <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row transition-all duration-700 ease-in-out">
 
-            {/* --- IMMERSIVE EVIDENCE LAYER --- */}
-            {/* --- IMMERSIVE EVIDENCE LAYER --- */}
-            {/* Logic: Result Mode = Left 40% */}
-            <div className={`absolute inset-0 transition-all duration-700 
-                ${result
-                    ? 'w-[40%] right-auto border-r border-white/10' // Result: Left Panel Locked
-                    : guess
-                        ? 'h-1/2 md:h-full md:w-1/2' // Game Split
-                        : 'h-full w-full' // Full
-                }`}>
-                {/* Mode Toggle Button */}
+            {/* --- COLUMN 1: IMAGE EVIDENCE --- */}
+            <div className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
+                ${layoutMode === "result" ? "w-full md:w-[40%]" :
+                    layoutMode === "guessing" ? "w-full md:w-1/2" :
+                        "w-full"
+                }`}
+            >
+
+                {/* Mode Toggle Button (Only in game mode) */}
                 {!result && !isSubmitting && (
-                    <div className="absolute top-24 right-6 z-30 flex flex-col items-end gap-2">
+                    <div className="absolute top-24 right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
                         <button
                             onClick={() => setIsEvidenceMode(!isEvidenceMode)}
                             className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md
@@ -256,14 +258,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         let statusIcon = "";
                         let statusText = null;
 
-                        // Identify result status if game is over
                         if (result?.matchedEvidenceIds && result.adminEvidence) {
-                            // Check if this user box matched an admin box
-                            // This logic is tricky because we don't know EXACTLY which user box mapped to which admin box 
-                            // unless we returned that mapping. 
-                            // But for now, let's just show Valid/Invalid based on AI feedback if available.
-
-                            // Simplification: Just style based on if it was considered "valid" by AI
                             if (result.fullFeedback?.results) {
                                 const feedback = result.fullFeedback.results.find((r: any) => r.index === index);
                                 if (feedback && feedback.validity > 0.7) {
@@ -297,7 +292,6 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                         {statusIcon} {statusText}
                                     </div>
                                 )}
-                                {/* Delete Button (Only in edit mode) */}
                                 {!result && (
                                     <button
                                         onClick={(e) => {
@@ -316,15 +310,13 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
                     {/* Overlay ADMIN Verified Boxes (Result Mode Only) */}
                     {result && result.adminEvidence && result.adminEvidence.map((ev: any) => {
-                        // Parse the bounding box if it's a string, or use 'box' property if from API
                         let box: BoxCoordinates;
                         try {
-                            // API returns 'box', DB has 'bounding_box'
                             const rawBox = ev.box || ev.bounding_box;
                             box = typeof rawBox === 'string' ? JSON.parse(rawBox) : rawBox;
                         } catch (e) { return null; }
 
-                        if (!box) return null; // Safety check
+                        if (!box) return null;
 
                         return (
                             <div
@@ -343,8 +335,6 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             </div>
                         );
                     })}
-
-
                 </div>
 
                 <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -353,50 +343,26 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             ← ABORT MISSION
                         </Link>
                         <div className="text-right">
+                            {/* Only show target name as simplified header */}
                             <h1 className="text-3xl font-black tracking-tighter">TARGET #{location.id.slice(-4).toUpperCase()}</h1>
-                            <p className="text-xs font-mono text-blue-300 opacity-80">LAT-UNKNOWN // LNG-UNKNOWN</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* --- VISUALIZATION LAYER (Image or Map) --- */}
-            {/* Logic:
-                - Game Mode: Show Image (EvidenceCanvas)
-                - Result Mode: User likely wants to see the MAP result mainly, but might want to see the evidence on the image too.
-                - Current layout puts the Google Map filling the screen.
-                - The user says "no map evidence mark".
-                - If we only show the Google Map, we can't show image evidence marks.
-                - WE SHOULD SHOW BOTH or TOGGLE.
-                - For now, let's keep the Google Map as the primary result visual, but maybe overlay pins?
-            */}
+            {/* --- COLUMN 2: MAP --- */}
+            <div className={`transition-all duration-700 ease-in-out bg-slate-900 overflow-hidden relative border-r border-white/10
+                 ${layoutMode === "result" ? "relative w-full md:w-[40%] h-full" :
+                    layoutMode === "guessing" ? "relative w-full md:w-1/2 h-full" :
+                        "absolute bottom-6 right-6 w-48 h-48 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105 border border-white/10 shadow-2xl z-40" // Floating
+                }`}
+            >
 
-            {/* --- VISUALIZATION CONTAINER (Split View) --- */}
-            <div className={`absolute transition-all duration-700 z-20 flex flex-col md:flex-row
-                ${result
-                    ? 'top-0 bottom-0 left-0 right-0' // Result: Full screen
-                    : guess
-                        ? 'h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0' // Game: Map takes half
-                        : 'w-0 h-0 opacity-0 pointer-events-none' // Game: Map hidden initially
-                }`
-            }>
-            </div>
-
-            {/* --- GOOGLE MAP CONTAINER --- */}
-            <div className={`transition-all duration-700 z-40 overflow-hidden bg-slate-900
-                ${result
-                    ? 'absolute top-0 bottom-0 left-[40%] w-[40%] rounded-none border-l border-r border-white/10' // Result: Center Block, Locked
-                    : guess
-                        ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2'
-                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105 border border-white/10 shadow-2xl'
-                }
-                ${result ? '!w-[40%] !left-[40%] !top-0 !bottom-0 !right-auto' : ''} 
-            `}>
                 <div ref={mapRef} className="w-full h-full" />
 
                 {/* Floating Map Controls (Game Mode) */}
                 {!result && (
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+                    <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4 transition-opacity duration-300 ${layoutMode === 'initial' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
                         <button
                             onClick={handleSubmit}
                             disabled={!guess || isSubmitting}
@@ -413,45 +379,37 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 )}
             </div>
 
-            {/* --- NEW POST-GAME RESULTS LAYER --- */}
-            {result && (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-transparent pointer-events-none animate-in fade-in zoom-in duration-300 overflow-hidden">
-
-                    {/* Split View: Map & Intel */}
-                    <div className="flex flex-col md:flex-row w-full h-full">
-
-                        {/* LEFT: Map Visualization - Spacer (40% + 40% = 80%) */}
-                        {/* The real map is positioned via CSS in the <div ref={mapRef}> above. 
-                            We use this spacer to push the sidebar to the right. 
-                        */}
-                        <div className="w-[80%] hidden md:block pointer-events-none" />
-
-                        {/* RIGHT: Sidebar Panel (20%) */}
-                        <div className="w-full md:w-[20%] flex flex-col bg-slate-950 border-l border-white/10 pointer-events-auto h-full z-50 shadow-2xl">
-
-                            {/* Stats Header (Moved into Sidebar) */}
-                            <div className="p-6 border-b border-white/10 bg-slate-900/50 shrink-0">
-                                <div className="mb-4">
-                                    <h2 className="text-5xl font-black text-white tracking-tighter leading-none">{result.score}</h2>
-                                    <p className="text-[10px] font-mono text-green-400 uppercase tracking-widest">Mission Score</p>
-                                </div>
-                                <div className="flex justify-between items-end">
-                                    <div>
-                                        <h3 className="text-xl font-bold text-white">{Math.round(result.distance)}<span className="text-sm font-normal text-slate-500">m</span></h3>
-                                        <p className="text-[10px] font-mono text-slate-500 uppercase">Deviation</p>
-                                    </div>
-                                    {result.aiBonus > 0 && (
-                                        <div className="text-right">
-                                            <h3 className="text-xl font-bold text-blue-400">+{result.aiBonus}</h3>
-                                            <p className="text-[10px] font-mono text-blue-500/70 uppercase">Intel Bonus</p>
-                                        </div>
-                                    )}
-                                </div>
+            {/* --- COLUMN 3: PANEL (RESULTS) --- */}
+            <div className={`transition-all duration-700 ease-in-out bg-slate-950 flex flex-col h-full overflow-hidden
+                 ${layoutMode === "result" ? "w-full md:w-[20%] opacity-100" : "w-0 opacity-0 pointer-events-none"}`}
+            >
+                {/* Stats Header */}
+                {result && (
+                    <>
+                        <div className="p-6 border-b border-white/10 bg-slate-900/50 shrink-0 animate-in slide-in-from-right duration-500">
+                            <div className="mb-4">
+                                <h2 className="text-5xl font-black text-white tracking-tighter leading-none">{result.score}</h2>
+                                <p className="text-[10px] font-mono text-green-400 uppercase tracking-widest">Mission Score</p>
                             </div>
+                            <div className="flex justify-between items-end">
+                                <div>
+                                    <h3 className="text-xl font-bold text-white">{Math.round(result.distance)}<span className="text-sm font-normal text-slate-500">m</span></h3>
+                                    <p className="text-[10px] font-mono text-slate-500 uppercase">Deviation</p>
+                                </div>
+                                {result.aiBonus > 0 && (
+                                    <div className="text-right">
+                                        <h3 className="text-xl font-bold text-blue-400">+{result.aiBonus}</h3>
+                                        <p className="text-[10px] font-mono text-blue-500/70 uppercase">Intel Bonus</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
 
-                            {/* Scrollable Content */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                                <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl">
+                        {/* Scrollable Content */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6 animate-in slide-in-from-right duration-700 delay-100">
+                            {/* ... Intel List ... */}
+                            <div className="space-y-4">
+                                <div>
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Geographic Intel</h4>
                                     <div className="space-y-2">
                                         {result.adminEvidence && result.adminEvidence.length > 0 ? (
@@ -474,9 +432,9 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                     </div>
                                 </div>
 
-                                <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl flex-grow flex flex-col">
+                                <div>
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">AI Analysis</h4>
-                                    <div className="flex-grow space-y-3 overflow-y-auto pr-1">
+                                    <div className="space-y-3">
                                         {result.fullFeedback?.results && result.fullFeedback.results.length > 0 ? (
                                             result.fullFeedback.results.map((item: any, i: number) => (
                                                 <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
@@ -494,21 +452,22 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                         )}
                                     </div>
                                     {result.aiBonus > 0 && (
-                                        <div className="mt-3 py-2 px-3 bg-blue-500/20 rounded-lg border border-blue-500/30 flex justify-between items-center shrink-0">
+                                        <div className="mt-3 py-2 px-3 bg-blue-500/20 rounded-lg border border-blue-500/30 flex justify-between items-center">
                                             <span className="text-xs font-bold text-blue-300">New Discovery Bonus</span>
                                             <span className="font-mono text-blue-400 font-bold">+{result.aiBonus}</span>
                                         </div>
                                     )}
                                 </div>
-
-                                <Link to="/" className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-center rounded-xl hover:bg-slate-200 transition-colors shadow-lg">
-                                    Next Deployment
-                                </Link>
                             </div>
+
+                            <Link to="/" className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-center rounded-xl hover:bg-slate-200 transition-colors shadow-lg mt-auto">
+                                Next Deployment
+                            </Link>
                         </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </div>
+
         </div>
     );
 }
