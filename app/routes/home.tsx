@@ -1,8 +1,8 @@
 import { Suspense } from "react";
 import type { Route } from "./+types/home";
-import { Link, Form, Await } from "react-router";
+import { Link, Form, Await, redirect } from "react-router";
 import type { Location } from "~/types/shared";
-import { getUserId, isDeveloper } from "~/lib/auth.server";
+import { getUserId, isDeveloper, getUserRole } from "~/lib/auth.server";
 
 export function meta({ }: Route.MetaArgs) {
   return [
@@ -31,10 +31,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       imageUrl: `/resources/image/${loc.id}`,
     })) as Location[]);
 
+  // Role Check
+  const role = await getUserRole(request);
+  if (role === 'student' && userId) {
+    // Students accessing base URL should go to Join screen
+    throw redirect("/join");
+  }
+
   return {
-    locations: locationsPromise, // This is now a promise
+    locations: locationsPromise,
     isLoggedIn: !!userId,
-    isDeveloper: dev
+    isDeveloper: dev,
+    role
   };
 }
 

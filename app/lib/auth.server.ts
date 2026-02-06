@@ -102,10 +102,12 @@ export const sessionStorage = createCookieSessionStorage({
     },
 });
 
-export async function createSession(userId: string, isDeveloper: boolean = false) {
+// ... imports ...
+
+export async function createSession(userId: string, role: string = 'student') {
     const session = await sessionStorage.getSession();
     session.set("userId", userId);
-    session.set("isDeveloper", isDeveloper);
+    session.set("role", role);
     return await sessionStorage.commitSession(session);
 }
 
@@ -118,9 +120,9 @@ export async function getUserId(request: Request) {
     return session.get("userId") as string | undefined;
 }
 
-export async function isDeveloper(request: Request) {
+export async function getUserRole(request: Request) {
     const session = await getSession(request);
-    return !!session.get("isDeveloper");
+    return (session.get("role") as string) || "student";
 }
 
 export async function requireUser(request: Request) {
@@ -131,9 +133,21 @@ export async function requireUser(request: Request) {
     return userId;
 }
 
+export async function requireTeacher(request: Request) {
+    const role = await getUserRole(request);
+    if (role !== "teacher" && role !== "developer") {
+        throw redirect("/"); // Or error page "Unauthorized"
+    }
+    return true;
+}
+
 export async function requireDeveloper(request: Request) {
+    const role = await getUserRole(request);
+    // Backward compatibility: check session "isDeveloper" OR role="developer"
     const session = await getSession(request);
-    if (!session.get("isDeveloper")) {
+    const isLegacyDev = session.get("isDeveloper");
+
+    if (role !== "developer" && !isLegacyDev) {
         throw redirect("/login?developer=true");
     }
     return true;
@@ -146,4 +160,11 @@ export async function logout(request: Request) {
             "Set-Cookie": await sessionStorage.destroySession(session),
         },
     });
+}
+
+export async function isDeveloper(request: Request) {
+    const role = await getUserRole(request);
+    const session = await getSession(request);
+    const isLegacyDev = session.get("isDeveloper");
+    return role === "developer" || !!isLegacyDev;
 }

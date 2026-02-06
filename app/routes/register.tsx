@@ -66,10 +66,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
             isDevOverride ? 0 : parseInt(classNumber)
         ).run();
 
-        // If dev key was used, we could grant dev privileges immediately, 
-        // but `isDeveloper` param in createSession is boolean.
-        // Let's assume using the key grants dev status for session.
-        const cookie = await createSession(userId, isDevOverride);
+        // If dev key was used, we set role to 'developer', otherwise 'student'.
+        const role = isDevOverride ? 'developer' : 'student';
+        const cookie = await createSession(userId, role);
 
         return redirect("/", {
             headers: {
