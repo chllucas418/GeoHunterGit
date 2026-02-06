@@ -77,8 +77,14 @@ export default function StudentLiveGame() {
                 setEvidenceList([]); // Clear evidence
                 setVisibleHints([]); // Clear hints
                 setHasZoomed(false);
-                if (marker) marker.setMap(null);
+
+                // Cleanup Marker using Ref
+                if (cursorMarkerRef.current) {
+                    cursorMarkerRef.current.setMap(null);
+                    cursorMarkerRef.current = null;
+                }
                 setMarker(null);
+
                 if (mapInstance) {
                     mapInstance.setZoom(11);
                     mapInstance.setCenter({ lat: 22.3193, lng: 114.1694 });
@@ -98,6 +104,8 @@ export default function StudentLiveGame() {
 
     // 2. Map Init
     const mapRef = useRef<HTMLDivElement>(null);
+    const cursorMarkerRef = useRef<google.maps.Marker | null>(null); // Ref for reliable cleanup
+
     useEffect(() => {
         if (room?.status === 'PLAYING' && !mapInstance && mapRef.current) {
             setOptions({ key: mapsApiKey });
@@ -108,7 +116,7 @@ export default function StudentLiveGame() {
                     zoom: 11,
                     disableDefaultUI: true,
                     mapTypeId: "hybrid",
-                    clickableIcons: false,
+                    clickableIcons: false, // Prevent POI clicks
                     gestureHandling: "greedy",
                     mapId: "DEMO_MAP_ID",
                 });
@@ -119,14 +127,14 @@ export default function StudentLiveGame() {
                     const lng = e.latLng!.lng();
                     setGuess({ lat, lng });
 
-                    if (marker) {
-                        marker.setPosition({ lat, lng });
+                    if (cursorMarkerRef.current) {
+                        cursorMarkerRef.current.setPosition({ lat, lng });
                     } else {
-                        const newMarker = new google.maps.Marker({
+                        cursorMarkerRef.current = new google.maps.Marker({
                             position: { lat, lng },
                             map: map,
                         });
-                        setMarker(newMarker);
+                        setMarker(cursorMarkerRef.current); // Keep state for UI triggers if needed, but rely on Ref for logic
                     }
                 });
 
@@ -137,11 +145,13 @@ export default function StudentLiveGame() {
 
     // Update marker if guess changes (redundant but safe)
     useEffect(() => {
-        if (mapInstance && guess && !marker) {
-            const m = new google.maps.Marker({ position: guess, map: mapInstance });
-            setMarker(m);
-        } else if (marker && guess) {
-            marker.setPosition(guess);
+        if (mapInstance && guess) {
+            if (!cursorMarkerRef.current) {
+                cursorMarkerRef.current = new google.maps.Marker({ position: guess, map: mapInstance });
+                setMarker(cursorMarkerRef.current);
+            } else {
+                cursorMarkerRef.current.setPosition(guess);
+            }
         }
     }, [guess, mapInstance]);
 

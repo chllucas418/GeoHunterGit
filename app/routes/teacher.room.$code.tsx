@@ -73,13 +73,14 @@ export default function TeacherRoom() {
                         map,
                         title: "Official Target",
                         icon: {
-                            url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+                            url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png"
                         }
                     });
                 }
 
                 // Fetch guesses
                 fetch(`/api/room/${code}/review?round=${room.current_index}`).then(res => res.json()).then((data: any) => {
+                    console.log("Teacher Review Data:", data); // DEBUG
                     if (data.guesses) {
                         const bounds = new google.maps.LatLngBounds();
                         if (currentRound?.location) {
