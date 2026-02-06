@@ -212,10 +212,11 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white">
 
             {/* --- IMMERSIVE EVIDENCE LAYER --- */}
-            {/* Logic: In Result Mode, it should take up the LEFT half (approx 55% to match map gap) */}
+            {/* --- IMMERSIVE EVIDENCE LAYER --- */}
+            {/* Logic: Result Mode = Left 40% */}
             <div className={`absolute inset-0 transition-all duration-700 
                 ${result
-                    ? 'w-full md:w-[55%] right-auto border-r border-white/10' // Result: Left Panel
+                    ? 'w-[40%] right-auto border-r border-white/10' // Result: Left Panel Locked
                     : guess
                         ? 'h-1/2 md:h-full md:w-1/2' // Game Split
                         : 'h-full w-full' // Full
@@ -371,39 +372,25 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             */}
 
             {/* --- VISUALIZATION CONTAINER (Split View) --- */}
-            <div className={`absolute transition-all duration-700 z-20 flex flex-col md:flex-row gap-2
+            <div className={`absolute transition-all duration-700 z-20 flex flex-col md:flex-row
                 ${result
-                    ? 'top-24 left-6 right-6 bottom-6 md:right-96' // Result: Fill main area, leave room for sidebar
+                    ? 'top-0 bottom-0 left-0 right-0' // Result: Full screen
                     : guess
                         ? 'h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0' // Game: Map takes half
-                        : 'w-0 h-0 opacity-0 pointer-events-none' // Game: Map hidden initially or small?
-                // Actually, in Game Mode, we want the map to be small in corner -> then expand.
-                // But user specifically asked for "Image behind map" issue.
-                // Let's keep the original "Mini Map" logic for Game Mode, but FORCE SPLIT for Result Mode.
+                        : 'w-0 h-0 opacity-0 pointer-events-none' // Game: Map hidden initially
                 }`
             }>
-                {/* In Result mode, we want TWO panels side-by-side inside this container?
-                   No, the `EvidenceCanvas` above is `absolute inset-0`.
-                   We need to shrink the EvidenceCanvas to 50% width in Result Mode.
-                */}
             </div>
 
             {/* --- GOOGLE MAP CONTAINER --- */}
-            <div className={`transition-all duration-700 shadow-2xl z-40 overflow-hidden border border-white/10 bg-slate-900
+            <div className={`transition-all duration-700 z-40 overflow-hidden bg-slate-900
                 ${result
-                    ? 'absolute top-24 bottom-6 right-6 w-1/2 md:w-[40%] rounded-2xl' // Result: Right side panel (beside sidebar? No sidebar is far right)
-                    // Wait, the sidebar is fixed width 96.
-                    // Let's try: Image (Left), Map (Center), Sidebar (Right)?
-                    // Too crowded.
-                    // User asked: "Make the page separate into two parts".
-                    // Let's do: Image (Top/Left), Map (Bottom/Right).
-
-                    // Let's override the positioning completely for result mode.
+                    ? 'absolute top-0 bottom-0 left-[40%] w-[40%] rounded-none border-l border-r border-white/10' // Result: Center Block, Locked
                     : guess
                         ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2'
-                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105'
+                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105 border border-white/10 shadow-2xl'
                 }
-                ${result ? '!w-[45%] !right-[26rem] !left-auto !top-24 !bottom-6' : ''}
+                ${result ? '!w-[40%] !left-[40%] !top-0 !bottom-0 !right-auto' : ''} 
             `}>
                 <div ref={mapRef} className="w-full h-full" />
 
@@ -430,84 +417,94 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             {result && (
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-transparent pointer-events-none animate-in fade-in zoom-in duration-300 overflow-hidden">
 
-                    {/* Top Stats Bar */}
-                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-10">
-                        <div className="bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10 pointer-events-auto">
-                            <h2 className="text-6xl font-black text-white leading-none">
-                                {result.score}
-                            </h2>
-                            <p className="text-sm font-mono text-green-400 uppercase tracking-widest">Mission Score</p>
-                        </div>
-                        <div className="text-right bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10 pointer-events-auto">
-                            <h3 className="text-2xl font-bold text-white">{Math.round(result.distance)}<span className="text-sm text-slate-400 font-normal">m</span></h3>
-                            <p className="text-xs font-mono text-slate-400 uppercase">Deviation</p>
-                        </div>
-                    </div>
-
                     {/* Split View: Map & Intel */}
-                    <div className="flex flex-col md:flex-row w-full h-full pt-32 pb-6 px-6 gap-6">
+                    <div className="flex flex-col md:flex-row w-full h-full">
 
-                        {/* LEFT: Map Visualization - Spacer */}
-                        {/* The real map is positioned via CSS in the <div ref={mapRef}> above.
-                            We use this spacer to push the sidebar to the right.
+                        {/* LEFT: Map Visualization - Spacer (40% + 40% = 80%) */}
+                        {/* The real map is positioned via CSS in the <div ref={mapRef}> above. 
+                            We use this spacer to push the sidebar to the right. 
                         */}
-                        <div className="flex-1 hidden md:block pointer-events-none" />
+                        <div className="w-[80%] hidden md:block pointer-events-none" />
 
-                        {/* RIGHT: Evidence Intel */}
-                        <div className="w-full md:w-96 flex flex-col gap-4 overflow-y-auto pr-2 pointer-events-auto items-stretch h-full z-50">
-                            <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl">
-                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Geographic Intel</h4>
-                                <div className="space-y-2">
-                                    {result.adminEvidence && result.adminEvidence.length > 0 ? (
-                                        result.adminEvidence.map((ev: any) => {
-                                            const isFound = result.matchedEvidenceIds?.includes(ev.id);
-                                            return (
-                                                <div key={ev.id} className={`p-3 rounded-xl border ${isFound ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-white/5'} transition-all`}>
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <span className={`text-[10px] font-black uppercase ${isFound ? 'text-green-400' : 'text-slate-500'}`}>
-                                                            {isFound ? "ACQUIRED" : "MISSED"}
-                                                        </span>
-                                                    </div>
-                                                    <p className={`text-xs ${isFound ? 'text-white' : 'text-slate-500'}`}>{ev.description}</p>
-                                                </div>
-                                            )
-                                        })
-                                    ) : (
-                                        <p className="text-xs text-slate-500 italic">No intelligence data available for this sector.</p>
-                                    )}
-                                </div>
-                            </div>
+                        {/* RIGHT: Sidebar Panel (20%) */}
+                        <div className="w-full md:w-[20%] flex flex-col bg-slate-950 border-l border-white/10 pointer-events-auto h-full z-50 shadow-2xl">
 
-                            <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl flex-grow flex flex-col">
-                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">AI Analysis</h4>
-                                <div className="flex-grow space-y-3 overflow-y-auto pr-1">
-                                    {result.fullFeedback?.results && result.fullFeedback.results.length > 0 ? (
-                                        result.fullFeedback.results.map((item: any, i: number) => (
-                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
-                                                <div className="flex justify-between">
-                                                    <span className="font-bold text-blue-400 block mb-1">{item.description}</span>
-                                                    <span className="text-[10px] font-mono opacity-50">CONF: {Math.round(item.validity * 100)}%</span>
-                                                </div>
-                                                <p className="opacity-80 leading-snug">{item.explanation}</p>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <p className="text-xs leading-relaxed text-slate-300 italic">
-                                            {result.aiFeedback?.explanation || "Searching for correlations..."}
-                                        </p>
-                                    )}
+                            {/* Stats Header (Moved into Sidebar) */}
+                            <div className="p-6 border-b border-white/10 bg-slate-900/50 shrink-0">
+                                <div className="mb-4">
+                                    <h2 className="text-5xl font-black text-white tracking-tighter leading-none">{result.score}</h2>
+                                    <p className="text-[10px] font-mono text-green-400 uppercase tracking-widest">Mission Score</p>
                                 </div>
-                                {result.aiBonus > 0 && (
-                                    <div className="mt-3 py-2 px-3 bg-blue-500/20 rounded-lg border border-blue-500/30 flex justify-between items-center shrink-0">
-                                        <span className="text-xs font-bold text-blue-300">New Discovery Bonus</span>
-                                        <span className="font-mono text-blue-400 font-bold">+{result.aiBonus}</span>
+                                <div className="flex justify-between items-end">
+                                    <div>
+                                        <h3 className="text-xl font-bold text-white">{Math.round(result.distance)}<span className="text-sm font-normal text-slate-500">m</span></h3>
+                                        <p className="text-[10px] font-mono text-slate-500 uppercase">Deviation</p>
                                     </div>
-                                )}
+                                    {result.aiBonus > 0 && (
+                                        <div className="text-right">
+                                            <h3 className="text-xl font-bold text-blue-400">+{result.aiBonus}</h3>
+                                            <p className="text-[10px] font-mono text-blue-500/70 uppercase">Intel Bonus</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
-                            <Link to="/" className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-center rounded-xl hover:bg-slate-200 transition-colors shadow-lg">
-                                Next Deployment
-                            </Link>
+                            {/* Scrollable Content */}
+                            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                                <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Geographic Intel</h4>
+                                    <div className="space-y-2">
+                                        {result.adminEvidence && result.adminEvidence.length > 0 ? (
+                                            result.adminEvidence.map((ev: any) => {
+                                                const isFound = result.matchedEvidenceIds?.includes(ev.id);
+                                                return (
+                                                    <div key={ev.id} className={`p-3 rounded-xl border ${isFound ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-white/5'} transition-all`}>
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <span className={`text-[10px] font-black uppercase ${isFound ? 'text-green-400' : 'text-slate-500'}`}>
+                                                                {isFound ? "ACQUIRED" : "MISSED"}
+                                                            </span>
+                                                        </div>
+                                                        <p className={`text-xs ${isFound ? 'text-white' : 'text-slate-500'}`}>{ev.description}</p>
+                                                    </div>
+                                                )
+                                            })
+                                        ) : (
+                                            <p className="text-xs text-slate-500 italic">No intelligence data available for this sector.</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl flex-grow flex flex-col">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">AI Analysis</h4>
+                                    <div className="flex-grow space-y-3 overflow-y-auto pr-1">
+                                        {result.fullFeedback?.results && result.fullFeedback.results.length > 0 ? (
+                                            result.fullFeedback.results.map((item: any, i: number) => (
+                                                <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
+                                                    <div className="flex justify-between">
+                                                        <span className="font-bold text-blue-400 block mb-1">{item.description}</span>
+                                                        <span className="text-[10px] font-mono opacity-50">CONF: {Math.round(item.validity * 100)}%</span>
+                                                    </div>
+                                                    <p className="opacity-80 leading-snug">{item.explanation}</p>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-xs leading-relaxed text-slate-300 italic">
+                                                {result.aiFeedback?.explanation || "Searching for correlations..."}
+                                            </p>
+                                        )}
+                                    </div>
+                                    {result.aiBonus > 0 && (
+                                        <div className="mt-3 py-2 px-3 bg-blue-500/20 rounded-lg border border-blue-500/30 flex justify-between items-center shrink-0">
+                                            <span className="text-xs font-bold text-blue-300">New Discovery Bonus</span>
+                                            <span className="font-mono text-blue-400 font-bold">+{result.aiBonus}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <Link to="/" className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-center rounded-xl hover:bg-slate-200 transition-colors shadow-lg">
+                                    Next Deployment
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </div>

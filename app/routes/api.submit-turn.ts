@@ -91,16 +91,40 @@ export async function action({ request, context }: ActionFunctionArgs) {
                         }
                     }
 
-                    // 2. If AI didn't catch it, fallback to geometry (distance check)
+                    // 2. If AI didn't catch it, fallback to geometry (Advanced: Intersection Over Union + Center Distance)
                     if (!matchedAdminId) {
                         for (const adminEv of adminBoxes) {
+                            const userBox = userEvidenceList[item.index]?.box;
+                            const adminBox = adminEv.box;
+
+                            if (!userBox || !adminBox) continue;
+
+                            // Calculate IoU (Intersection over Union)
+                            const x1 = Math.max(userBox.x, adminBox.x);
+                            const y1 = Math.max(userBox.y, adminBox.y);
+                            const x2 = Math.min(userBox.x + userBox.w, adminBox.x + adminBox.w);
+                            const y2 = Math.min(userBox.y + userBox.h, adminBox.y + adminBox.h);
+
+                            const intersectionW = Math.max(0, x2 - x1);
+                            const intersectionH = Math.max(0, y2 - y1);
+                            const intersectionArea = intersectionW * intersectionH;
+
+                            const userArea = userBox.w * userBox.h;
+                            const adminArea = adminBox.w * adminBox.h;
+                            const unionArea = userArea + adminArea - intersectionArea;
+
+                            const iou = unionArea > 0 ? intersectionArea / unionArea : 0;
+
+                            // Center distance fallback
                             const userCx = userBox.x + userBox.w / 2;
                             const userCy = userBox.y + userBox.h / 2;
-                            const adminCx = adminEv.box.x + adminEv.box.w / 2;
-                            const adminCy = adminEv.box.y + adminEv.box.h / 2;
-
+                            const adminCx = adminBox.x + adminBox.w / 2;
+                            const adminCy = adminBox.y + adminBox.h / 2;
                             const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
-                            if (dist < 100) { // 10% tolerance
+
+                            // Thresholds: IoU > 0.1 (10% overlap) OR Center Closeness < 80 units (approx 8%)
+                            // We use a looser threshold because drawing boxes is imprecise
+                            if (iou > 0.1 || dist < 120) {
                                 matchedAdminId = adminEv.id;
                                 break;
                             }
