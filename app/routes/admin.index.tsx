@@ -44,6 +44,17 @@ export default function AdminDashboard() {
                         </div>
                     </Link>
 
+                    {/* Dataset Management */}
+                    <Link to="/admin/datasets" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-pink-500/30">
+                        <div className="w-12 h-12 rounded-2xl bg-pink-500/20 text-pink-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
+                            D
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black text-white mb-2">Datasets</h3>
+                            <p className="text-sm text-white/50">Organize loose locations into categorized map sets.</p>
+                        </div>
+                    </Link>
+
                     {/* Create Teacher */}
                     <Link to="/admin/create-teacher" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-yellow-500/30">
                         <div className="w-12 h-12 rounded-2xl bg-yellow-500/20 text-yellow-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">

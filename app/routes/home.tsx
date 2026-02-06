@@ -38,6 +38,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     throw redirect("/join");
   }
 
+  if (role === 'teacher' && userId) {
+    // Teachers go to Mission Control
+    throw redirect("/teacher/dashboard");
+  }
+
   return {
     locations: locationsPromise,
     isLoggedIn: !!userId,
@@ -75,18 +80,30 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             {isLoggedIn ? (
               <>
                 {!isDeveloper && (
-                  <Link
-                    to="/profile"
-                    className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-indigo-300 hover:text-white hover:bg-indigo-500/20 rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)]"
-                  >
-                    My Data
-                  </Link>
+                  <>
+                    {/* Teacher Link */}
+                    {loaderData.role === 'teacher' && (
+                      <Link
+                        to="/teacher/dashboard"
+                        className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-emerald-300 hover:text-white hover:bg-emerald-500/20 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] mr-2"
+                      >
+                        Mission Control
+                      </Link>
+                    )}
+                    <Link
+                      to="/profile"
+                      className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-indigo-300 hover:text-white hover:bg-indigo-500/20 rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)]"
+                    >
+                      My Data
+                    </Link>
+                  </>
                 )}
 
                 {isDeveloper && (
                   <div className="flex gap-1 border-l border-white/10 pl-2 ml-2">
                     <Link to="/admin/add-location" className="w-10 h-10 flex items-center justify-center bg-blue-500/20 hover:bg-blue-500/40 rounded-lg text-blue-300 transition-colors" title="Deploy">+L</Link>
                     <Link to="/admin/create-teacher" className="w-10 h-10 flex items-center justify-center bg-yellow-500/20 hover:bg-yellow-500/40 rounded-lg text-yellow-300 transition-colors" title="Add Teacher">+T</Link>
+                    <Link to="/admin/datasets" className="w-10 h-10 flex items-center justify-center bg-pink-500/20 hover:bg-pink-500/40 rounded-lg text-pink-300 transition-colors" title="Datasets">D</Link>
                     <Link to="/admin/users" className="w-10 h-10 flex items-center justify-center bg-purple-500/20 hover:bg-purple-500/40 rounded-lg text-purple-300 transition-colors" title="Agents">A</Link>
                     <Link to="/admin/locations" className="w-10 h-10 flex items-center justify-center bg-emerald-500/20 hover:bg-emerald-500/40 rounded-lg text-emerald-300 transition-colors" title="Manage">M</Link>
                   </div>

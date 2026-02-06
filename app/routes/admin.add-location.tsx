@@ -19,9 +19,12 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
         existingLocation = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(id).first<any>();
     }
 
+    const { results: mapSets } = await db.prepare("SELECT id, name FROM map_sets ORDER BY created_at DESC").all<any>();
+
     return {
         mapsApiKey: env.GOOGLE_MAPS_API_KEY,
-        existingLocation
+        existingLocation,
+        mapSets
     };
 }
 
@@ -111,7 +114,41 @@ export async function action({ request, context }: ActionFunctionArgs) {
             if (batch.length > 0) await db.batch(batch);
         }
 
-        return { success: true, message: `Location saved with ${evidenceListJson ? JSON.parse(evidenceListJson).length : 0} evidence points!` };
+        // Handle Evidence
+        if (evidenceListJson) {
+            const evidenceList = JSON.parse(evidenceListJson);
+
+            // Should properly clear old evidence if updating, but for now we just add new ones or ignore?
+            // Better to clear old ones for this location if we are in "Edit Mode" fully, but for "Add" it's fine.
+            // Let's safe-guard: delete all existing dev-evidence for this location and re-insert.
+            await db.prepare("DELETE FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(locationId).run();
+
+            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified) VALUES (?, ?, ?, ?, 1)");
+            const batch = evidenceList.map((ev: any) =>
+                stmt.bind(
+                    `ev_${Math.random().toString(36).substring(2, 9)}`,
+                    locationId,
+                    JSON.stringify(ev.box),
+                    ev.description
+                )
+            );
+            if (batch.length > 0) await db.batch(batch);
+        }
+
+        // Handle Dataset Assignment
+        const setId = formData.get("addToSet") as string;
+        if (setId) {
+            // Check if already in set
+            const exists = await db.prepare("SELECT 1 FROM map_set_items WHERE set_id = ? AND location_id = ?").bind(setId, locationId).first();
+            if (!exists) {
+                // Get next order
+                const max = await db.prepare("SELECT MAX(order_index) as m FROM map_set_items WHERE set_id = ?").bind(setId).first<any>();
+                const nextOrder = (max?.m || 0) + 1;
+                await db.prepare("INSERT INTO map_set_items (set_id, location_id, order_index) VALUES (?, ?, ?)").bind(setId, locationId, nextOrder).run();
+            }
+        }
+
+        return { success: true, message: `Location saved and added to dataset!` };
     } catch (e) {
         console.error("Save location error:", e);
         return { error: "Failed to save location" };
@@ -119,7 +156,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function AddLocation() {
-    const { mapsApiKey, existingLocation } = useLoaderData() as any;
+    const { mapsApiKey, existingLocation, mapSets } = useLoaderData() as any;
     const actionData = useActionData() as any;
     const fetcher = useFetcher() as any;
     const navigation = useNavigation();
@@ -444,7 +481,22 @@ export default function AddLocation() {
                                         </div>
                                     </div>
                                 </div>
+                            </div>
 
+                            <div className="space-y-4 pt-4 border-t border-slate-800">
+                                <label className="block text-sm font-medium text-slate-400">Assignment</label>
+                                <div className="space-y-2">
+                                    <p className="text-[10px] uppercase text-slate-500 font-bold">Add to Dataset</p>
+                                    <select
+                                        name="addToSet"
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
+                                    >
+                                        <option value="">-- None (Loose Location) --</option>
+                                        {mapSets.map((set: any) => (
+                                            <option key={set.id} value={set.id}>{set.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
 
                             <input type="hidden" name="intent" value="deploy" />
@@ -566,7 +618,7 @@ export default function AddLocation() {
                         </div>
                     )}
                 </div>
-            </div >
+            </div>
         </div>
     );
 }
