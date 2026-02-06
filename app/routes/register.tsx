@@ -1,5 +1,6 @@
 import { Form, Link, useActionData, useNavigation, redirect } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
+import { useState } from "react";
 import { hashPassword, createSession, validatePassword } from "~/lib/auth.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -8,17 +9,41 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const password = formData.get("password") as string;
     const displayName = formData.get("displayName") as string;
 
+    // New Fields
+    const classGrade = formData.get("classGrade") as string;
+    const classNumber = formData.get("classNumber") as string;
+    const developerKey = formData.get("developerKey") as string;
+
     if (!email || !password) {
         return { error: "Email and password are required" };
+    }
+
+    const env = context.cloudflare.env as any;
+    const db = env.DB as D1Database;
+    const REQUIRED_DEV_KEY = env.DEVELOPER_REGISTRATION_KEY || "<REDACTED_DEV_KEY>";
+
+    // Validation Logic
+    const isDevOverride = developerKey === REQUIRED_DEV_KEY;
+
+    if (!isDevOverride) {
+        // Enforce Student Rules
+        if (!email.endsWith("@makopan.edu.hk")) {
+            return { error: "Access Restricted: Institutional Email (@makopan.edu.hk) required." };
+        }
+        if (!classGrade || !classNumber) {
+            return { error: "Class Information is required for student registration." };
+        }
+    } else {
+        // Dev logic (optional: explicit logging or tagging user as dev? 
+        // For now, just bypassing domain check. 
+        // Ideally we might want to auto-set 'is_developer' in session/db if we had a column for it,
+        // but currently we check specific emails or just use this for signup bypass).
     }
 
     const { valid, error } = validatePassword(password);
     if (!valid) {
         return { error };
     }
-
-    const env = context.cloudflare.env as any;
-    const db = env.DB as D1Database;
 
     // Check if user exists
     const existing = await db.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
@@ -31,10 +56,21 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     try {
         await db.prepare(
-            "INSERT INTO users (id, email, password_hash, display_name) VALUES (?, ?, ?, ?)"
-        ).bind(userId, email, hashedPassword, displayName).run();
+            "INSERT INTO users (id, email, password_hash, display_name, class_grade, class_number) VALUES (?, ?, ?, ?, ?, ?)"
+        ).bind(
+            userId,
+            email,
+            hashedPassword,
+            displayName,
+            isDevOverride ? "DEV" : classGrade,
+            isDevOverride ? 0 : parseInt(classNumber)
+        ).run();
 
-        const cookie = await createSession(userId);
+        // If dev key was used, we could grant dev privileges immediately, 
+        // but `isDeveloper` param in createSession is boolean.
+        // Let's assume using the key grants dev status for session.
+        const cookie = await createSession(userId, isDevOverride);
+
         return redirect("/", {
             headers: {
                 "Set-Cookie": cookie,
@@ -51,6 +87,8 @@ export default function Register() {
     const navigation = useNavigation();
     const isSubmitting = navigation.state === "submitting";
 
+    const [isDevMode, setIsDevMode] = useState(false);
+
     return (
         <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
             <div className="w-full max-w-md glass-panel p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
@@ -59,7 +97,7 @@ export default function Register() {
                 <div className="absolute bottom-[-20%] left-[-20%] w-64 h-64 bg-purple-500/20 rounded-full blur-[80px]" />
 
                 <div className="relative z-10">
-                    <header className="mb-10 text-center">
+                    <header className="mb-8 text-center">
                         <Link to="/" className="inline-block mb-6 px-4 py-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-all">
                             ← Return to Base
                         </Link>
@@ -69,7 +107,7 @@ export default function Register() {
                         <p className="text-sm text-blue-200/60 font-mono">Create your agent identity</p>
                     </header>
 
-                    <Form method="post" className="space-y-6">
+                    <Form method="post" className="space-y-5">
                         <div className="space-y-2">
                             <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Codename</label>
                             <input
@@ -80,16 +118,52 @@ export default function Register() {
                                 placeholder="Agent X"
                             />
                         </div>
+
+                        {/* Class Info (Student Mode Only) */}
+                        {!isDevMode && (
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Class</label>
+                                    <select
+                                        name="classGrade"
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all appearance-none cursor-pointer hover:bg-white/5"
+                                        required
+                                    >
+                                        <option value="" disabled selected>--</option>
+                                        <option value="2A">2A</option>
+                                        <option value="2B">2B</option>
+                                        <option value="2C">2C</option>
+                                        <option value="2D">2D</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Class No.</label>
+                                    <input
+                                        name="classNumber"
+                                        type="number"
+                                        min="1"
+                                        max="40"
+                                        required
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20"
+                                        placeholder="#"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
                         <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Comm Frequency</label>
+                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">
+                                {isDevMode ? "Any Email Address" : "Institutional Email"}
+                            </label>
                             <input
                                 name="email"
                                 type="email"
                                 required
                                 className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20"
-                                placeholder="agent@geohunter.com"
+                                placeholder={isDevMode ? "dev@example.com" : "student@makopan.edu.hk"}
                             />
                         </div>
+
                         <div className="space-y-2">
                             <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Security Key</label>
                             <input
@@ -101,6 +175,31 @@ export default function Register() {
                             />
                         </div>
 
+                        {/* Developer Override Toggle & Input */}
+                        <div className="pt-2">
+                            <div className="flex justify-end mb-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsDevMode(!isDevMode)}
+                                    className={`text-[9px] font-black uppercase tracking-widest border-b border-dashed 
+                                        ${isDevMode ? "text-yellow-400 border-yellow-400" : "text-white/20 border-white/20 hover:text-white/40"}`}
+                                >
+                                    {isDevMode ? "⚠ Developer Override Active" : "Developer Access"}
+                                </button>
+                            </div>
+
+                            {isDevMode && (
+                                <div className="space-y-2 animate-in slide-in-from-top-2 fade-in">
+                                    <input
+                                        name="developerKey"
+                                        type="password"
+                                        className="w-full bg-yellow-400/10 border border-yellow-400/50 rounded-2xl px-6 py-3 text-sm text-yellow-200 focus:bg-yellow-400/20 outline-none transition-all placeholder-yellow-400/30"
+                                        placeholder="Enter Override Key"
+                                    />
+                                </div>
+                            )}
+                        </div>
+
                         {actionData?.error && (
                             <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-2xl text-center">
                                 {actionData.error}
@@ -110,7 +209,7 @@ export default function Register() {
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="w-full py-5 bg-white text-black font-black uppercase tracking-widest rounded-2xl hover:bg-blue-50 transition-all shadow-lg active:scale-[0.98] mt-4"
+                            className="w-full py-5 bg-white text-black font-black uppercase tracking-widest rounded-2xl hover:bg-blue-50 transition-all shadow-lg active:scale-[0.98] mt-2"
                         >
                             {isSubmitting ? "Establishing Uplink..." : "Activate Agent Profile"}
                         </button>
