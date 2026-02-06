@@ -33,6 +33,92 @@ export default function TeacherRoom() {
     const [roomState, setRoomState] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState(300); // 5 mins default
 
+    // --- REVIEW MAP LOGIC ---
+    const mapRef = useRef<HTMLDivElement>(null);
+    const [reviewMap, setReviewMap] = useState<google.maps.Map | null>(null);
+    const markersRef = useRef<google.maps.Marker[]>([]);
+
+    useEffect(() => {
+        const room = roomState?.room;
+        const currentRound = roomState?.currentRound;
+        const status = room?.status;
+
+        if (status === 'REVIEW' && !reviewMap && mapRef.current) {
+            import("@googlemaps/js-api-loader").then(({ Loader }) => {
+                const loader = new Loader({
+                    apiKey: mapsApiKey,
+                    version: "weekly",
+                }) as any;
+
+                loader.importLibrary("maps").then(async () => {
+                    const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
+
+                    const center = currentRound?.location ?
+                        { lat: currentRound.location.lat, lng: currentRound.location.lng } :
+                        { lat: 22.3193, lng: 114.1694 };
+
+                    const map = new Map(mapRef.current!, {
+                        center,
+                        zoom: 14,
+                        disableDefaultUI: true,
+                        mapId: "TEACHER_REVIEW_MAP",
+                    });
+
+                    setReviewMap(map);
+
+                    if (currentRound?.location) {
+                        new google.maps.Marker({
+                            position: { lat: currentRound.location.lat, lng: currentRound.location.lng },
+                            map,
+                            title: "Target Location",
+                            icon: {
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 10,
+                                fillColor: "#10b981",
+                                fillOpacity: 1,
+                                strokeColor: "#ffffff",
+                                strokeWeight: 2,
+                            }
+                        });
+                    }
+
+                    // Fetch guesses
+                    fetch(`/api/room/${code}/review?round=${room.current_index}`).then(res => res.json()).then((data: any) => {
+                        if (data.guesses) {
+                            const bounds = new google.maps.LatLngBounds();
+                            if (currentRound?.location) {
+                                bounds.extend({ lat: currentRound.location.lat, lng: currentRound.location.lng });
+                            }
+
+                            data.guesses.forEach((g: any) => {
+                                const m = new google.maps.Marker({
+                                    position: { lat: g.lat, lng: g.lng },
+                                    map,
+                                    label: {
+                                        text: g.user_name[0],
+                                        color: "white",
+                                        fontWeight: "bold"
+                                    },
+                                    title: `${g.user_name} (${Math.round(g.distance * 1000)}m)`,
+                                });
+                                markersRef.current.push(m);
+                                bounds.extend({ lat: g.lat, lng: g.lng });
+                            });
+
+                            map.fitBounds(bounds);
+                        }
+                    });
+                });
+            });
+        }
+
+        if (status !== 'REVIEW' && reviewMap) {
+            setReviewMap(null);
+            markersRef.current = [];
+        }
+    }, [roomState, mapsApiKey]); // Depend on roomState, not room.status which might crash
+
+
     // Polling Logic
     useEffect(() => {
         // Initial load
@@ -142,98 +228,7 @@ export default function TeacherRoom() {
         </div>
     );
 
-    // --- REVIEW MAP LOGIC ---
-    const mapRef = useRef<HTMLDivElement>(null);
-    const [reviewMap, setReviewMap] = useState<google.maps.Map | null>(null);
-    const markersRef = useRef<google.maps.Marker[]>([]);
-
-    useEffect(() => {
-        if (room.status === 'REVIEW' && !reviewMap && mapRef.current) {
-            import("@googlemaps/js-api-loader").then(({ Loader }) => {
-                const loader = new Loader({
-                    apiKey: mapsApiKey,
-                    version: "weekly",
-                }) as any;
-
-                loader.importLibrary("maps").then(async () => {
-                    const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
-
-                    // Center on correct location or default
-                    // Ideally we should know the correct location from `currentRound.location`
-                    const center = currentRound?.location ?
-                        { lat: currentRound.location.lat, lng: currentRound.location.lng } :
-                        { lat: 22.3193, lng: 114.1694 };
-
-                    const map = new Map(mapRef.current!, {
-                        center,
-                        zoom: 14,
-                        disableDefaultUI: true,
-                        mapId: "TEACHER_REVIEW_MAP",
-                    });
-
-                    setReviewMap(map);
-
-                    // Add Correct Location Marker (Star/Flag)
-                    if (currentRound?.location) {
-                        new google.maps.Marker({
-                            position: { lat: currentRound.location.lat, lng: currentRound.location.lng },
-                            map,
-                            title: "Target Location",
-                            icon: {
-                                path: google.maps.SymbolPath.CIRCLE,
-                                scale: 10,
-                                fillColor: "#10b981", // Emerald
-                                fillOpacity: 1,
-                                strokeColor: "#ffffff",
-                                strokeWeight: 2,
-                            }
-                        });
-                    }
-
-                    // Add Student Guesses
-                    // We need to fetch guesses! Poller might not return guesses in `status` endpoint to save bandwidth?
-                    // Or we assume `participants` has last guess? No, `participants` is score.
-                    // We should probably fetch guesses for this round specifically.
-                    // For now, let's assume valid data or fetch it.
-                    // Let's create a quick specific fetch for review data: `/api/room/$code/review/$roundIndex` 
-                    // OR just rely on a new endpoint. 
-
-                    // Actually, let's just fetch all guess for this round in a useEffect inside Review mode
-                    fetch(`/api/room/${code}/review?round=${room.current_index}`).then(res => res.json()).then((data: any) => {
-                        if (data.guesses) {
-                            const bounds = new google.maps.LatLngBounds();
-                            if (currentRound?.location) {
-                                bounds.extend({ lat: currentRound.location.lat, lng: currentRound.location.lng });
-                            }
-
-                            data.guesses.forEach((g: any) => {
-                                const m = new google.maps.Marker({
-                                    position: { lat: g.lat, lng: g.lng },
-                                    map,
-                                    label: {
-                                        text: g.user_name[0],
-                                        color: "white",
-                                        fontWeight: "bold"
-                                    },
-                                    title: `${g.user_name} (${Math.round(g.distance * 1000)}m)`,
-                                });
-                                markersRef.current.push(m);
-                                bounds.extend({ lat: g.lat, lng: g.lng });
-                            });
-
-                            map.fitBounds(bounds);
-                        }
-                    });
-                });
-            });
-        }
-
-        // Cleanup when leaving review
-        if (room.status !== 'REVIEW' && reviewMap) {
-            setReviewMap(null);
-            markersRef.current = [];
-        }
-    }, [room.status, mapsApiKey]);
+    // --- REVIEW MAP LOGIC MOVED TO TOP ---
 
     const renderReview = () => (
         <div className="h-full flex overflow-hidden">
