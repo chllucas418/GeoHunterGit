@@ -318,6 +318,8 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box;
                         } catch (e) { return null; }
 
+                        if (!box) return null; // Safety check
+
                         return (
                             <div
                                 key={`admin-${ev.id}`}
