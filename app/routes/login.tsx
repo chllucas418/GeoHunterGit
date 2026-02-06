@@ -18,7 +18,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         if (!devPass || password !== devPass) {
             return { error: "Access Denied: Invalid override code." };
         }
-        const cookie = await createSession("developer-admin", true);
+        const cookie = await createSession("developer-admin", "developer");
         return redirect("/", { headers: { "Set-Cookie": cookie } });
     }
 
