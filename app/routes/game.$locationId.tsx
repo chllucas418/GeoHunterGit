@@ -21,6 +21,10 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         throw new Response("Location Not Found", { status: 404 });
     }
 
+    // Fetch verified evidence count
+    const evidenceCountResult = await db.prepare("SELECT COUNT(*) as count FROM map_evidence WHERE location_id = ? AND is_verified = 1").bind(locationId).first<any>();
+    const totalEvidence = evidenceCountResult?.count || 0;
+
     const location: Location = {
         id: loc.id,
         imageUrl: loc.image_url,
@@ -30,11 +34,15 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         verifiedByGemini: !!loc.verified_by_gemini
     };
 
-    return { location, mapsApiKey: MAPS_API_KEY };
+    // Parse hints (assuming double-newline separation from Admin UI)
+    // If hints is empty, fallback to empty array
+    const hintList = loc.hints ? loc.hints.split(/\n\n|\n/) : [];
+
+    return { location, mapsApiKey: MAPS_API_KEY, totalEvidence, hintList };
 }
 
 export default function GameRoute({ loaderData }: Route.ComponentProps) {
-    const { location, mapsApiKey } = loaderData;
+    const { location, mapsApiKey, totalEvidence, hintList } = loaderData;
     const fetcher = useFetcher() as any;
     const navigation = useNavigation();
     const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; id: string }[]>([]);
@@ -52,6 +60,57 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const result = fetcher.data;
     const isSubmitting = fetcher.state !== "idle";
     const isLoading = navigation.state === "loading";
+
+    // Hint & Timer System
+    const [secondsElapsed, setSecondsElapsed] = useState(0);
+    const [visibleHints, setVisibleHints] = useState<string[]>([]);
+    const [hasZoomed, setHasZoomed] = useState(false);
+
+    // Timer (only active during game)
+    useEffect(() => {
+        if (result || isSubmitting) return;
+        const timer = setInterval(() => setSecondsElapsed(prev => prev + 1), 1000);
+        return () => clearInterval(timer);
+    }, [result, isSubmitting]);
+
+    // Hint Logic
+    useEffect(() => {
+        if (result || isSubmitting) return;
+
+        // Start hints after 90 seconds (1.5 mins)
+        // Then every 30 seconds
+        const startDelay = 90;
+        const interval = 30;
+
+        if (secondsElapsed >= startDelay) {
+            const count = Math.floor((secondsElapsed - startDelay) / interval) + 1;
+
+            // Show Hints if available
+            if (count > 0 && count <= hintList.length) {
+                if (visibleHints.length < count) {
+                    setVisibleHints(hintList.slice(0, count));
+                    // Optional: Play sound or visual cue
+                }
+            }
+            // Fallback: Zoom Map if all hints shown and ample time passed (e.g. 30s after last hint)
+            else if (count > hintList.length && !hasZoomed && mapInstance) {
+                setHasZoomed(true);
+                // Pan to vicinity (perturb slightly to avoids giving exact spot)
+                const offsetLat = (Math.random() - 0.5) * 0.01;
+                const offsetLng = (Math.random() - 0.5) * 0.01;
+                const approxLoc = {
+                    lat: location.geoPoint.lat + offsetLat,
+                    lng: location.geoPoint.lng + offsetLng
+                };
+
+                mapInstance.panTo(approxLoc);
+                mapInstance.setZoom(14);
+
+                // Add system message about satellite assistance?
+                setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
+            }
+        }
+    }, [secondsElapsed, hintList, mapInstance, hasZoomed, result, isSubmitting, visibleHints.length, location.geoPoint]);
 
     // --- LAYOUT STATE ---
     // Determine the current layout mode
@@ -219,6 +278,38 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full md:w-1/2"}`
             }
             >
+
+                {/* Evidence Count Banner (Liquid Glass) */}
+                {!result && (
+                    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none w-max max-w-[90%]">
+                        <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-10 duration-1000 fade-in">
+                            <div className="relative w-2 h-2">
+                                <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
+                                <span className="relative block w-2 h-2 rounded-full bg-blue-500"></span>
+                            </div>
+                            <span className="text-xs font-black text-white/90 tracking-[0.2em] uppercase text-shadow-sm">
+                                {totalEvidence} Intel Items Hidden
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Hints Overlay */}
+                {!result && visibleHints.length > 0 && (
+                    <div className="absolute bottom-24 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
+                        {visibleHints.map((hint, i) => (
+                            <div
+                                key={i}
+                                className="bg-black/40 backdrop-blur-xl border border-white/10 p-3 rounded-r-xl rounded-bl-xl border-l-4 border-l-yellow-400 text-xs font-medium text-white shadow-lg animate-in slide-in-from-left-10 fade-in duration-500"
+                            >
+                                <span className="block text-[10px] font-black text-yellow-400 mb-1 uppercase tracking-widest">
+                                    Incoming Transmisson {i < 3 ? `#00${i + 1}` : 'SYSTEM'}
+                                </span>
+                                {hint}
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Mode Toggle Button (Only in game mode) */}
                 {!result && !isSubmitting && (

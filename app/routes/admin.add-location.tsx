@@ -144,12 +144,17 @@ export default function AddLocation() {
     const [tempDesc, setTempDesc] = useState("");
 
     // Sync status with AI
+    // Sync status with AI
     useEffect(() => {
-        if (analysis?.quality_score) {
-            setQualityScore(analysis.quality_score);
-        }
-        if (analysis?.difficulty_rating) {
-            setDifficulty(analysis.difficulty_rating);
+        if (analysis) {
+            if (analysis.quality_score) setQualityScore(analysis.quality_score);
+            if (analysis.difficulty_rating) setDifficulty(analysis.difficulty_rating);
+            if (analysis.generated_hints && Array.isArray(analysis.generated_hints)) {
+                // Only pre-fill if empty to avoid overwriting manual edits
+                if (!hints) {
+                    setHints(analysis.generated_hints.join("\n\n"));
+                }
+            }
         }
     }, [analysis]);
 

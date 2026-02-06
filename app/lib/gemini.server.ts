@@ -145,12 +145,17 @@ export async function analyzeImageQuality(
     3. Suggest a "difficulty_rating" from 1 to 10 based on how hard it would be to find this exact spot.
     4. Provide a brief "precontext" description of what you see.
     ${context?.lat ? "5. Verify if the visual environment matches the provided coordinates." : ""}
+    6. Generate 3 progressive hints for players who are stuck (do not give away the exact answer immediately):
+       - Hint 1: Visual/Vague (e.g. "Focus on the architectural style")
+       - Hint 2: Contextual (e.g. "This vegetation is typical of...")
+       - Hint 3: Specific (e.g. "Look near the [Specific Landmark] in the background")
     
     Return a JSON object with:
     - "quality_score": number
     - "difficulty_rating": number
     - "precontext": string
     - "recommendation": string (e.g., "Ready for deployment" or "Too blurry")
+    - "generated_hints": string[] (Array of 3 suggestion strings)
   `;
 
     const result = await model.generateContent([
@@ -164,9 +169,12 @@ export async function analyzeImageQuality(
     ]);
 
     const responseText = result.response.text();
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    // Clean potential markdown blocks
+    const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
     }
-    return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually" };
+    return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually", generated_hints: [] };
 }
