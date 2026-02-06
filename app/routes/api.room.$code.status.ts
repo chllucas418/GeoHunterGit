@@ -33,11 +33,20 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         const currentItem = items[room.current_index];
         if (currentItem) {
             const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(currentItem.location_id).first<any>();
+
+            // Fetch Evidence only if REVIEW (or PODIUM) to prevent spoilers
+            let evidence = [];
+            if (room.status === 'REVIEW' || room.status === 'PODIUM') {
+                const { results } = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(location.id).all<any>();
+                evidence = results;
+            }
+
             currentRound = {
                 index: room.current_index,
                 total: items.length,
                 startTime: room.round_start_time,
-                location: location, // CAREFUL: Don't leak coordinates to students if playing!
+                location: location,
+                evidence: evidence
             };
         }
     }

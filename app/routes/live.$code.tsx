@@ -24,6 +24,7 @@ export default function StudentLiveGame() {
     const [guess, setGuess] = useState<{ lat: number, lng: number } | null>(null);
     const [submitted, setSubmitted] = useState(false);
     const [result, setResult] = useState<any>(null);
+    const lastRoundIndex = useRef<number>(-1);
 
     // --- NEW UI STATES ---
     const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; id: string }[]>([]);
@@ -66,9 +67,10 @@ export default function StudentLiveGame() {
     useEffect(() => {
         if (fetcher.data) {
             const newData = fetcher.data as any;
+            const newIndex = newData.room.current_index;
 
-            // Detect Round Change
-            if (roomState?.room.current_index !== newData.room.current_index) {
+            // Detect Round Change using Ref to prevent stale closures
+            if (lastRoundIndex.current !== -1 && lastRoundIndex.current !== newIndex) {
                 setGuess(null);
                 setSubmitted(false);
                 setResult(null);
@@ -83,6 +85,7 @@ export default function StudentLiveGame() {
                 }
             }
 
+            lastRoundIndex.current = newIndex;
             setRoomState(newData);
 
             // Sync Timer
@@ -195,21 +198,7 @@ export default function StudentLiveGame() {
     useEffect(() => {
         if (actionFetcher.data) {
             setResult(actionFetcher.data);
-            // Draw result line
-            if (mapInstance && guess && (actionFetcher.data as any).distance !== undefined) {
-                // We need true location. Result usually returns points/distance. 
-                // Ideally we show the true location. API might not return custom true location coords? 
-                // `api.room.$code.submit` returns { success: true, points: pts, distance: dist }
-                // It misses trueLat/Lng! 
-                // We should ideally fetch them or update API.
-                // For now, allow line drawing if we knew it (which we don't strictly in student mode unless we cheat/expose it).
-                // Student view might just show "Distance X km".
-                // BUT `result` layout tries to show `actualMarker`. 
-                // Let's assume Student doesn't see True Location on their map to prevent sharing? 
-                // Or we update API to return it.
-                // Teacher View shows it.
-                // Let's update API to return true coords for the line drawing.
-            }
+            // Wait for Review mode to draw logic lines
         }
     }, [actionFetcher.data]);
 
@@ -242,7 +231,8 @@ export default function StudentLiveGame() {
     // "Teacher will show the image... students will play".
     // If status is REVIEW, we probably show results.
 
-    const layoutMode = (submitted || room.status === 'REVIEW') ? "result" : "game";
+    // Gated Result Mode: Only show Result layout if status is REVIEW
+    const layoutMode = room.status === 'REVIEW' ? "result" : "game";
 
     return (
         <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row transition-all duration-700 ease-in-out">
@@ -290,6 +280,7 @@ export default function StudentLiveGame() {
                             onBoxChange={isEvidenceMode ? handleBoxDrawn : () => { }}
                             disabled={submitted || !isEvidenceMode}
                         >
+                            {/* User Evidence (Green) */}
                             {evidenceList.map((ev) => (
                                 <div key={ev.id} className="absolute border-2 border-green-400 bg-green-400/10"
                                     style={{ left: `${ev.box.x / 10}%`, top: `${ev.box.y / 10}%`, width: `${ev.box.w / 10}%`, height: `${ev.box.h / 10}%` }}
@@ -299,6 +290,22 @@ export default function StudentLiveGame() {
                                     )}
                                 </div>
                             ))}
+
+                            {/* Official Evidence (Yellow) - Only in Review */}
+                            {room.status === 'REVIEW' && currentRound?.evidence?.map((ev: any) => {
+                                let box;
+                                try { box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box; } catch (e) { return null; }
+                                if (!box) return null;
+                                return (
+                                    <div key={ev.id} className="absolute border-2 border-yellow-400 bg-yellow-400/10 flex flex-col items-start p-1"
+                                        style={{ left: `${box.x / 10}%`, top: `${box.y / 10}%`, width: `${box.w / 10}%`, height: `${box.h / 10}%` }}
+                                    >
+                                        <div className="bg-yellow-500 text-black text-[9px] font-bold px-1 rounded-sm shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                                            {ev.description}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </EvidenceCanvas>
                     ) : <div className="flex items-center justify-center h-full">No Signal</div>}
                 </div>
@@ -310,11 +317,19 @@ export default function StudentLiveGame() {
             >
                 <div ref={mapRef} className="w-full h-full" />
 
-                {!submitted && (
+                {!submitted ? (
                     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
                         <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'}`}>
                             CONFIRM COORDINATES
                         </button>
+                    </div>
+                ) : (
+                    <div className="absolute bottom-6 left-6 right-6 z-10">
+                        <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5">
+                            <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
+                            <div className="text-lg font-black">LOCKED IN</div>
+                            <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Awaiting Mission Control Reveal...</div>
+                        </div>
                     </div>
                 )}
             </div>

@@ -19,6 +19,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     const lat = parseFloat(formData.get("lat") as string);
     const lng = parseFloat(formData.get("lng") as string);
 
+    if (isNaN(lat) || isNaN(lng)) {
+        return Response.json({ error: "Invalid Coordinates" }, { status: 400 });
+    }
+
     // We need locationId to verify against current round, 
     // BUT safest is to look up current round location from DB to prevent cheating
 
