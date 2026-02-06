@@ -26,29 +26,27 @@ export async function checkEvidenceListWithGemini(
     const arrayBuffer = await response.arrayBuffer();
     const base64Data = arrayBufferToBase64(arrayBuffer);
 
-    // Prompt updated to GENERATE descriptions for boxes, as users no longer input them.
+    // Prompt updated to GENERATE descriptions for boxes.
+    // We also provide the 'adminEvidence' if available so the AI knows what to look for/compare.
+    const adminContext = evidenceList.map((e, i) => `User Box ${i}: ${JSON.stringify(e.box)}`).join("\n");
+
     const prompt = `
-    Analyze the image and the following list of marked evidence regions (Box coordinates are on a 0-1000 scale relative to image size).
+    Analyze the image and the following list of marked evidence regions (Box coordinates are on a 0-100 scale relative to image size).
     Location context: "${locationName}".
     
     For each item:
     1. Analyze the visual content within the bounding box.
-    2. Determine if it contains a DISTINCTIVE visual clue usable for geolocation (e.g., signage, unique architecture, landmark, specific vegetation).
-    3. If VALID:
-       - Generate a short, precise description of the clue.
-       - Set "validity" to high (0.8-1.0).
-    4. If INVALID (empty sky, generic road, too blurry):
-       - Set "validity" to low (0.0-0.3).
-       - Explanation: "Generic feature" or similar.
+    2. Determine if it contains a DISTINCTIVE visual clue usable for geolocation.
+    3. Generate a description.
     
     Evidence List (Boxes only):
     ${JSON.stringify(evidenceList.map(e => ({ box: e.box })), null, 2)}
     
-    Return a JSON object with a "results" array containing:
+    Return a JSON ARRAY (list of objects) with:
     - "index": number (matching input array index)
     - "validity": number (0.0 to 1.0)
-    - "description": string (AI generated description of the feature)
-    - "explanation": string (reason for validity score)
+    - "description": string (AI generated description)
+    - "explanation": string (reason)
   `;
 
     const result = await model.generateContent([
@@ -65,22 +63,33 @@ export async function checkEvidenceListWithGemini(
     console.log("Gemini Raw Response:", responseText); // Debug logging
 
     // Clean up markdown code blocks if present
-    const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+    let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    // Try to find the first '{' and the last '}'
-    const startIndex = cleanText.indexOf('{');
-    const endIndex = cleanText.lastIndexOf('}');
+    // Find the outer-most array brackets
+    const startIndex = cleanText.indexOf('[');
+    const endIndex = cleanText.lastIndexOf(']');
 
     if (startIndex !== -1 && endIndex !== -1) {
         try {
             const jsonStr = cleanText.substring(startIndex, endIndex + 1);
-            return JSON.parse(jsonStr);
+            return { results: JSON.parse(jsonStr) };
         } catch (e) {
             console.error("JSON Parse Error:", e);
-            // Fallback: return empty results if parsing fails but structure seemed there
+            // Try to rescue if it's just a single object wrapped in array logic
             return { results: [] };
         }
     }
+    // Fallback: Check for single object
+    const startObj = cleanText.indexOf('{');
+    const endObj = cleanText.lastIndexOf('}');
+    if (startObj !== -1 && endObj !== -1) {
+        try {
+            const jsonStr = cleanText.substring(startObj, endObj + 1);
+            // unexpected single object, wrap it
+            return { results: [JSON.parse(jsonStr)] };
+        } catch (e) { }
+    }
+
     return { results: [] };
 }
 

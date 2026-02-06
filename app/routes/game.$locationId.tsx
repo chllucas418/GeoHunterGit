@@ -146,17 +146,45 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         if (result && mapInstance) {
             const timer = setTimeout(() => {
                 google.maps.event.trigger(mapInstance, "resize");
-                // Re-fit bounds after resize
+
                 if (guess) {
                     const bounds = new google.maps.LatLngBounds();
                     bounds.extend(guess);
                     bounds.extend(location.geoPoint);
                     mapInstance.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
                 }
+                mapInstance.setCenter(location.geoPoint);
+                mapInstance.setZoom(16);
+
+                // --- RESULT MODE: RENDER EVIDENCE & CONNECTIONS ---
+                if (result && mapInstance && window.google) {
+                    const bounds = new window.google.maps.LatLngBounds();
+                    bounds.extend(location.geoPoint);
+                    if (guess) bounds.extend(guess);
+
+                    // Draw Connection Line
+                    if (guess) {
+                        new window.google.maps.Polyline({
+                            path: [guess, location.geoPoint],
+                            map: mapInstance,
+                            geodesic: true,
+                            strokeColor: "#3b82f6", // Blue-500
+                            strokeOpacity: 0.8,
+                            strokeWeight: 4,
+                            icons: [{
+                                icon: { path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW },
+                                offset: '100%'
+                            }]
+                        });
+                    }
+
+                    mapInstance.fitBounds(bounds, { top: 100, bottom: 100, left: 100, right: 100 });
+                }
+
             }, 500); // Wait for transition animation
             return () => clearTimeout(timer);
         }
-    }, [result, mapInstance, guess, location.geoPoint]);
+    }, [result, mapInstance, guess, location, evidenceList]);
 
     const handleSubmit = () => {
         if (!guess) return;
@@ -282,6 +310,32 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         );
                     })}
 
+                    {/* Overlay ADMIN Verified Boxes (Result Mode Only) */}
+                    {result && result.adminEvidence && result.adminEvidence.map((ev: any) => {
+                        // Parse the bounding box if it's a string
+                        let box: BoxCoordinates;
+                        try {
+                            box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box;
+                        } catch (e) { return null; }
+
+                        return (
+                            <div
+                                key={`admin-${ev.id}`}
+                                className="absolute border-2 border-yellow-400 bg-yellow-400/10 transition-all duration-500 flex flex-col items-start p-1 animate-in zoom-in-50 z-20"
+                                style={{
+                                    left: `${box.x / 10}%`,
+                                    top: `${box.y / 10}%`,
+                                    width: `${box.w / 10}%`,
+                                    height: `${box.h / 10}%`
+                                }}
+                            >
+                                <div className="text-[10px] font-black px-2 py-0.5 rounded-sm backdrop-blur-md bg-yellow-500 text-black uppercase tracking-wider shadow-lg">
+                                    ★ OFFICIAL INTEL
+                                </div>
+                            </div>
+                        );
+                    })}
+
 
                 </div>
 
@@ -298,22 +352,29 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 </div>
             </div>
 
-            {/* --- TACTICAL MAP LAYER --- */}
-            {/* When result is present, we move this map to the result view via CSS layout or we ensure it persists visually? 
-                React Portals or just CSS classes.
-                Let's use CSS classes to change its position from "bottom-right corner" to "fullscreen result container left".
+            {/* --- VISUALIZATION LAYER (Image or Map) --- */}
+            {/* Logic: 
+                - Game Mode: Show Image (EvidenceCanvas) 
+                - Result Mode: User likely wants to see the MAP result mainly, but might want to see the evidence on the image too.
+                - Current layout puts the result MAP filling the screen.
+                - The user says "no map evidence mark".
+                - If we only show the Google Map, we can't show image evidence marks.
+                - WE SHOULD SHOW BOTH or TOGGLE.
+                - For now, let's keep the Google Map as the primary result visual, but maybe overlay pins?
             */}
-            <div className={`transition-all duration-700 shadow-2xl z-20 overflow-hidden border border-white/10 
+
+            {/* GOOGLE MAP CONTAINER */}
+            <div className={`transition-all duration-700 shadow-2xl z-20 overflow-hidden border border-white/10 bg-slate-900
                 ${result
-                    ? 'absolute inset-0 z-40 m-6 mb-24 md:mr-[26rem] md:mb-6 rounded-3xl' // Result Mode: Fill screen minus sidebar
+                    ? 'absolute inset-0 z-40 m-6 mb-24 md:mr-[26rem] md:mb-6 rounded-3xl' // Result: Large Left Panel
                     : guess
-                        ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2' // Split Mode
-                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105' // Mini Mode
+                        ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2' // Split
+                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105' // Mini
                 }
             `}>
-                <div ref={mapRef} className="w-full h-full bg-slate-800" />
+                <div ref={mapRef} className="w-full h-full" />
 
-                {/* Floating Map Controls */}
+                {/* Floating Map Controls (Game Mode) */}
                 {!result && (
                     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
                         <button
