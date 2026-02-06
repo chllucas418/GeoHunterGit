@@ -16,6 +16,7 @@ export interface Location {
     difficultyRating: number; // 1-10
     qualityScore: number;    // 1-100
     verifiedByGemini: boolean;
+    photographer?: string;
 }
 
 export interface GameSession {

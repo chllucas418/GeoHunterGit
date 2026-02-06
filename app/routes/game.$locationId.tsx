@@ -25,19 +25,34 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
     const evidenceCountResult = await db.prepare("SELECT COUNT(*) as count FROM map_evidence WHERE location_id = ? AND is_verified = 1").bind(locationId).first<any>();
     const totalEvidence = evidenceCountResult?.count || 0;
 
+
+
+    // Parse metadata
+    let photographer = "";
+    if (loc.image_metadata) {
+        try {
+            const meta = JSON.parse(loc.image_metadata);
+            photographer = meta.photographer || "";
+        } catch (e) {
+            console.error("Failed to parse image metadata", e);
+        }
+    }
+
+    // Parse hints (Support JSON array or legacy newline separation)
+    const hintList = loc.hints ? (() => {
+        try { return JSON.parse(loc.hints); } catch { return loc.hints.split(/\n\n|\n/); }
+    })() : [];
+
+    // Add photographer to location object
     const location: Location = {
         id: loc.id,
         imageUrl: loc.image_url,
         geoPoint: { lat: loc.lat, lng: loc.lng },
         difficultyRating: loc.difficulty_rating,
         qualityScore: loc.quality_score,
-        verifiedByGemini: !!loc.verified_by_gemini
+        verifiedByGemini: !!loc.verified_by_gemini,
+        photographer
     };
-
-    // Parse hints (Support JSON array or legacy newline separation)
-    const hintList = loc.hints ? (() => {
-        try { return JSON.parse(loc.hints); } catch { return loc.hints.split(/\n\n|\n/); }
-    })() : [];
 
     return { location, mapsApiKey: MAPS_API_KEY, totalEvidence, hintList };
 }
@@ -443,7 +458,15 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                 </div>
                             );
                         })}
+
                     </EvidenceCanvas>
+
+                    {/* Photographer Attribution */}
+                    {location.photographer && (
+                        <div className="absolute bottom-2 right-2 z-10 text-[10px] text-white/60 bg-black/40 px-2 py-0.5 rounded backdrop-blur-sm pointer-events-none select-none">
+                            📷 {location.photographer}
+                        </div>
+                    )}
                 </div>
 
                 <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
@@ -581,6 +604,6 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 )}
             </div>
 
-        </div>
+        </div >
     );
 }
