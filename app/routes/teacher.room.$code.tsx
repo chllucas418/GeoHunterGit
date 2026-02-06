@@ -1,7 +1,7 @@
 import { Form, useLoaderData, useFetcher, useNavigate, Link } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { requireTeacher } from "~/lib/auth.server";
-import { Loader } from "@googlemaps/js-api-loader";
+import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 // import { GoogleMap, Marker } from "@react-google-maps/api"; // Will need to adapt for Remix/Vite or use existing loader
 
 export async function loader({ request, params, context }: any) {
@@ -44,70 +44,68 @@ export default function TeacherRoom() {
         const status = room?.status;
 
         if (status === 'REVIEW' && !reviewMap && mapRef.current) {
-            import("@googlemaps/js-api-loader").then(({ Loader }) => {
-                const loader = new Loader({
-                    apiKey: mapsApiKey,
-                    version: "weekly",
-                }) as any;
+            setOptions({
+                key: mapsApiKey,
 
-                loader.importLibrary("maps").then(async () => {
-                    const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
+            });
 
-                    const center = currentRound?.location ?
-                        { lat: currentRound.location.lat, lng: currentRound.location.lng } :
-                        { lat: 22.3193, lng: 114.1694 };
+            importLibrary("maps").then(async () => {
+                const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
 
-                    const map = new Map(mapRef.current!, {
-                        center,
-                        zoom: 14,
-                        disableDefaultUI: true,
-                        mapId: "TEACHER_REVIEW_MAP",
-                    });
+                const center = currentRound?.location ?
+                    { lat: currentRound.location.lat, lng: currentRound.location.lng } :
+                    { lat: 22.3193, lng: 114.1694 };
 
-                    setReviewMap(map);
+                const map = new Map(mapRef.current!, {
+                    center,
+                    zoom: 14,
+                    disableDefaultUI: true,
+                    mapId: "TEACHER_REVIEW_MAP",
+                });
 
-                    if (currentRound?.location) {
-                        new google.maps.Marker({
-                            position: { lat: currentRound.location.lat, lng: currentRound.location.lng },
-                            map,
-                            title: "Target Location",
-                            icon: {
-                                path: google.maps.SymbolPath.CIRCLE,
-                                scale: 10,
-                                fillColor: "#10b981",
-                                fillOpacity: 1,
-                                strokeColor: "#ffffff",
-                                strokeWeight: 2,
-                            }
-                        });
-                    }
+                setReviewMap(map);
 
-                    // Fetch guesses
-                    fetch(`/api/room/${code}/review?round=${room.current_index}`).then(res => res.json()).then((data: any) => {
-                        if (data.guesses) {
-                            const bounds = new google.maps.LatLngBounds();
-                            if (currentRound?.location) {
-                                bounds.extend({ lat: currentRound.location.lat, lng: currentRound.location.lng });
-                            }
-
-                            data.guesses.forEach((g: any) => {
-                                const m = new google.maps.Marker({
-                                    position: { lat: g.lat, lng: g.lng },
-                                    map,
-                                    label: {
-                                        text: g.user_name[0],
-                                        color: "white",
-                                        fontWeight: "bold"
-                                    },
-                                    title: `${g.user_name} (${Math.round(g.distance * 1000)}m)`,
-                                });
-                                markersRef.current.push(m);
-                                bounds.extend({ lat: g.lat, lng: g.lng });
-                            });
-
-                            map.fitBounds(bounds);
+                if (currentRound?.location) {
+                    new google.maps.Marker({
+                        position: { lat: currentRound.location.lat, lng: currentRound.location.lng },
+                        map,
+                        title: "Target Location",
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 10,
+                            fillColor: "#10b981",
+                            fillOpacity: 1,
+                            strokeColor: "#ffffff",
+                            strokeWeight: 2,
                         }
                     });
+                }
+
+                // Fetch guesses
+                fetch(`/api/room/${code}/review?round=${room.current_index}`).then(res => res.json()).then((data: any) => {
+                    if (data.guesses) {
+                        const bounds = new google.maps.LatLngBounds();
+                        if (currentRound?.location) {
+                            bounds.extend({ lat: currentRound.location.lat, lng: currentRound.location.lng });
+                        }
+
+                        data.guesses.forEach((g: any) => {
+                            const m = new google.maps.Marker({
+                                position: { lat: g.lat, lng: g.lng },
+                                map,
+                                label: {
+                                    text: g.user_name[0],
+                                    color: "white",
+                                    fontWeight: "bold"
+                                },
+                                title: `${g.user_name} (${Math.round(g.distance * 1000)}m)`,
+                            });
+                            markersRef.current.push(m);
+                            bounds.extend({ lat: g.lat, lng: g.lng });
+                        });
+
+                        map.fitBounds(bounds);
+                    }
                 });
             });
         }

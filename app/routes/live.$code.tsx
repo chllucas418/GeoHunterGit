@@ -1,7 +1,7 @@
 import { useLoaderData, useFetcher } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { requireUser } from "~/lib/auth.server";
-import { Loader } from "@googlemaps/js-api-loader";
+import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 export async function loader({ request, params, context }: any) {
     const userId = await requireUser(request);
@@ -57,11 +57,12 @@ export default function StudentLiveGame() {
     const mapRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         if (roomState?.room.status === 'PLAYING' && !mapInstance && mapRef.current) {
-            const loader = new Loader({
-                apiKey: mapsApiKey,
-                version: "weekly",
-            }) as any;
-            loader.importLibrary("maps").then(async () => {
+            setOptions({
+                key: mapsApiKey,
+
+            });
+
+            importLibrary("maps").then(async () => {
                 const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
                 const map = new Map(mapRef.current!, {
                     center: { lat: 22.3193, lng: 114.1694 }, // Default HK
