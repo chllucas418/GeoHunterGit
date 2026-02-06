@@ -35,7 +35,16 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         "SELECT location_id FROM map_set_items WHERE set_id = ? AND order_index = ?"
     ).bind(room.map_set_id, room.current_index).first<any>();
 
+    if (!item) {
+        console.error(`Map Item not found for Set ${room.map_set_id} Index ${room.current_index}`);
+        return Response.json({ error: "Location data missing for this round" }, { status: 500 });
+    }
+
     const trueLoc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
+
+    if (!trueLoc) {
+        return Response.json({ error: "Target location not found in database" }, { status: 500 });
+    }
 
     // Determine Score
     // 5000 pts max. 
