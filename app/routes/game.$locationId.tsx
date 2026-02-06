@@ -360,10 +360,10 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             </div>
 
             {/* --- VISUALIZATION LAYER (Image or Map) --- */}
-            {/* Logic: 
-                - Game Mode: Show Image (EvidenceCanvas) 
+            {/* Logic:
+                - Game Mode: Show Image (EvidenceCanvas)
                 - Result Mode: User likely wants to see the MAP result mainly, but might want to see the evidence on the image too.
-                - Current layout puts the result MAP filling the screen.
+                - Current layout puts the Google Map filling the screen.
                 - The user says "no map evidence mark".
                 - If we only show the Google Map, we can't show image evidence marks.
                 - WE SHOULD SHOW BOTH or TOGGLE.
@@ -376,14 +376,14 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     ? 'top-24 left-6 right-6 bottom-6 md:right-96' // Result: Fill main area, leave room for sidebar
                     : guess
                         ? 'h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0' // Game: Map takes half
-                        : 'w-0 h-0 opacity-0 pointer-events-none' // Game: Map hidden initially or small? 
-                // Actually, in Game Mode, we want the map to be small in corner -> then expand. 
+                        : 'w-0 h-0 opacity-0 pointer-events-none' // Game: Map hidden initially or small?
+                // Actually, in Game Mode, we want the map to be small in corner -> then expand.
                 // But user specifically asked for "Image behind map" issue.
                 // Let's keep the original "Mini Map" logic for Game Mode, but FORCE SPLIT for Result Mode.
                 }`
             }>
-                {/* In Result mode, we want TWO panels side-by-side inside this container? 
-                   No, the `EvidenceCanvas` above is `absolute inset-0`. 
+                {/* In Result mode, we want TWO panels side-by-side inside this container?
+                   No, the `EvidenceCanvas` above is `absolute inset-0`.
                    We need to shrink the EvidenceCanvas to 50% width in Result Mode.
                 */}
             </div>
@@ -393,7 +393,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 ${result
                     ? 'absolute top-24 bottom-6 right-6 w-1/2 md:w-[40%] rounded-2xl' // Result: Right side panel (beside sidebar? No sidebar is far right)
                     // Wait, the sidebar is fixed width 96.
-                    // Let's try: Image (Left), Map (Center), Sidebar (Right)? 
+                    // Let's try: Image (Left), Map (Center), Sidebar (Right)?
                     // Too crowded.
                     // User asked: "Make the page separate into two parts".
                     // Let's do: Image (Top/Left), Map (Bottom/Right).
@@ -403,7 +403,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2'
                         : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105'
                 }
-                ${result ? '!w-[45%] !right-[26rem] !left-auto !top-24 !bottom-6' : ''} 
+                ${result ? '!w-[45%] !right-[26rem] !left-auto !top-24 !bottom-6' : ''}
             `}>
                 <div ref={mapRef} className="w-full h-full" />
 
@@ -448,8 +448,8 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     <div className="flex flex-col md:flex-row w-full h-full pt-32 pb-6 px-6 gap-6">
 
                         {/* LEFT: Map Visualization - Spacer */}
-                        {/* The real map is positioned via CSS in the <div ref={mapRef}> above. 
-                            We use this spacer to push the sidebar to the right. 
+                        {/* The real map is positioned via CSS in the <div ref={mapRef}> above.
+                            We use this spacer to push the sidebar to the right.
                         */}
                         <div className="flex-1 hidden md:block pointer-events-none" />
 

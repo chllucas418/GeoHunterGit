@@ -111,8 +111,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
                     if (item.validity > 0.7 || matchedAdminId) {
                         if (matchedAdminId) {
                             // User found a known clue!
-                            evidenceScore += 1000;
+                            // CHECK DEDUPLICATION: Only award if this admin ID hasn't been matched yet in this turn
                             if (!matchedEvidenceIds.includes(matchedAdminId)) {
+                                evidenceScore += 1000;
                                 matchedEvidenceIds.push(matchedAdminId);
                             }
                         } else {
