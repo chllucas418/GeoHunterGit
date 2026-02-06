@@ -13,5 +13,22 @@ export default [
     route("profile", "routes/profile.tsx"),
     route("leaderboard", "routes/leaderboard.tsx"),
     route("privacy", "routes/privacy.tsx"),
-    route("resources/image/:locationId", "routes/resources.image.$locationId.ts")
+    route("resources/image/:locationId", "routes/resources.image.$locationId.ts"),
+
+    // Teacher Mode Routes
+    route("join", "routes/join.tsx"),
+    route("live/:code", "routes/live.$code.tsx"),
+    route("teacher/dashboard", "routes/teacher.dashboard.tsx"),
+    route("teacher/room/:code", "routes/teacher.room.$code.tsx"),
+
+    // Admin Routes
+    route("admin/create-teacher", "routes/admin.create-teacher.tsx"),
+    route("admin/users/:userId", "routes/admin.users.$userId.tsx"),
+
+    // Room APIs
+    route("api/room/:code/action", "routes/api.room.$code.action.ts"),
+    route("api/room/:code/join", "routes/api.room.$code.join.ts"),
+    route("api/room/:code/review", "routes/api.room.$code.review.ts"),
+    route("api/room/:code/status", "routes/api.room.$code.status.ts"),
+    route("api/room/:code/submit", "routes/api.room.$code.submit.ts")
 ] satisfies RouteConfig;
