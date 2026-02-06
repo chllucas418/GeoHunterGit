@@ -61,8 +61,6 @@ export async function checkEvidenceListWithGemini(
         },
     ]);
 
-    const responseText = result.response.text();
-    const responseText = result.response.text();
     console.log("Gemini Raw Response:", responseText); // Debug logging
 
     // Clean up markdown code blocks if present
