@@ -12,16 +12,39 @@ body {
 
 :root {
   /* Light Mode Liquid Glass Palette */
-  --glass-bg-light: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.3) 100%);
-  --glass-border-light: rgba(255, 255, 255, 0.4);
-  --glass-shadow-light: 0 8px 32px 0 rgba(100, 116, 139, 0.1);
-  --text-primary-light: #1e293b;
+  --glass-bg-light: rgba(255, 255, 255, 0.85);
+  /* More opaque */
+  --glass-border-light: rgba(203, 213, 225, 0.6);
+  /* Slate-300 */
+  --glass-shadow-light: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --text-primary-light: #0f172a;
+  /* Slate-900 */
   --text-secondary-light: #475569;
+  /* Slate-600 */
 }
 
 body.light-mode {
-  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  background: #f8fafc;
+  /* Slate-50 - Solid light background */
   color: var(--text-primary-light);
+}
+
+/* Ensure global elements react to light mode correctly if they use default text colors */
+body.light-mode h1,
+body.light-mode h2,
+body.light-mode h3,
+body.light-mode h4,
+body.light-mode h5,
+body.light-mode h6 {
+  color: #0f172a;
+  /* Force headers to dark in light mode */
+}
+
+body.light-mode p,
+body.light-mode span,
+body.light-mode div {
+  color: inherit;
+  /* Inherit slate-900 */
 }
 
 .glass-panel {
@@ -33,9 +56,11 @@ body.light-mode {
 }
 
 .light-mode .glass-panel {
-  background: var(--glass-bg-light);
-  border: 1px solid var(--glass-border-light);
-  box-shadow: var(--glass-shadow-light);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  /* Slate-200 */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  color: #0f172a;
 }
 
 .glass-card {
@@ -48,9 +73,10 @@ body.light-mode {
 }
 
 .light-mode .glass-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.2) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 8px 32px 0 rgba(148, 163, 184, 0.15);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  color: #0f172a;
 }
 
 .glass-card:hover {
@@ -61,9 +87,9 @@ body.light-mode {
 }
 
 .light-mode .glass-card:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.5) 100%);
-  border-color: #fff;
-  box-shadow: 0 20px 40px -5px rgba(31, 38, 135, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: #cbd5e1;
 }
 
 .glass-card {
