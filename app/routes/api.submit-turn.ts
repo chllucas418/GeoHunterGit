@@ -128,9 +128,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
                         const adminCy = adminBox.y + adminBox.h / 2;
                         const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
 
-                        // Thresholds: IoU > 0.1 (10% overlap) OR Center Closeness < 80 units (approx 8%)
-                        // We use a looser threshold because drawing boxes is imprecise
-                        if (iou > 0.1 || dist < 120) {
+                        // Thresholds: IoU > 0.3 (30% overlap) OR Center Closeness < 50 units (approx 3% of canvas)
+                        // STRICTER: We want to avoid auto-accepting loose boxes.
+                        if (iou > 0.3 || dist < 50) {
                             matchedAdminId = adminEv.id;
                             break;
                         }

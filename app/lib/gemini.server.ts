@@ -45,19 +45,23 @@ export async function checkEvidenceListWithGemini(
     For each USER item:
     1. Compare the user's box with the GROUND TRUTH clues (by visual content and location).
     2. If the user's box matches a Ground Truth clue:
-       - Valid: HIGH (0.8-1.0)
-       - Matched Index: The index (0-based) of the Ground Truth item in the provided list.
+       - **STRICTLY EVALUATE visual content.** Does the box actually contain the object?
+       - If yes: Valid: HIGH (0.8-1.0).
+       - Matched Index: The index (0-based) of the Ground Truth item.
        - Description: Identify the object using the Official Clue name.
        - Explanation: "Correctly identified [Official Clue Name]."
+       - If the box is nearby but misses the actual feature visually (e.g. empty wall next to sign), validity = 0.2.
     3. If the user found a legitimate clue that is NOT in the Ground Truth (a "Novel Discovery"):
-       - Valid: HIGH (0.7-0.9)
-       - Matched Index: -1
-       - Description: Describe what it is.
+       - **STRICT CRITERIA:** Only accept if it is **legible text** (shop sign, street name) or a **highly unique landmark** (statue, distinct mural).
+       - **REJECT** generic features like "red wall", "pavement", "tree", "sky", "building corner" with LOW validity (0.1).
+       - If Valid: HIGH (0.7-0.9).
+       - Matched Index: -1.
+       - Description: Describe specifically what it is.
        - Explanation: "Good eye! You spotted [Feature] which wasn't in our database."
-    4. If invalid/random/empty:
-       - Valid: LOW.
-       - Matched Index: -1
-       - Explanation: "Generic feature."
+    4. If invalid/random/empty/generic:
+       - Valid: LOW (0.0 - 0.1).
+       - Matched Index: -1.
+       - Explanation: "Generic feature (e.g. wall, road, sky) or unclear."
 
     CRITICAL: ALWAYS Provide a "summary_explanation".
     - If the user missed key evidence or provided no evidence, explain clearly how the GROUND TRUTH items help identify this location. 
