@@ -59,12 +59,14 @@ export async function checkEvidenceListWithGemini(
        - Matched Index: -1
        - Explanation: "Generic feature."
 
-    Return a JSON ARRAY of objects with:
-    - "index": number (matching input USER array index)
-    - "validity": number (0.0 to 1.0)
-    - "matched_admin_index": number (0-based index of the Admin Evidence matched, or -1 if none)
-    - "description": string (AI generated description)
-    - "explanation": string (reason)
+    CRITICAL: ALWAYS Provide a "summary_explanation".
+    - If the user missed key evidence or provided no evidence, explain clearly how the GROUND TRUTH items help identify this location. 
+    - e.g. "You missed the [Clue A] and [Clue B]. These are critical because..."
+    - Be educational and encouraging.
+
+    Return a JSON OBJECT with:
+    - "results": ARRAY of objects (same as before: index, validity, matched_admin_index, description, explanation)
+    - "summary_explanation": string (The educational summary)
   `;
     const result = await model.generateContent([
         prompt,
@@ -80,35 +82,23 @@ export async function checkEvidenceListWithGemini(
     console.log("Gemini Raw Response:", responseText); // Debug logging
 
     // Clean up markdown code blocks if present
-    // Clean up markdown code blocks if present
     let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    // Find the outer-most array brackets
-    const startIndex = cleanText.indexOf('[');
-    const endIndex = cleanText.lastIndexOf(']');
-
-    if (startIndex !== -1 && endIndex !== -1) {
-        try {
-            const jsonStr = cleanText.substring(startIndex, endIndex + 1);
-            return { results: JSON.parse(jsonStr) };
-        } catch (e) {
-            console.error("JSON Parse Error:", e);
-            // Try to rescue if it's just a single object wrapped in array logic
-            return { results: [] };
+    // Try to parse the whole object first
+    try {
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            // Ensure results array exists
+            if (!parsed.results) parsed.results = [];
+            return parsed;
         }
-    }
-    // Fallback: Check for single object
-    const startObj = cleanText.indexOf('{');
-    const endObj = cleanText.lastIndexOf('}');
-    if (startObj !== -1 && endObj !== -1) {
-        try {
-            const jsonStr = cleanText.substring(startObj, endObj + 1);
-            // unexpected single object, wrap it
-            return { results: [JSON.parse(jsonStr)] };
-        } catch (e) { }
+    } catch (e) {
+        console.error("JSON Parse Error:", e);
     }
 
-    return { results: [] };
+    // Fallback: If strict parsing fails, try to salvage results array if possible, or return empty
+    return { results: [], summary_explanation: "AI feedback unavailable." };
 }
 
 export async function analyzeImageQuality(

@@ -54,7 +54,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // 3. Evidence Processing (Hybrid: Geometry Match + AI Validation)
     let aiBonus = 0;
     let evidenceScore = 0;
-    let aiFeedback: any = { status: "no_evidence_submitted" };
+    let aiFeedback: any = { status: "processing" };
     const matchedEvidenceIds: string[] = [];
 
     // Fetch Admin Evidence
@@ -65,99 +65,97 @@ export async function action({ request, context }: ActionFunctionArgs) {
         description: ae.description
     }));
 
-    if (evidenceListJson) {
-        const userEvidenceList = JSON.parse(evidenceListJson);
+    // Always run AI analysis to get the "Teaching Moment" even if user found nothing
+    const userEvidenceList = evidenceListJson ? JSON.parse(evidenceListJson) : [];
 
-        try {
-            // 5. AI Analysis (with Admin Context)
-            // We pass the admin evidence descriptions so the AI knows what the "Official" answers are.
-            const fullFeedback = await checkEvidenceListWithGemini(
-                GEMINI_API_KEY,
-                loc.image_url,
-                userEvidenceList, // User's boxes
-                loc.name,
-                adminBoxes // Pass Admin Evidence for context
-            );
+    try {
+        // 5. AI Analysis (with Admin Context)
+        const fullFeedback = await checkEvidenceListWithGemini(
+            GEMINI_API_KEY,
+            loc.image_url,
+            userEvidenceList, // User's boxes (can be empty)
+            loc.name,
+            adminBoxes // Pass Admin Evidence for context
+        );
 
-            aiFeedback = fullFeedback;
+        aiFeedback = fullFeedback;
 
-            if (fullFeedback.results) {
-                for (const item of fullFeedback.results) {
-                    // Safety check index
-                    const userBox = userEvidenceList[item.index]?.box;
-                    if (!userBox) continue;
+        if (fullFeedback.results) {
+            for (const item of fullFeedback.results) {
+                // Safety check index
+                const userBox = userEvidenceList[item.index]?.box;
+                if (!userBox) continue;
 
-                    // B. Geometry Match (Fallback) or AI Match (Priority)
-                    let matchedAdminId = null;
+                // B. Geometry Match (Fallback) or AI Match (Priority)
+                let matchedAdminId = null;
 
-                    // 1. Check if AI explicitly linked it
-                    if (typeof item.matched_admin_index === 'number' && item.matched_admin_index >= 0) {
-                        const matchedAdmin = adminBoxes[item.matched_admin_index];
-                        if (matchedAdmin) {
-                            matchedAdminId = matchedAdmin.id;
-                        }
+                // 1. Check if AI explicitly linked it
+                if (typeof item.matched_admin_index === 'number' && item.matched_admin_index >= 0) {
+                    const matchedAdmin = adminBoxes[item.matched_admin_index];
+                    if (matchedAdmin) {
+                        matchedAdminId = matchedAdmin.id;
                     }
+                }
 
-                    // 2. If AI didn't catch it, fallback to geometry (Advanced: Intersection Over Union + Center Distance)
-                    if (!matchedAdminId) {
-                        for (const adminEv of adminBoxes) {
-                            const userBox = userEvidenceList[item.index]?.box;
-                            const adminBox = adminEv.box;
+                // 2. If AI didn't catch it, fallback to geometry (Advanced: Intersection Over Union + Center Distance)
+                if (!matchedAdminId) {
+                    for (const adminEv of adminBoxes) {
+                        const userBox = userEvidenceList[item.index]?.box;
+                        const adminBox = adminEv.box;
 
-                            if (!userBox || !adminBox) continue;
+                        if (!userBox || !adminBox) continue;
 
-                            // Calculate IoU (Intersection over Union)
-                            const x1 = Math.max(userBox.x, adminBox.x);
-                            const y1 = Math.max(userBox.y, adminBox.y);
-                            const x2 = Math.min(userBox.x + userBox.w, adminBox.x + adminBox.w);
-                            const y2 = Math.min(userBox.y + userBox.h, adminBox.y + adminBox.h);
+                        // Calculate IoU (Intersection over Union)
+                        const x1 = Math.max(userBox.x, adminBox.x);
+                        const y1 = Math.max(userBox.y, adminBox.y);
+                        const x2 = Math.min(userBox.x + userBox.w, adminBox.x + adminBox.w);
+                        const y2 = Math.min(userBox.y + userBox.h, adminBox.y + adminBox.h);
 
-                            const intersectionW = Math.max(0, x2 - x1);
-                            const intersectionH = Math.max(0, y2 - y1);
-                            const intersectionArea = intersectionW * intersectionH;
+                        const intersectionW = Math.max(0, x2 - x1);
+                        const intersectionH = Math.max(0, y2 - y1);
+                        const intersectionArea = intersectionW * intersectionH;
 
-                            const userArea = userBox.w * userBox.h;
-                            const adminArea = adminBox.w * adminBox.h;
-                            const unionArea = userArea + adminArea - intersectionArea;
+                        const userArea = userBox.w * userBox.h;
+                        const adminArea = adminBox.w * adminBox.h;
+                        const unionArea = userArea + adminArea - intersectionArea;
 
-                            const iou = unionArea > 0 ? intersectionArea / unionArea : 0;
+                        const iou = unionArea > 0 ? intersectionArea / unionArea : 0;
 
-                            // Center distance fallback
-                            const userCx = userBox.x + userBox.w / 2;
-                            const userCy = userBox.y + userBox.h / 2;
-                            const adminCx = adminBox.x + adminBox.w / 2;
-                            const adminCy = adminBox.y + adminBox.h / 2;
-                            const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
+                        // Center distance fallback
+                        const userCx = userBox.x + userBox.w / 2;
+                        const userCy = userBox.y + userBox.h / 2;
+                        const adminCx = adminBox.x + adminBox.w / 2;
+                        const adminCy = adminBox.y + adminBox.h / 2;
+                        const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
 
-                            // Thresholds: IoU > 0.1 (10% overlap) OR Center Closeness < 80 units (approx 8%)
-                            // We use a looser threshold because drawing boxes is imprecise
-                            if (iou > 0.1 || dist < 120) {
-                                matchedAdminId = adminEv.id;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Scoring Logic
-                    if (item.validity > 0.7 || matchedAdminId) {
-                        if (matchedAdminId) {
-                            // User found a known clue!
-                            // CHECK DEDUPLICATION: Only award if this admin ID hasn't been matched yet in this turn
-                            if (!matchedEvidenceIds.includes(matchedAdminId)) {
-                                evidenceScore += 1000;
-                                matchedEvidenceIds.push(matchedAdminId);
-                            }
-                        } else {
-                            // User found a NEW valid clue (AI confirmed but not in DB)
-                            aiBonus += 250;
+                        // Thresholds: IoU > 0.1 (10% overlap) OR Center Closeness < 80 units (approx 8%)
+                        // We use a looser threshold because drawing boxes is imprecise
+                        if (iou > 0.1 || dist < 120) {
+                            matchedAdminId = adminEv.id;
+                            break;
                         }
                     }
                 }
+
+                // Scoring Logic
+                if (item.validity > 0.7 || matchedAdminId) {
+                    if (matchedAdminId) {
+                        // User found a known clue!
+                        // CHECK DEDUPLICATION: Only award if this admin ID hasn't been matched yet in this turn
+                        if (!matchedEvidenceIds.includes(matchedAdminId)) {
+                            evidenceScore += 1000;
+                            matchedEvidenceIds.push(matchedAdminId);
+                        }
+                    } else {
+                        // User found a NEW valid clue (AI confirmed but not in DB)
+                        aiBonus += 250;
+                    }
+                }
             }
-        } catch (e) {
-            console.error("Gemini Error:", e);
-            aiFeedback = { error: "AI verification failed" };
         }
+    } catch (e) {
+        console.error("Gemini Error:", e);
+        aiFeedback = { error: "AI verification failed" };
     }
 
     // 4. Dynamic Difficulty Adjustment
