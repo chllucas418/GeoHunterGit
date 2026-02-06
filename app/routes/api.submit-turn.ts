@@ -70,12 +70,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     try {
         // 5. AI Analysis (with Admin Context)
+        const GEMINI_BASE_URL = context.cloudflare.env.GEMINI_BASE_URL;
+
         const fullFeedback = await checkEvidenceListWithGemini(
             GEMINI_API_KEY,
             loc.image_url,
             userEvidenceList, // User's boxes (can be empty)
             loc.name,
-            adminBoxes // Pass Admin Evidence for context
+            adminBoxes, // Pass Admin Evidence for context
+            GEMINI_BASE_URL
         );
 
         aiFeedback = fullFeedback;

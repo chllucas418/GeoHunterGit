@@ -10,7 +10,8 @@
 	"vars": {
 		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
 		"GEMINI_API_KEY": "<REDACTED_DRIVE_KEY>",
-		"GOOGLE_MAPS_API_KEY": "<REDACTED_MAPS_KEY>"
+		"GOOGLE_MAPS_API_KEY": "<REDACTED_MAPS_KEY>",
+		"GEMINI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/<REDACTED_GATEWAY_ID>/geohunter-proxy/google-ai-studio"
 	},
 	"d1_databases": [
 		{

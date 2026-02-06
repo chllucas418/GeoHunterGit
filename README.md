@@ -45,8 +45,11 @@ GeoHunterGit is a location-guessing game where players identify locations from i
     ```ini
     GEMINI_API_KEY=your_gemini_api_key
     GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+    GEMINI_BASE_URL=https://gateway.ai.cloudflare.com/v1/{account}/{id}/google-ai  # Optional: For Regional Proxy
     VALUE_FROM_CLOUDFLARE=Hello World
     ```
+
+    > **Note on Regional Restrictions**: If you are in a region where Google Gemini is unavailable (e.g., UK, EU), setup a [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) and add its URL as `GEMINI_BASE_URL`. This relays requests through permitted regions.
 
 4.  **Database Migration:**
     Applies D1 migrations to the local database:

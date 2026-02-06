@@ -1,5 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 // Helper to convert ArrayBuffer to Base64
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
     let binary = '';
@@ -11,21 +9,59 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return btoa(binary);
 }
 
+// Helper for raw fetch to Gemini API
+async function callGeminiApi(
+    apiKey: string,
+    modelName: string,
+    prompt: string,
+    imageData: { mimeType: string; data: string },
+    baseUrl: string = "https://generativelanguage.googleapis.com"
+) {
+    const url = `${baseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+    const payload = {
+        contents: [{
+            parts: [
+                { text: prompt },
+                {
+                    inlineData: {
+                        mimeType: imageData.mimeType,
+                        data: imageData.data
+                    }
+                }
+            ]
+        }]
+    };
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        throw new Error(`Gemini API Error: ${response.status} ${response.statusText} - ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    // Extract text from standard Gemini response structure
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
 export async function checkEvidenceListWithGemini(
     apiKey: string,
     imageUrl: string,
     evidenceList: { box: { x: number; y: number; w: number; h: number }; description?: string }[],
     locationName: string,
-    adminEvidence: any[] = []
+    adminEvidence: any[] = [],
+    baseUrl?: string
 ) {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
 
     const arrayBuffer = await response.arrayBuffer();
     const base64Data = arrayBufferToBase64(arrayBuffer);
+    const mimeType = response.headers.get("content-type") || "image/jpeg";
 
     // Prepare Admin Context String for the AI
     const adminContextStr = adminEvidence.map((e, i) =>
@@ -72,37 +108,41 @@ export async function checkEvidenceListWithGemini(
     - "results": ARRAY of objects (same as before: index, validity, matched_admin_index, description, explanation)
     - "summary_explanation": string (The educational summary)
   `;
-    const result = await model.generateContent([
-        prompt,
-        {
-            inlineData: {
-                data: base64Data,
-                mimeType: response.headers.get("content-type") || "image/jpeg",
-            },
-        },
-    ]);
 
-    const responseText = result.response.text();
-    console.log("Gemini Raw Response:", responseText); // Debug logging
-
-    // Clean up markdown code blocks if present
-    let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-
-    // Try to parse the whole object first
     try {
-        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            // Ensure results array exists
-            if (!parsed.results) parsed.results = [];
-            return parsed;
-        }
-    } catch (e) {
-        console.error("JSON Parse Error:", e);
-    }
+        const responseText = await callGeminiApi(
+            apiKey,
+            "gemini-1.5-flash", // Updated to stable model name
+            prompt,
+            { mimeType, data: base64Data },
+            baseUrl
+        );
 
-    // Fallback: If strict parsing fails, try to salvage results array if possible, or return empty
-    return { results: [], summary_explanation: "AI feedback unavailable." };
+        console.log("Gemini Raw Response:", responseText);
+
+        // Clean up markdown code blocks if present
+        let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+
+        // Try to parse the whole object first
+        try {
+            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                // Ensure results array exists
+                if (!parsed.results) parsed.results = [];
+                return parsed;
+            }
+        } catch (e) {
+            console.error("JSON Parse Error:", e);
+        }
+
+        // Fallback: If strict parsing fails, try to salvage results array if possible, or return empty
+        return { results: [], summary_explanation: "AI feedback unavailable." };
+
+    } catch (e) {
+        console.error("Gemini API Call Error:", e);
+        return { results: [], summary_explanation: "AI service error." };
+    }
 }
 
 export async function analyzeImageQuality(
@@ -112,16 +152,15 @@ export async function analyzeImageQuality(
         lat?: number;
         lng?: number;
         evidenceList?: any[]; // optional pre-filled evidence
-    }
+    },
+    baseUrl?: string
 ) {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
 
     const arrayBuffer = await response.arrayBuffer();
     const base64Data = arrayBufferToBase64(arrayBuffer);
+    const mimeType = response.headers.get("content-type") || "image/jpeg";
 
     let contextStr = "";
     if (context?.lat && context?.lng) {
@@ -156,23 +195,25 @@ export async function analyzeImageQuality(
     - "generated_hints": string[] (Array of 3 suggestion strings)
   `;
 
-    const result = await model.generateContent([
-        prompt,
-        {
-            inlineData: {
-                data: base64Data,
-                mimeType: response.headers.get("content-type") || "image/jpeg",
-            },
-        },
-    ]);
+    try {
+        const responseText = await callGeminiApi(
+            apiKey,
+            "gemini-1.5-flash",
+            prompt,
+            { mimeType, data: base64Data },
+            baseUrl
+        );
 
-    const responseText = result.response.text();
-    // Clean potential markdown blocks
-    const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+        return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually", generated_hints: [] };
+
+    } catch (e) {
+        console.error("Gemini API Call Error:", e);
+        return { quality_score: 0, precontext: "Reference failed", recommendation: "Error", generated_hints: [] };
     }
-    return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually", generated_hints: [] };
 }
