@@ -43,22 +43,26 @@ export async function checkEvidenceListWithGemini(
     ${JSON.stringify(evidenceList.map(e => ({ box: e.box })), null, 2)}
 
     For each USER item:
-    1. Compare the user's box with the GROUND TRUTH clues.
-    2. If the user's box overlaps significantly with a Ground Truth clue, they found it!
+    1. Compare the user's box with the GROUND TRUTH clues (by visual content and location).
+    2. If the user's box matches a Ground Truth clue:
        - Valid: HIGH (0.8-1.0)
+       - Matched Index: The index (0-based) of the Ground Truth item in the provided list.
        - Description: Identify the object using the Official Clue name.
        - Explanation: "Correctly identified [Official Clue Name]."
     3. If the user found a legitimate clue that is NOT in the Ground Truth (a "Novel Discovery"):
        - Valid: HIGH (0.7-0.9)
+       - Matched Index: -1
        - Description: Describe what it is.
        - Explanation: "Good eye! You spotted [Feature] which wasn't in our database."
     4. If invalid/random/empty:
        - Valid: LOW.
+       - Matched Index: -1
        - Explanation: "Generic feature."
 
     Return a JSON ARRAY of objects with:
-    - "index": number (matching input array index)
+    - "index": number (matching input USER array index)
     - "validity": number (0.0 to 1.0)
+    - "matched_admin_index": number (0-based index of the Admin Evidence matched, or -1 if none)
     - "description": string (AI generated description)
     - "explanation": string (reason)
   `;

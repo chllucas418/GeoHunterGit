@@ -80,31 +80,43 @@ export async function action({ request, context }: ActionFunctionArgs) {
                     const userBox = userEvidenceList[item.index]?.box;
                     if (!userBox) continue;
 
-                    // B. Geometry Match with Admin Evidence (Simple overlap check)
+                    // B. Geometry Match (Fallback) or AI Match (Priority)
                     let matchedAdminId = null;
-                    for (const adminEv of adminBoxes) {
-                        // Simple center-point check or rough overlap. 
-                        // Let's check if centers are close (within 10% of image size)
-                        const userCx = userBox.x + userBox.w / 2;
-                        const userCy = userBox.y + userBox.h / 2;
-                        const adminCx = adminEv.box.x + adminEv.box.w / 2;
-                        const adminCy = adminEv.box.y + adminEv.box.h / 2;
 
-                        const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
-                        if (dist < 100) { // 100 units on 1000 scale = 10% tolerance
-                            matchedAdminId = adminEv.id;
-                            break;
+                    // 1. Check if AI explicitly linked it
+                    if (typeof item.matched_admin_index === 'number' && item.matched_admin_index >= 0) {
+                        const matchedAdmin = adminBoxes[item.matched_admin_index];
+                        if (matchedAdmin) {
+                            matchedAdminId = matchedAdmin.id;
+                        }
+                    }
+
+                    // 2. If AI didn't catch it, fallback to geometry (distance check)
+                    if (!matchedAdminId) {
+                        for (const adminEv of adminBoxes) {
+                            const userCx = userBox.x + userBox.w / 2;
+                            const userCy = userBox.y + userBox.h / 2;
+                            const adminCx = adminEv.box.x + adminEv.box.w / 2;
+                            const adminCy = adminEv.box.y + adminEv.box.h / 2;
+
+                            const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
+                            if (dist < 100) { // 10% tolerance
+                                matchedAdminId = adminEv.id;
+                                break;
+                            }
                         }
                     }
 
                     // Scoring Logic
-                    if (item.validity > 0.7) {
+                    if (item.validity > 0.7 || matchedAdminId) {
                         if (matchedAdminId) {
                             // User found a known clue!
                             evidenceScore += 1000;
-                            matchedEvidenceIds.push(matchedAdminId);
+                            if (!matchedEvidenceIds.includes(matchedAdminId)) {
+                                matchedEvidenceIds.push(matchedAdminId);
+                            }
                         } else {
-                            // User found a NEW valid clue (AI confirmed)
+                            // User found a NEW valid clue (AI confirmed but not in DB)
                             aiBonus += 250;
                         }
                     }

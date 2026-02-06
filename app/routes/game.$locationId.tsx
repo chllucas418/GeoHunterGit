@@ -212,7 +212,14 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white">
 
             {/* --- IMMERSIVE EVIDENCE LAYER --- */}
-            <div className={`absolute inset-0 transition-all duration-700 ${guess ? 'h-1/2 md:h-full md:w-1/2' : 'h-full w-full'}`}>
+            {/* Logic: In Result Mode, it should take up the LEFT half (approx 55% to match map gap) */}
+            <div className={`absolute inset-0 transition-all duration-700 
+                ${result
+                    ? 'w-full md:w-[55%] right-auto border-r border-white/10' // Result: Left Panel
+                    : guess
+                        ? 'h-1/2 md:h-full md:w-1/2' // Game Split
+                        : 'h-full w-full' // Full
+                }`}>
                 {/* Mode Toggle Button */}
                 {!result && !isSubmitting && (
                     <div className="absolute top-24 right-6 z-30 flex flex-col items-end gap-2">
@@ -363,14 +370,40 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 - For now, let's keep the Google Map as the primary result visual, but maybe overlay pins?
             */}
 
-            {/* GOOGLE MAP CONTAINER */}
-            <div className={`transition-all duration-700 shadow-2xl z-20 overflow-hidden border border-white/10 bg-slate-900
+            {/* --- VISUALIZATION CONTAINER (Split View) --- */}
+            <div className={`absolute transition-all duration-700 z-20 flex flex-col md:flex-row gap-2
                 ${result
-                    ? 'absolute inset-0 z-40 m-6 mb-24 md:mr-[26rem] md:mb-6 rounded-3xl' // Result: Large Left Panel
+                    ? 'top-24 left-6 right-6 bottom-6 md:right-96' // Result: Fill main area, leave room for sidebar
                     : guess
-                        ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2' // Split
-                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105' // Mini
+                        ? 'h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0' // Game: Map takes half
+                        : 'w-0 h-0 opacity-0 pointer-events-none' // Game: Map hidden initially or small? 
+                // Actually, in Game Mode, we want the map to be small in corner -> then expand. 
+                // But user specifically asked for "Image behind map" issue.
+                // Let's keep the original "Mini Map" logic for Game Mode, but FORCE SPLIT for Result Mode.
+                }`
+            }>
+                {/* In Result mode, we want TWO panels side-by-side inside this container? 
+                   No, the `EvidenceCanvas` above is `absolute inset-0`. 
+                   We need to shrink the EvidenceCanvas to 50% width in Result Mode.
+                */}
+            </div>
+
+            {/* --- GOOGLE MAP CONTAINER --- */}
+            <div className={`transition-all duration-700 shadow-2xl z-40 overflow-hidden border border-white/10 bg-slate-900
+                ${result
+                    ? 'absolute top-24 bottom-6 right-6 w-1/2 md:w-[40%] rounded-2xl' // Result: Right side panel (beside sidebar? No sidebar is far right)
+                    // Wait, the sidebar is fixed width 96.
+                    // Let's try: Image (Left), Map (Center), Sidebar (Right)? 
+                    // Too crowded.
+                    // User asked: "Make the page separate into two parts".
+                    // Let's do: Image (Top/Left), Map (Bottom/Right).
+
+                    // Let's override the positioning completely for result mode.
+                    : guess
+                        ? 'absolute h-1/2 w-full md:h-full md:w-1/2 bottom-0 right-0 border-l-2'
+                        : 'absolute h-48 w-48 bottom-6 right-6 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105'
                 }
+                ${result ? '!w-[45%] !right-[26rem] !left-auto !top-24 !bottom-6' : ''} 
             `}>
                 <div ref={mapRef} className="w-full h-full" />
 
@@ -395,7 +428,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
             {/* --- NEW POST-GAME RESULTS LAYER --- */}
             {result && (
-                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-transparent pointer-events-none animate-in fade-in zoom-in duration-300 overflow-hidden">
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-transparent pointer-events-none animate-in fade-in zoom-in duration-300 overflow-hidden">
 
                     {/* Top Stats Bar */}
                     <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-10">
