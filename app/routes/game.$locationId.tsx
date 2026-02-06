@@ -141,6 +141,23 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
     }, [result, mapInstance, guess, location.geoPoint]);
 
+    // Force Map Resize when switching to Result View
+    useEffect(() => {
+        if (result && mapInstance) {
+            const timer = setTimeout(() => {
+                google.maps.event.trigger(mapInstance, "resize");
+                // Re-fit bounds after resize
+                if (guess) {
+                    const bounds = new google.maps.LatLngBounds();
+                    bounds.extend(guess);
+                    bounds.extend(location.geoPoint);
+                    mapInstance.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+                }
+            }, 500); // Wait for transition animation
+            return () => clearTimeout(timer);
+        }
+    }, [result, mapInstance, guess, location.geoPoint]);
+
     const handleSubmit = () => {
         if (!guess) return;
         const formData = new FormData();

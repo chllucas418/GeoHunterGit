@@ -62,9 +62,25 @@ export async function checkEvidenceListWithGemini(
     ]);
 
     const responseText = result.response.text();
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+    const responseText = result.response.text();
+    console.log("Gemini Raw Response:", responseText); // Debug logging
+
+    // Clean up markdown code blocks if present
+    const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    // Try to find the first '{' and the last '}'
+    const startIndex = cleanText.indexOf('{');
+    const endIndex = cleanText.lastIndexOf('}');
+
+    if (startIndex !== -1 && endIndex !== -1) {
+        try {
+            const jsonStr = cleanText.substring(startIndex, endIndex + 1);
+            return JSON.parse(jsonStr);
+        } catch (e) {
+            console.error("JSON Parse Error:", e);
+            // Fallback: return empty results if parsing fails but structure seemed there
+            return { results: [] };
+        }
     }
     return { results: [] };
 }
