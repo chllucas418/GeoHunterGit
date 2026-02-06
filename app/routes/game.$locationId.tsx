@@ -312,10 +312,12 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
                     {/* Overlay ADMIN Verified Boxes (Result Mode Only) */}
                     {result && result.adminEvidence && result.adminEvidence.map((ev: any) => {
-                        // Parse the bounding box if it's a string
+                        // Parse the bounding box if it's a string, or use 'box' property if from API
                         let box: BoxCoordinates;
                         try {
-                            box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box;
+                            // API returns 'box', DB has 'bounding_box'
+                            const rawBox = ev.box || ev.bounding_box;
+                            box = typeof rawBox === 'string' ? JSON.parse(rawBox) : rawBox;
                         } catch (e) { return null; }
 
                         if (!box) return null; // Safety check

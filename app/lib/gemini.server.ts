@@ -14,8 +14,9 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 export async function checkEvidenceListWithGemini(
     apiKey: string,
     imageUrl: string,
-    evidenceList: { box: { x: number; y: number; w: number; h: number }; description: string }[],
-    locationName: string
+    evidenceList: { box: { x: number; y: number; w: number; h: number }; description?: string }[],
+    locationName: string,
+    adminEvidence: any[] = []
 ) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
@@ -26,29 +27,41 @@ export async function checkEvidenceListWithGemini(
     const arrayBuffer = await response.arrayBuffer();
     const base64Data = arrayBufferToBase64(arrayBuffer);
 
-    // Prompt updated to GENERATE descriptions for boxes.
-    // We also provide the 'adminEvidence' if available so the AI knows what to look for/compare.
-    const adminContext = evidenceList.map((e, i) => `User Box ${i}: ${JSON.stringify(e.box)}`).join("\n");
+    // Prepare Admin Context String for the AI
+    const adminContextStr = adminEvidence.map((e, i) =>
+        `Official Clue #${i + 1}: "${e.description}"`
+    ).join("\n");
 
     const prompt = `
-    Analyze the image and the following list of marked evidence regions (Box coordinates are on a 0-100 scale relative to image size).
-    Location context: "${locationName}".
-    
-    For each item:
-    1. Analyze the visual content within the bounding box.
-    2. Determine if it contains a DISTINCTIVE visual clue usable for geolocation.
-    3. Generate a description.
-    
-    Evidence List (Boxes only):
+    Analyze the image and the following USER marked evidence regions.
+    Location: "${locationName}".
+
+    GROUND TRUTH (Official Evidence for this location):
+    ${adminContextStr}
+
+    USER'S EVIDENCE LIST (Boxes marked by player):
     ${JSON.stringify(evidenceList.map(e => ({ box: e.box })), null, 2)}
-    
-    Return a JSON ARRAY (list of objects) with:
+
+    For each USER item:
+    1. Compare the user's box with the GROUND TRUTH clues.
+    2. If the user's box overlaps significantly with a Ground Truth clue, they found it!
+       - Valid: HIGH (0.8-1.0)
+       - Description: Identify the object using the Official Clue name.
+       - Explanation: "Correctly identified [Official Clue Name]."
+    3. If the user found a legitimate clue that is NOT in the Ground Truth (a "Novel Discovery"):
+       - Valid: HIGH (0.7-0.9)
+       - Description: Describe what it is.
+       - Explanation: "Good eye! You spotted [Feature] which wasn't in our database."
+    4. If invalid/random/empty:
+       - Valid: LOW.
+       - Explanation: "Generic feature."
+
+    Return a JSON ARRAY of objects with:
     - "index": number (matching input array index)
     - "validity": number (0.0 to 1.0)
     - "description": string (AI generated description)
     - "explanation": string (reason)
   `;
-
     const result = await model.generateContent([
         prompt,
         {
@@ -62,6 +75,7 @@ export async function checkEvidenceListWithGemini(
     const responseText = result.response.text();
     console.log("Gemini Raw Response:", responseText); // Debug logging
 
+    // Clean up markdown code blocks if present
     // Clean up markdown code blocks if present
     let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
 

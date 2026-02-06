@@ -62,18 +62,20 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const userEvidenceList = JSON.parse(evidenceListJson);
 
         try {
-            // A. AI Analysis (Generates descriptions & validity)
-            const verification = await checkEvidenceListWithGemini(
+            // 5. AI Analysis (with Admin Context)
+            // We pass the admin evidence descriptions so the AI knows what the "Official" answers are.
+            const fullFeedback = await checkEvidenceListWithGemini(
                 GEMINI_API_KEY,
                 loc.image_url,
-                userEvidenceList,
-                "Hong Kong"
+                userEvidenceList, // User's boxes
+                loc.name,
+                adminBoxes // Pass Admin Evidence for context
             );
 
-            aiFeedback = verification;
+            aiFeedback = fullFeedback;
 
-            if (verification.results) {
-                for (const item of verification.results) {
+            if (fullFeedback.results) {
+                for (const item of fullFeedback.results) {
                     // Safety check index
                     const userBox = userEvidenceList[item.index]?.box;
                     if (!userBox) continue;
