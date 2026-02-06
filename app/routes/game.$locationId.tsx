@@ -81,11 +81,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     mapTypeId: "hybrid",
                     mapId: "DEMO_MAP_ID",
                     gestureHandling: "greedy", // Enable 1-finger pan
-                    styles: [
-                        { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-                        { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-                        { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-                    ]
+                    // Styles removed to prevent conflict with mapId
                 });
 
                 map.addListener("click", (e: google.maps.MapMouseEvent) => {
@@ -115,7 +111,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             actualMarkerRef.current = new google.maps.Marker({
                 position: actualCoord,
                 map: mapInstance,
-                icon: "http://maps.google.com/mapfiles/ms/icons/green-dot.png",
+                icon: "https://maps.google.com/mapfiles/ms/icons/green-dot.png", // HTTPS fix
                 title: "Actual Location"
             });
         }
@@ -399,34 +395,34 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
             {/* --- NEW POST-GAME RESULTS LAYER --- */}
             {result && (
-                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md animate-in fade-in zoom-in duration-300 overflow-hidden">
+                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-transparent pointer-events-none animate-in fade-in zoom-in duration-300 overflow-hidden">
 
                     {/* Top Stats Bar */}
-                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-10 pointer-events-none">
-                        <div>
+                    <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-start z-10">
+                        <div className="bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10 pointer-events-auto">
                             <h2 className="text-6xl font-black text-white leading-none">
                                 {result.score}
                             </h2>
                             <p className="text-sm font-mono text-green-400 uppercase tracking-widest">Mission Score</p>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10 pointer-events-auto">
                             <h3 className="text-2xl font-bold text-white">{Math.round(result.distance)}<span className="text-sm text-slate-400 font-normal">m</span></h3>
                             <p className="text-xs font-mono text-slate-400 uppercase">Deviation</p>
                         </div>
                     </div>
 
                     {/* Split View: Map & Intel */}
-                    <div className="flex flex-col md:flex-row w-full h-full pt-28 pb-6 px-6 gap-6 pointer-events-none">
+                    <div className="flex flex-col md:flex-row w-full h-full pt-32 pb-6 px-6 gap-6">
 
                         {/* LEFT: Map Visualization - Spacer */}
                         {/* The real map is positioned via CSS in the <div ref={mapRef}> above. 
                             We use this spacer to push the sidebar to the right. 
                         */}
-                        <div className="flex-1 hidden md:block" />
+                        <div className="flex-1 hidden md:block pointer-events-none" />
 
                         {/* RIGHT: Evidence Intel */}
                         <div className="w-full md:w-96 flex flex-col gap-4 overflow-y-auto pr-2 pointer-events-auto items-stretch h-full z-50">
-                            <div className="p-5 bg-white/5 rounded-2xl border border-white/10">
+                            <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl">
                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Geographic Intel</h4>
                                 <div className="space-y-2">
                                     {result.adminEvidence && result.adminEvidence.length > 0 ? (
@@ -449,13 +445,27 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                 </div>
                             </div>
 
-                            <div className="p-5 bg-white/5 rounded-2xl border border-white/10 flex-grow">
+                            <div className="p-5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl flex-grow flex flex-col">
                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">AI Analysis</h4>
-                                <p className="text-xs leading-relaxed text-slate-300">
-                                    {result.aiFeedback?.explanation || "Evidence correlation complete."}
-                                </p>
+                                <div className="flex-grow space-y-3 overflow-y-auto pr-1">
+                                    {result.fullFeedback?.results && result.fullFeedback.results.length > 0 ? (
+                                        result.fullFeedback.results.map((item: any, i: number) => (
+                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
+                                                <div className="flex justify-between">
+                                                    <span className="font-bold text-blue-400 block mb-1">{item.description}</span>
+                                                    <span className="text-[10px] font-mono opacity-50">CONF: {Math.round(item.validity * 100)}%</span>
+                                                </div>
+                                                <p className="opacity-80 leading-snug">{item.explanation}</p>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-xs leading-relaxed text-slate-300 italic">
+                                            {result.aiFeedback?.explanation || "Searching for correlations..."}
+                                        </p>
+                                    )}
+                                </div>
                                 {result.aiBonus > 0 && (
-                                    <div className="mt-3 py-2 px-3 bg-blue-500/20 rounded-lg border border-blue-500/30 flex justify-between items-center">
+                                    <div className="mt-3 py-2 px-3 bg-blue-500/20 rounded-lg border border-blue-500/30 flex justify-between items-center shrink-0">
                                         <span className="text-xs font-bold text-blue-300">New Discovery Bonus</span>
                                         <span className="font-mono text-blue-400 font-bold">+{result.aiBonus}</span>
                                     </div>
