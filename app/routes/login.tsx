@@ -43,7 +43,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
         return { error: "Authentication Failed: Invalid credentials." };
     }
 
-    const cookie = await createSession(user.id, false);
+    // Fix: Pass the actual role from the DB, default to 'student' if missing
+    const role = user.role || 'student';
+    const cookie = await createSession(user.id, role);
 
     return redirect("/", {
         headers: {
