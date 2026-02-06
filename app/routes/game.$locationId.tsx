@@ -101,16 +101,17 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 // Wait one more interval after last hint to zoom
                 if (secondsElapsed > (HINT_START_DELAY + (hintList.length * HINT_INTERVAL))) {
                     setHasZoomed(true);
-                    // Pan to vicinity
-                    const offsetLat = (Math.random() - 0.5) * 0.01;
-                    const offsetLng = (Math.random() - 0.5) * 0.01;
+                    // Pan to vicinity (500m radius adjust)
+                    // 0.0045 deg is approx 500m. Using 0.003 as max offset to keep target well within view.
+                    const offsetLat = (Math.random() - 0.5) * 0.006;
+                    const offsetLng = (Math.random() - 0.5) * 0.006;
                     const approxLoc = {
                         lat: location.geoPoint.lat + offsetLat,
                         lng: location.geoPoint.lng + offsetLng
                     };
 
                     mapInstance.panTo(approxLoc);
-                    mapInstance.setZoom(14);
+                    mapInstance.setZoom(15); // Street/Neighborhood level (~1km width view)
                     setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
                 }
             }
@@ -502,9 +503,15 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                     <h3 className="text-xl font-bold text-white">{Math.round(result.distance)}<span className="text-sm font-normal text-slate-500">m</span></h3>
                                     <p className="text-[10px] font-mono text-slate-500 uppercase">Deviation</p>
                                 </div>
-                                {result.aiBonus > 0 && (
+                                {result.distanceScore !== undefined && (
                                     <div className="text-right">
-                                        <h3 className="text-xl font-bold text-blue-400">+{result.aiBonus}</h3>
+                                        <h3 className="text-xl font-bold text-white">{result.distanceScore}</h3>
+                                        <p className="text-[10px] font-mono text-slate-500 uppercase">Distance Pts</p>
+                                    </div>
+                                )}
+                                {(result.evidenceScore > 0 || result.aiBonus > 0) && (
+                                    <div className="text-right">
+                                        <h3 className="text-xl font-bold text-blue-400">+{result.evidenceScore + result.aiBonus}</h3>
                                         <p className="text-[10px] font-mono text-blue-500/70 uppercase">Intel Bonus</p>
                                     </div>
                                 )}
