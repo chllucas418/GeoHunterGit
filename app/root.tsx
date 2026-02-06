@@ -5,10 +5,27 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useNavigation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
+
+// Separate component to use hook inside Layout if needed, 
+// but Layout wraps children, so we might need to use the hook in a component inside Layout 
+// OR just use it in Layout since Layout is part of value returned by generic Route.
+// Actually, in Remix/React Router v7, Layout is a component.
+function NavigationOverlay() {
+  const navigation = useNavigation();
+  const isNavigating = navigation.state === "loading";
+
+  return (
+    <div
+      className={`fixed inset-0 bg-black z-[9999] pointer-events-none transition-opacity duration-500 ease-in-out
+        ${isNavigating ? "opacity-100" : "opacity-0"}`}
+    />
+  );
+}
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -56,6 +73,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="relative z-10 flex-grow flex flex-col">
           {children}
         </div>
+
+        {/* Global Navigation Overlay (Fade to Black) */}
+        <NavigationOverlay />
 
         {/* Theme Toggle (Fixed) */}
         <div className="fixed bottom-6 left-6 z-50">

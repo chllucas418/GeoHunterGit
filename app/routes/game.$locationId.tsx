@@ -66,16 +66,18 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null);
     const [isEvidenceMode, setIsEvidenceMode] = useState(false);
 
-    // Intro Splash State
-    const [showIntro, setShowIntro] = useState(true);
-    const [introFading, setIntroFading] = useState(false);
+    // Intro Splash State: 0 = Init (Solid Black), 1 = Active (Blur), 2 = Exit (Fade Out), 3 = Gone
+    const [introStage, setIntroStage] = useState(0);
 
     useEffect(() => {
-        // Start fade out after 3.5s
-        const timer1 = setTimeout(() => setIntroFading(true), 3500);
-        // Remove from DOM after 4s (allow 500ms for fade out)
-        const timer2 = setTimeout(() => setShowIntro(false), 4500);
-        return () => { clearTimeout(timer1); clearTimeout(timer2); };
+        // Stage 0 -> 1 (Fade from Black to Blur) after mount
+        const t1 = setTimeout(() => setIntroStage(1), 100);
+        // Stage 1 -> 2 (Start Exit Fade) after reading time
+        const t2 = setTimeout(() => setIntroStage(2), 4000);
+        // Stage 2 -> 3 (Unmount) after exit animation
+        const t3 = setTimeout(() => setIntroStage(3), 5000);
+
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
     }, []);
 
     const mapRef = useRef<HTMLDivElement>(null);
@@ -618,15 +620,18 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             </div>
 
             {/* --- INTRO SPLASH OVERLAY --- */}
-            {showIntro && (
-                <div className={`fixed inset-0 z-50 flex items-center justify-center pointer-events-none transition-opacity duration-1000 ease-in-out
-                    ${introFading ? 'opacity-0' : 'opacity-100'}`}
+            {introStage < 3 && (
+                <div
+                    className={`fixed inset-0 z-50 flex items-center justify-center pointer-events-none transition-all duration-1000 ease-in-out
+                    ${introStage === 0 ? 'bg-black opacity-100 backdrop-blur-none' : ''}
+                    ${introStage === 1 ? 'bg-black/60 opacity-100 backdrop-blur-xl' : ''}
+                    ${introStage === 2 ? 'bg-black/0 opacity-0 backdrop-blur-none' : ''}
+                    `}
                 >
-                    {/* Blurred Backdrop */}
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-xl" />
-
                     {/* Content */}
-                    <div className={`relative z-10 text-center animate-in zoom-in-90 fade-in duration-1000 slide-in-from-bottom-10`}>
+                    <div className={`relative z-10 text-center transition-all duration-1000 delay-100
+                        ${introStage === 0 ? 'opacity-0 scale-95 translate-y-4' : 'opacity-100 scale-100 translate-y-0'}
+                    `}>
                         <div className="mb-2">
                             <div className="inline-block px-3 py-1 border border-white/20 rounded-full bg-white/5 backdrop-blur-md mb-4 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
                                 <span className="text-[10px] font-mono text-blue-300 tracking-[0.3em] uppercase">Incoming Transmission</span>
