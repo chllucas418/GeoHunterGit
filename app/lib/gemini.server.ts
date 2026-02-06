@@ -122,7 +122,7 @@ export async function checkEvidenceListWithGemini(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-1.5-flash", // Updated to stable model name
+            "gemini-3-flash-preview", // User explicitly requested this model
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -210,7 +210,7 @@ export async function analyzeImageQuality(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-1.5-flash",
+            "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
