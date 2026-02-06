@@ -165,6 +165,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
         aiBonus,
         evidenceScore,
         matchedEvidenceIds,
-        adminEvidence: adminBoxes // Send back all admin evidence for the UI to reveal
+        adminEvidence: adminBoxes // Always return admin evidence
     });
 }
