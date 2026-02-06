@@ -249,92 +249,92 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         imageUrl={location.imageUrl}
                         onBoxChange={isEvidenceMode ? handleBoxDrawn : () => { }}
                         disabled={!!result || !isEvidenceMode}
-                    />
+                    >
+                        {/* Overlay Player Boxes */}
+                        {evidenceList.map((ev, index) => {
+                            let borderColor = "border-green-400";
+                            let bgColor = "bg-green-400/10";
+                            let statusIcon = "";
+                            let statusText = null;
 
-                    {/* Overlay Player Boxes */}
-                    {evidenceList.map((ev, index) => {
-                        let borderColor = "border-green-400";
-                        let bgColor = "bg-green-400/10";
-                        let statusIcon = "";
-                        let statusText = null;
-
-                        if (result?.matchedEvidenceIds && result.adminEvidence) {
-                            if (result.fullFeedback?.results) {
-                                const feedback = result.fullFeedback.results.find((r: any) => r.index === index);
-                                if (feedback && feedback.validity > 0.7) {
-                                    borderColor = "border-blue-400 shadow-[0_0_15px_rgba(96,165,250,0.6)]";
-                                    bgColor = "bg-blue-400/20";
-                                    statusIcon = "✓";
-                                    statusText = "VALID CLUE";
-                                } else {
-                                    borderColor = "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]";
-                                    bgColor = "bg-red-500/10";
-                                    statusIcon = "✕";
-                                    statusText = "IGNORED";
+                            if (result?.matchedEvidenceIds && result.adminEvidence) {
+                                if (result.fullFeedback?.results) {
+                                    const feedback = result.fullFeedback.results.find((r: any) => r.index === index);
+                                    if (feedback && feedback.validity > 0.7) {
+                                        borderColor = "border-blue-400 shadow-[0_0_15px_rgba(96,165,250,0.6)]";
+                                        bgColor = "bg-blue-400/20";
+                                        statusIcon = "✓";
+                                        statusText = "VALID CLUE";
+                                    } else {
+                                        borderColor = "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]";
+                                        bgColor = "bg-red-500/10";
+                                        statusIcon = "✕";
+                                        statusText = "IGNORED";
+                                    }
                                 }
                             }
-                        }
 
-                        return (
-                            <div
-                                key={ev.id}
-                                className={`absolute border-2 ${borderColor} ${bgColor} transition-all duration-500 flex flex-col items-end p-1 animate-in zoom-in-50 cursor-pointer group hover:bg-green-400/20`}
-                                style={{
-                                    left: `${ev.box.x / 10}%`,
-                                    top: `${ev.box.y / 10}%`,
-                                    width: `${ev.box.w / 10}%`,
-                                    height: `${ev.box.h / 10}%`
-                                }}
-                            >
-                                {result && statusText && (
-                                    <div className={`text-[10px] font-black px-2 py-0.5 rounded-sm backdrop-blur-md uppercase tracking-wider
-                                        ${statusIcon === "✓" ? "bg-blue-500 text-white" : "bg-red-500 text-white"}`}>
-                                        {statusIcon} {statusText}
-                                    </div>
-                                )}
-                                {!result && (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEvidenceList(prev => prev.filter(item => item.id !== ev.id));
-                                        }}
-                                        className="bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs font-bold rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title="Remove Evidence"
-                                    >
-                                        ✕
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
-
-                    {/* Overlay ADMIN Verified Boxes (Result Mode Only) */}
-                    {result && result.adminEvidence && result.adminEvidence.map((ev: any) => {
-                        let box: BoxCoordinates;
-                        try {
-                            const rawBox = ev.box || ev.bounding_box;
-                            box = typeof rawBox === 'string' ? JSON.parse(rawBox) : rawBox;
-                        } catch (e) { return null; }
-
-                        if (!box) return null;
-
-                        return (
-                            <div
-                                key={`admin-${ev.id}`}
-                                className="absolute border-2 border-yellow-400 bg-yellow-400/10 transition-all duration-500 flex flex-col items-start p-1 animate-in zoom-in-50 z-20"
-                                style={{
-                                    left: `${box.x / 10}%`,
-                                    top: `${box.y / 10}%`,
-                                    width: `${box.w / 10}%`,
-                                    height: `${box.h / 10}%`
-                                }}
-                            >
-                                <div className="text-[10px] font-black px-2 py-0.5 rounded-sm backdrop-blur-md bg-yellow-500 text-black uppercase tracking-wider shadow-lg">
-                                    ★ OFFICIAL INTEL
+                            return (
+                                <div
+                                    key={ev.id}
+                                    className={`absolute border-2 ${borderColor} ${bgColor} transition-all duration-500 flex flex-col items-end p-1 animate-in zoom-in-50 cursor-pointer group hover:bg-green-400/20`}
+                                    style={{
+                                        left: `${ev.box.x / 10}%`,
+                                        top: `${ev.box.y / 10}%`,
+                                        width: `${ev.box.w / 10}%`,
+                                        height: `${ev.box.h / 10}%`
+                                    }}
+                                >
+                                    {result && statusText && (
+                                        <div className={`text-[10px] font-black px-2 py-0.5 rounded-sm backdrop-blur-md uppercase tracking-wider
+                                            ${statusIcon === "✓" ? "bg-blue-500 text-white" : "bg-red-500 text-white"}`}>
+                                            {statusIcon} {statusText}
+                                        </div>
+                                    )}
+                                    {!result && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEvidenceList(prev => prev.filter(item => item.id !== ev.id));
+                                            }}
+                                            className="bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs font-bold rounded hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Remove Evidence"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
+
+                        {/* Overlay ADMIN Verified Boxes (Result Mode Only) */}
+                        {result && result.adminEvidence && result.adminEvidence.map((ev: any) => {
+                            let box: BoxCoordinates;
+                            try {
+                                const rawBox = ev.box || ev.bounding_box;
+                                box = typeof rawBox === 'string' ? JSON.parse(rawBox) : rawBox;
+                            } catch (e) { return null; }
+
+                            if (!box) return null;
+
+                            return (
+                                <div
+                                    key={`admin-${ev.id}`}
+                                    className="absolute border-2 border-yellow-400 bg-yellow-400/10 transition-all duration-500 flex flex-col items-start p-1 animate-in zoom-in-50 z-20"
+                                    style={{
+                                        left: `${box.x / 10}%`,
+                                        top: `${box.y / 10}%`,
+                                        width: `${box.w / 10}%`,
+                                        height: `${box.h / 10}%`
+                                    }}
+                                >
+                                    <div className="text-[10px] font-black px-2 py-0.5 rounded-sm backdrop-blur-md bg-yellow-500 text-black uppercase tracking-wider shadow-lg">
+                                        ★ OFFICIAL INTEL
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </EvidenceCanvas>
                 </div>
 
                 <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent pointer-events-none">

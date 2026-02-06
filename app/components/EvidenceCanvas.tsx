@@ -1,27 +1,33 @@
-import { useState, useRef, useEffect } from "react";
-import clsx from "clsx";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import type { BoxCoordinates } from "~/types/shared";
 
 interface EvidenceCanvasProps {
     imageUrl: string;
     onBoxChange: (box: BoxCoordinates | null) => void;
     disabled?: boolean;
+    children?: ReactNode;
 }
 
-export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false }: EvidenceCanvasProps) {
-    const containerRef = useRef<HTMLDivElement>(null);
+export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, children }: EvidenceCanvasProps) {
+    const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null); // The outer responsive container
+    const imageContainerRef = useRef<HTMLDivElement>(null); // The inner aspect-ratio locked container
+
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
-    const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null); // stored as pixels initially for display, convert to relative on submit? 
-    // Requirement: "box [x,y,w,h]" for Gemini. Usually relative 0-1000 or 0-1 is better for resolution independence.
-    // I will store relative coordinates (percent) internally or convert at end.
-    // Let's store internal display box in Percent to handle resize.
+    const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null); // In Pixels
 
-    const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null); // In Pixels for drawing interaction
+    const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+        const { naturalWidth, naturalHeight } = e.currentTarget;
+        if (naturalHeight > 0) {
+            setAspectRatio(naturalWidth / naturalHeight);
+        }
+    };
 
     const getRelativeCoords = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!containerRef.current) return { x: 0, y: 0, width: 0, height: 0 };
-        const rect = containerRef.current.getBoundingClientRect();
+        if (!imageContainerRef.current) return { x: 0, y: 0, width: 0, height: 0 };
+        const rect = imageContainerRef.current.getBoundingClientRect();
+
         const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
         const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
@@ -35,6 +41,11 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false }: Evid
 
     const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
         if (disabled) return;
+        // Prevent default only for mouse to avoid selecting text, but allow touch actions if needed
+        if (!('touches' in e)) {
+            e.preventDefault();
+        }
+
         const { x, y } = getRelativeCoords(e);
         setIsDrawing(true);
         setStartPoint({ x, y });
@@ -46,7 +57,7 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false }: Evid
         if (!isDrawing || !startPoint || disabled) return;
         const { x, y, width, height } = getRelativeCoords(e);
 
-        // Clamp
+        // Clamp to image bounds
         const clampedX = Math.max(0, Math.min(x, width));
         const clampedY = Math.max(0, Math.min(y, height));
 
@@ -59,11 +70,11 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false }: Evid
     };
 
     const handleMouseUp = () => {
-        if (!isDrawing || !drawRect || !containerRef.current) return;
+        if (!isDrawing || !drawRect || !imageContainerRef.current) return;
         setIsDrawing(false);
 
-        // Convert to relative % or 1000-scale for backend
-        const rect = containerRef.current.getBoundingClientRect();
+        // Convert to relative 1000-scale for backend
+        const rect = imageContainerRef.current.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
             const relativeBox = {
                 x: Math.round((drawRect.x / rect.width) * 1000),
@@ -84,45 +95,62 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false }: Evid
 
     return (
         <div
-            className="relative w-full h-full bg-slate-100 overflow-hidden select-none touch-none"
+            className="w-full h-full bg-slate-900 flex items-center justify-center overflow-hidden"
             ref={containerRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onTouchStart={handleMouseDown}
-            onTouchMove={handleMouseMove}
-            onTouchEnd={handleMouseUp}
         >
-            <img
-                src={imageUrl}
-                alt="Evidence"
-                className="w-full h-full object-contain pointer-events-none"
-                draggable={false}
-            />
-
-            {/* Overlay to darken area outside selection? Or just the box. */}
-            {/* Box */}
-            {drawRect && (
-                <div
-                    className="absolute border-2 border-yellow-400 bg-yellow-400/20"
-                    style={{
-                        left: drawRect.x,
-                        top: drawRect.y,
-                        width: drawRect.w,
-                        height: drawRect.h
-                    }}
+            {/* Inner Container: Locked to Image Aspect Ratio */}
+            <div
+                ref={imageContainerRef}
+                className="relative select-none touch-none"
+                style={{
+                    // Use CSS Variable or fallback to style for dynamic aspect ratio
+                    aspectRatio: aspectRatio ? `${aspectRatio}` : 'auto',
+                    width: aspectRatio ? (aspectRatio > 1 ? '100%' : 'auto') : 'auto',
+                    height: aspectRatio ? (aspectRatio > 1 ? 'auto' : '100%') : '100%',
+                    maxWidth: '100%',
+                    maxHeight: '100%'
+                }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleMouseDown}
+                onTouchMove={handleMouseMove}
+                onTouchEnd={handleMouseUp}
+            >
+                <img
+                    src={imageUrl}
+                    alt="Evidence"
+                    className="w-full h-full object-contain pointer-events-none display-block"
+                    draggable={false}
+                    onLoad={handleImageLoad}
                 />
-            )}
 
-            {/* Instruction */}
-            {!drawRect && !isDrawing && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <p className="bg-black/50 text-white px-3 py-1 rounded text-sm backdrop-blur-sm">
-                        Draw box around visual evidence
-                    </p>
-                </div>
-            )}
+                {/* Drawing Box (Transient) */}
+                {drawRect && (
+                    <div
+                        className="absolute border-2 border-yellow-400 bg-yellow-400/20 z-50"
+                        style={{
+                            left: drawRect.x,
+                            top: drawRect.y,
+                            width: drawRect.w,
+                            height: drawRect.h
+                        }}
+                    />
+                )}
+
+                {/* Result/Overlay Content (Anchored to this container) */}
+                {children}
+
+                {/* Instruction Overlay */}
+                {!drawRect && !isDrawing && !disabled && (
+                    <div className="absolute inset-x-0 bottom-4 flex justify-center pointer-events-none">
+                        <p className="bg-black/60 text-white px-3 py-1 rounded text-xs font-mono uppercase tracking-widest backdrop-blur-md border border-white/10">
+                            Draw Box to Scan
+                        </p>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
