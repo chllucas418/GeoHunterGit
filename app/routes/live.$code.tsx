@@ -338,11 +338,40 @@ export default function StudentLiveGame() {
             <div className={`transition-all duration-700 ease-in-out bg-slate-950 flex flex-col h-full overflow-hidden ${layoutMode === "result" ? "w-full md:w-[20%] opacity-100" : "w-0 opacity-0"}`}>
                 {result ? (
                     <div className="p-6">
-                        <h2 className="text-5xl font-black text-white">{result.points}</h2>
+                        <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
                         <p className="text-xs text-green-400 uppercase">Score</p>
                         <hr className="border-white/10 my-4" />
-                        <div className="text-xl font-bold">{Math.round(result.distance)}m</div>
+
+                        <div className="text-xl font-bold">
+                            {result.distance !== undefined && !isNaN(result.distance)
+                                ? `${Math.round(result.distance)}m`
+                                : "-- m"}
+                        </div>
                         <p className="text-xs text-slate-500 uppercase">Deviation</p>
+
+                        <div className="mt-8 space-y-4">
+                            <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
+                            {result.fullFeedback && result.fullFeedback.results && result.fullFeedback.results.length > 0 ? (
+                                result.fullFeedback.results.map((item: any, i: number) => (
+                                    <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
+                                        </div>
+                                        <p className="opacity-80 leading-snug">{item.explanation}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-xs text-slate-500 italic">Target data processing...</p>
+                            )}
+
+                            {/* Matched Evidence Summary */}
+                            {result.evidenceScore > 0 && (
+                                <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
+                                    <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
+                                    <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
+                                </div>
+                            )}
+                        </div>
 
                         <div className="mt-8">
                             <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>

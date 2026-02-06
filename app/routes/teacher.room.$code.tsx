@@ -71,14 +71,9 @@ export default function TeacherRoom() {
                     new google.maps.Marker({
                         position: { lat: currentRound.location.lat, lng: currentRound.location.lng },
                         map,
-                        title: "Target Location",
+                        title: "Official Target",
                         icon: {
-                            path: google.maps.SymbolPath.CIRCLE,
-                            scale: 10,
-                            fillColor: "#10b981",
-                            fillOpacity: 1,
-                            strokeColor: "#ffffff",
-                            strokeWeight: 2,
+                            url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
                         }
                     });
                 }
@@ -92,21 +87,35 @@ export default function TeacherRoom() {
                         }
 
                         data.guesses.forEach((g: any) => {
+                            // Student Marker: "Pinpoint Head" simulation using SVG
+                            const pinColor = "#3b82f6"; // Blue
                             const m = new google.maps.Marker({
                                 position: { lat: g.lat, lng: g.lng },
                                 map,
+                                icon: {
+                                    path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z", // Simple Pin Path
+                                    fillColor: pinColor,
+                                    fillOpacity: 1,
+                                    strokeWeight: 1,
+                                    strokeColor: "#ffffff",
+                                    scale: 1.5,
+                                    labelOrigin: new google.maps.Point(12, 9),
+                                    anchor: new google.maps.Point(12, 22)
+                                },
                                 label: {
-                                    text: g.user_name[0],
+                                    text: g.user_name[0].toUpperCase(),
                                     color: "white",
-                                    fontWeight: "bold"
+                                    fontWeight: "bold",
+                                    fontSize: "10px"
                                 },
                                 title: `${g.user_name} (${Math.round(g.distance * 1000)}m)`,
+                                zIndex: 100
                             });
                             markersRef.current.push(m);
                             bounds.extend({ lat: g.lat, lng: g.lng });
                         });
 
-                        map.fitBounds(bounds);
+                        map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
                     }
                 });
             });

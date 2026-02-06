@@ -51,26 +51,100 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     }
 
     // Determine Score
-    // 5000 pts max. 
-    // Distance factor
-    const dist = getDistance(lat, lng, trueLoc.lat, trueLoc.lng);
-    let pts = 0;
-    if (dist < 0.1) pts = 5000;
-    else if (dist < 2000) pts = Math.max(0, 5000 * Math.exp(-dist / 2000)); // Standard GuessCurve
+    // 5000 pts max for distance. 
+    // Quadratic Curve: 5000 * (1 - d/7000)^2, clamped at 0
+    const distance = getDistance(lat, lng, trueLoc.lat, trueLoc.lng);
+    const MAX_DISTANCE_SCORE = 5000;
+    const MAX_DISTANCE_METERS = 7000; // 7km cutoff
 
-    // Time Bonus? (Optional, maybe later)
+    let distanceScore = 0;
+    if (distance * 1000 < MAX_DISTANCE_METERS) { // distance is km
+        distanceScore = Math.round(MAX_DISTANCE_SCORE * Math.pow(1 - (distance * 1000) / MAX_DISTANCE_METERS, 2));
+    }
 
-    pts = Math.round(pts);
+    // --- EVIDENCE VERIFICATION (Geometry Only - No Gemini for Speed) ---
+    // Fetch Admin Evidence (Official Intel)
+    const adminEvidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(trueLoc.id).all<any>();
+    const adminBoxes = adminEvidence.results.map((ae: any) => ({
+        id: ae.id,
+        box: typeof ae.bounding_box === 'string' ? JSON.parse(ae.bounding_box) : ae.bounding_box,
+        description: ae.description
+    }));
+
+    // Parse Student Evidence
+    const evidenceListJson = formData.get("evidenceList") as string;
+    const userEvidenceList = evidenceListJson ? JSON.parse(evidenceListJson) : [];
+
+    let evidenceScore = 0;
+    let matchedEvidenceIds: string[] = [];
+    const fullFeedback = { results: [] as any[] };
+
+    // Run Intersection Over Union (IoU) Matching
+    userEvidenceList.forEach((userItem: any, index: number) => {
+        const userBox = userItem.box;
+        let bestMatchId = null;
+        let maxIoU = 0;
+
+        for (const adminEv of adminBoxes) {
+            const adminBox = adminEv.box;
+            if (!userBox || !adminBox) continue;
+
+            const x1 = Math.max(userBox.x, adminBox.x);
+            const y1 = Math.max(userBox.y, adminBox.y);
+            const x2 = Math.min(userBox.x + userBox.w, adminBox.x + adminBox.w);
+            const y2 = Math.min(userBox.y + userBox.h, adminBox.y + adminBox.h);
+
+            const intersectionW = Math.max(0, x2 - x1);
+            const intersectionH = Math.max(0, y2 - y1);
+            const intersectionArea = intersectionW * intersectionH;
+
+            const userArea = userBox.w * userBox.h;
+            const adminArea = adminBox.w * adminBox.h;
+            const unionArea = userArea + adminArea - intersectionArea;
+
+            const iou = unionArea > 0 ? intersectionArea / unionArea : 0;
+
+            if (iou > 0.3 && iou > maxIoU) {
+                maxIoU = iou;
+                bestMatchId = adminEv.id;
+            }
+        }
+
+        if (bestMatchId) {
+            if (!matchedEvidenceIds.includes(bestMatchId)) {
+                evidenceScore += 1000;
+                matchedEvidenceIds.push(bestMatchId);
+            }
+            fullFeedback.results.push({
+                index,
+                validity: 1.0,
+                description: adminBoxes.find(a => a.id === bestMatchId)?.description || "Evidence Match",
+                explanation: "You successfully identified a key detail."
+            });
+        }
+    });
+
+    const finalScore = distanceScore + evidenceScore;
 
     // Save Guess
     await db.prepare(
-        "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(code, trueLoc.id, userId, lat, lng, pts, dist, Date.now()).run();
+        "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds)).run();
 
     // Update Participant Totals
     await db.prepare(
         "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
-    ).bind(pts, code, userId).run();
+    ).bind(finalScore, code, userId).run();
 
-    return Response.json({ success: true, points: pts, distance: dist });
+    return Response.json({
+        success: true,
+        score: finalScore,
+        points: finalScore, // Backward compat
+        distance: distance * 1000, // Return meters for consistency with Game UI
+        distanceScore,
+        evidenceScore,
+        matchedEvidenceIds,
+        adminEvidence: adminBoxes,
+        fullFeedback
+    });
 }
