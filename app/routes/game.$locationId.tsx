@@ -55,10 +55,9 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
     // --- LAYOUT STATE ---
     // Determine the current layout mode
-    // "initial": Image Full, Map Floating
-    // "guessing": Image 50%, Map 50% (When user clicks map to guess)
+    // "game": Image 50%, Map 50% (Default)
     // "result": Image 40%, Map 40%, Panel 20% (After submission)
-    const layoutMode = result ? "result" : guess ? "guessing" : "initial";
+    const layoutMode = result ? "result" : "game";
 
     // Handle evidence box drawing (Auto-save without description)
     const handleBoxDrawn = (box: BoxCoordinates | null) => {
@@ -175,10 +174,10 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             });
                         }
                     }
-                } else if (guess) {
-                    // Guessing Mode adjustments
-                    // Center on guess or keep current view? 
-                    // mapInstance.panTo(guess); 
+                } else {
+                    // Game Mode adjustments
+                    // No specific bounds enforcement needed for default view, 
+                    // users can pan freely.
                 }
             }, 500); // Wait for transition animation
             return () => clearTimeout(timer);
@@ -217,10 +216,8 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
             {/* --- COLUMN 1: IMAGE EVIDENCE --- */}
             <div className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
-                ${layoutMode === "result" ? "w-full md:w-[40%]" :
-                    layoutMode === "guessing" ? "w-full md:w-1/2" :
-                        "w-full"
-                }`}
+                ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full md:w-1/2"}`
+            }
             >
 
                 {/* Mode Toggle Button (Only in game mode) */}
@@ -352,17 +349,15 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
             {/* --- COLUMN 2: MAP --- */}
             <div className={`transition-all duration-700 ease-in-out bg-slate-900 overflow-hidden relative border-r border-white/10
-                 ${layoutMode === "result" ? "relative w-full md:w-[40%] h-full" :
-                    layoutMode === "guessing" ? "relative w-full md:w-1/2 h-full" :
-                        "absolute bottom-6 right-6 w-48 h-48 rounded-3xl opacity-90 hover:opacity-100 hover:scale-105 border border-white/10 shadow-2xl z-40" // Floating
-                }`}
+                 ${layoutMode === "result" ? "relative w-full md:w-[40%] h-full" : "relative w-full md:w-1/2 h-full"}`
+            }
             >
 
                 <div ref={mapRef} className="w-full h-full" />
 
                 {/* Floating Map Controls (Game Mode) */}
                 {!result && (
-                    <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4 transition-opacity duration-300 ${layoutMode === 'initial' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
                         <button
                             onClick={handleSubmit}
                             disabled={!guess || isSubmitting}
