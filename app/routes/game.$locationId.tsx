@@ -61,9 +61,22 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
     const { location, mapsApiKey, totalEvidence, hintList } = loaderData;
     const fetcher = useFetcher() as any;
     const navigation = useNavigation();
+
     const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; id: string }[]>([]);
     const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null);
     const [isEvidenceMode, setIsEvidenceMode] = useState(false);
+
+    // Intro Splash State
+    const [showIntro, setShowIntro] = useState(true);
+    const [introFading, setIntroFading] = useState(false);
+
+    useEffect(() => {
+        // Start fade out after 3.5s
+        const timer1 = setTimeout(() => setIntroFading(true), 3500);
+        // Remove from DOM after 4s (allow 500ms for fade out)
+        const timer2 = setTimeout(() => setShowIntro(false), 4500);
+        return () => { clearTimeout(timer1); clearTimeout(timer2); };
+    }, []);
 
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
@@ -603,6 +616,53 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     </>
                 )}
             </div>
+
+            {/* --- INTRO SPLASH OVERLAY --- */}
+            {showIntro && (
+                <div className={`fixed inset-0 z-50 flex items-center justify-center pointer-events-none transition-opacity duration-1000 ease-in-out
+                    ${introFading ? 'opacity-0' : 'opacity-100'}`}
+                >
+                    {/* Blurred Backdrop */}
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-xl" />
+
+                    {/* Content */}
+                    <div className={`relative z-10 text-center animate-in zoom-in-90 fade-in duration-1000 slide-in-from-bottom-10`}>
+                        <div className="mb-2">
+                            <div className="inline-block px-3 py-1 border border-white/20 rounded-full bg-white/5 backdrop-blur-md mb-4 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
+                                <span className="text-[10px] font-mono text-blue-300 tracking-[0.3em] uppercase">Incoming Transmission</span>
+                            </div>
+                        </div>
+
+                        <h1 className="text-6xl md:text-8xl font-black text-white tracking-tighter mb-2 drop-shadow-2xl">
+                            LOC-{location.id.slice(-4).toUpperCase()}
+                        </h1>
+
+                        {location.photographer && (
+                            <div className="flex items-center justify-center gap-2 mb-8 opacity-80">
+                                <span className="text-xs uppercase tracking-widest text-slate-400">Captured by</span>
+                                <span className="text-sm font-bold text-white border-b border-white/30 pb-0.5">{location.photographer}</span>
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-center gap-8 md:gap-16">
+                            <div className="text-center">
+                                <div className="text-4xl md:text-5xl font-black text-white mb-1">{location.qualityScore}</div>
+                                <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Quality Score</div>
+                            </div>
+
+                            <div className="w-px h-12 bg-white/20" />
+
+                            <div className="text-center">
+                                <div className="text-xl md:text-2xl text-yellow-400 mb-2 tracking-widest">
+                                    {"★".repeat(Math.round(location.difficultyRating / 2))}
+                                    <span className="text-white/20">{"★".repeat(5 - Math.round(location.difficultyRating / 2))}</span>
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Diff Level</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div >
     );
