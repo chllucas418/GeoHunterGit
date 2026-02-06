@@ -12,15 +12,15 @@ body {
 
 :root {
   /* Light Mode Liquid Glass Palette */
-  --glass-bg-light: rgba(255, 255, 255, 0.4);
-  --glass-border-light: rgba(255, 255, 255, 0.6);
-  --glass-shadow-light: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+  --glass-bg-light: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.3) 100%);
+  --glass-border-light: rgba(255, 255, 255, 0.4);
+  --glass-shadow-light: 0 8px 32px 0 rgba(100, 116, 139, 0.1);
   --text-primary-light: #1e293b;
   --text-secondary-light: #475569;
 }
 
 body.light-mode {
-  background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
   color: var(--text-primary-light);
 }
 
@@ -48,9 +48,9 @@ body.light-mode {
 }
 
 .light-mode .glass-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.3) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.2) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px 0 rgba(148, 163, 184, 0.15);
 }
 
 .glass-card:hover {
