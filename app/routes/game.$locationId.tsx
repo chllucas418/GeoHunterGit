@@ -34,9 +34,10 @@ export async function loader({ params, request, context }: LoaderFunctionArgs) {
         verifiedByGemini: !!loc.verified_by_gemini
     };
 
-    // Parse hints (assuming double-newline separation from Admin UI)
-    // If hints is empty, fallback to empty array
-    const hintList = loc.hints ? loc.hints.split(/\n\n|\n/) : [];
+    // Parse hints (Support JSON array or legacy newline separation)
+    const hintList = loc.hints ? (() => {
+        try { return JSON.parse(loc.hints); } catch { return loc.hints.split(/\n\n|\n/); }
+    })() : [];
 
     return { location, mapsApiKey: MAPS_API_KEY, totalEvidence, hintList };
 }
@@ -73,41 +74,45 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
         return () => clearInterval(timer);
     }, [result, isSubmitting]);
 
+    // Hint & Timer System
+    const HINT_INTERVAL = 10; // Modified for testing (was 30)
+    const HINT_START_DELAY = 5; // Modified for testing (was 90)
+
+    const timeUntilNext = Math.max(0, HINT_INTERVAL - ((secondsElapsed - HINT_START_DELAY) % HINT_INTERVAL));
+    const progress = Math.min(100, Math.max(0, ((HINT_INTERVAL - timeUntilNext) / HINT_INTERVAL) * 100));
+
     // Hint Logic
     useEffect(() => {
         if (result || isSubmitting) return;
 
-        // Start hints after 90 seconds (1.5 mins)
-        // Then every 30 seconds
-        const startDelay = 90;
-        const interval = 30;
+        if (secondsElapsed >= HINT_START_DELAY) {
+            // How many hints *should* be shown by now
+            // e.g. at 5s (start), count = 1 (Show hint 0). 
+            // at 15s (start+10), count = 2 (Show hint 0, 1).
+            const count = Math.floor((secondsElapsed - HINT_START_DELAY) / HINT_INTERVAL) + 1;
 
-        if (secondsElapsed >= startDelay) {
-            const count = Math.floor((secondsElapsed - startDelay) / interval) + 1;
-
-            // Show Hints if available
             if (count > 0 && count <= hintList.length) {
                 if (visibleHints.length < count) {
                     setVisibleHints(hintList.slice(0, count));
-                    // Optional: Play sound or visual cue
                 }
             }
-            // Fallback: Zoom Map if all hints shown and ample time passed (e.g. 30s after last hint)
+            // Fallback: Zoom Map if all hints shown and ample time passed
             else if (count > hintList.length && !hasZoomed && mapInstance) {
-                setHasZoomed(true);
-                // Pan to vicinity (perturb slightly to avoids giving exact spot)
-                const offsetLat = (Math.random() - 0.5) * 0.01;
-                const offsetLng = (Math.random() - 0.5) * 0.01;
-                const approxLoc = {
-                    lat: location.geoPoint.lat + offsetLat,
-                    lng: location.geoPoint.lng + offsetLng
-                };
+                // Wait one more interval after last hint to zoom
+                if (secondsElapsed > (HINT_START_DELAY + (hintList.length * HINT_INTERVAL))) {
+                    setHasZoomed(true);
+                    // Pan to vicinity
+                    const offsetLat = (Math.random() - 0.5) * 0.01;
+                    const offsetLng = (Math.random() - 0.5) * 0.01;
+                    const approxLoc = {
+                        lat: location.geoPoint.lat + offsetLat,
+                        lng: location.geoPoint.lng + offsetLng
+                    };
 
-                mapInstance.panTo(approxLoc);
-                mapInstance.setZoom(14);
-
-                // Add system message about satellite assistance?
-                setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
+                    mapInstance.panTo(approxLoc);
+                    mapInstance.setZoom(14);
+                    setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
+                }
             }
         }
     }, [secondsElapsed, hintList, mapInstance, hasZoomed, result, isSubmitting, visibleHints.length, location.geoPoint]);
@@ -281,7 +286,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
                 {/* Evidence Count Banner (Liquid Glass) */}
                 {!result && (
-                    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none w-max max-w-[90%]">
+                    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none w-max max-w-[90%] flex flex-col items-center gap-2">
                         <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-10 duration-1000 fade-in">
                             <div className="relative w-2 h-2">
                                 <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
@@ -291,6 +296,21 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                 {totalEvidence} Intel Items Hidden
                             </span>
                         </div>
+
+                        {/* Timer / Hint Progress */}
+                        {visibleHints.length < hintList.length && (
+                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-700 delay-300">
+                                <div className="w-32 h-1 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm shadow-inner">
+                                    <div
+                                        className="h-full bg-yellow-400 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(250,204,21,0.5)]"
+                                        style={{ width: `${progress}%` }}
+                                    />
+                                </div>
+                                <span className="text-[10px] font-mono text-yellow-400 font-bold tracking-tight">
+                                    HINT IN {Math.ceil(timeUntilNext)}s
+                                </span>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -303,7 +323,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                 className="bg-black/40 backdrop-blur-xl border border-white/10 p-3 rounded-r-xl rounded-bl-xl border-l-4 border-l-yellow-400 text-xs font-medium text-white shadow-lg animate-in slide-in-from-left-10 fade-in duration-500"
                             >
                                 <span className="block text-[10px] font-black text-yellow-400 mb-1 uppercase tracking-widest">
-                                    Incoming Transmisson {i < 3 ? `#00${i + 1}` : 'SYSTEM'}
+                                    Incoming Transmisson {i < hintList.length ? `#0${i + 1} / 0${hintList.length}` : 'SYSTEM'}
                                 </span>
                                 {hint}
                             </div>

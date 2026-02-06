@@ -134,7 +134,14 @@ export default function AddLocation() {
     const [base64, setBase64] = useState<string>(existingLocation?.image_url ?? "");
     const [qualityScore, setQualityScore] = useState<number>(existingLocation?.quality_score ?? 100);
     const [difficulty, setDifficulty] = useState<number>(existingLocation?.difficulty_rating ?? 5);
-    const [hints, setHints] = useState<string>(existingLocation?.hints ?? "");
+    const [hintsList, setHintsList] = useState<string[]>(
+        existingLocation?.hints ?
+            // Try parsing JSON first, fallback to newline split, fallback to empty
+            (() => {
+                try { return JSON.parse(existingLocation.hints); } catch { return existingLocation.hints ? existingLocation.hints.split(/\n\n|\n/) : []; }
+            })()
+            : []
+    );
     const [photographer, setPhotographer] = useState<string>(initialMetadata.photographer ?? "");
 
     const [evidenceStep, setEvidenceStep] = useState(false);
@@ -144,15 +151,14 @@ export default function AddLocation() {
     const [tempDesc, setTempDesc] = useState("");
 
     // Sync status with AI
-    // Sync status with AI
     useEffect(() => {
         if (analysis) {
             if (analysis.quality_score) setQualityScore(analysis.quality_score);
             if (analysis.difficulty_rating) setDifficulty(analysis.difficulty_rating);
             if (analysis.generated_hints && Array.isArray(analysis.generated_hints)) {
                 // Only pre-fill if empty to avoid overwriting manual edits
-                if (!hints) {
-                    setHints(analysis.generated_hints.join("\n\n"));
+                if (hintsList.length === 0) {
+                    setHintsList(analysis.generated_hints);
                 }
             }
         }
@@ -378,27 +384,61 @@ export default function AddLocation() {
                                 <label className="block text-sm font-medium text-slate-400">Extra Data</label>
                                 <div className="grid grid-cols-1 gap-4">
                                     <div className="space-y-2">
-                                        <p className="text-[10px] uppercase text-slate-500 font-bold">Hints (Markdown supported)</p>
-                                        <textarea
-                                            name="hints"
-                                            value={hints}
-                                            onChange={(e) => setHints(e.target.value)}
-                                            className="w-full h-24 bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm focus:border-blue-500 outline-none resize-none"
-                                            placeholder="Example: Look for the blue sign..."
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <p className="text-[10px] uppercase text-slate-500 font-bold">Photographer Attribute</p>
-                                        <input
-                                            name="photographer"
-                                            type="text"
-                                            value={photographer}
-                                            onChange={(e) => setPhotographer(e.target.value)}
-                                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
-                                            placeholder="e.g. Unsplash / @username"
-                                        />
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <p className="text-[10px] uppercase text-slate-500 font-bold">Hints ({hintsList.length} items)</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setHintsList(prev => [...prev, ""])}
+                                                    className="text-xs text-blue-400 font-bold hover:text-blue-300"
+                                                >
+                                                    + ADD HINT
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {hintsList.map((hint, idx) => (
+                                                    <div key={idx} className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={hint}
+                                                            onChange={(e) => {
+                                                                const newHints = [...hintsList];
+                                                                newHints[idx] = e.target.value;
+                                                                setHintsList(newHints);
+                                                            }}
+                                                            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:border-blue-500 outline-none"
+                                                            placeholder={`Hint #${idx + 1}`}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setHintsList(prev => prev.filter((_, i) => i !== idx))}
+                                                            className="px-3 text-red-400 hover:bg-slate-800 rounded-xl border border-transparent hover:border-red-900/30"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {hintsList.length === 0 && (
+                                                    <p className="text-xs text-slate-600 italic">No hints added. AI will generate them automatically if pre-check is run.</p>
+                                                )}
+                                            </div>
+                                            {/* Hidden input to send as JSON string */}
+                                            <input type="hidden" name="hints" value={JSON.stringify(hintsList)} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] uppercase text-slate-500 font-bold">Photographer Attribute</p>
+                                            <input
+                                                name="photographer"
+                                                type="text"
+                                                value={photographer}
+                                                onChange={(e) => setPhotographer(e.target.value)}
+                                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
+                                                placeholder="e.g. Unsplash / @username"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
+
                             </div>
 
                             <input type="hidden" name="intent" value="deploy" />

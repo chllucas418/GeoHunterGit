@@ -143,12 +143,16 @@ export async function analyzeImageQuality(
     1. Is the image clear enough to identify landmarks or locations?
     2. Suggest a "quality_score" from 0 to 100 based on clarity and uniqueness.
     3. Suggest a "difficulty_rating" from 1 to 10 based on how hard it would be to find this exact spot.
-    4. Provide a brief "precontext" description of what you see.
+    4. Provide a brief "precontext" description of what you see. CRITICAL: Do NOT reveal the location name, specific coordinates, or any direct spoilers. Keep it atmospheric.
     ${context?.lat ? "5. Verify if the visual environment matches the provided coordinates." : ""}
-    6. Generate 3 progressive hints for players who are stuck (do not give away the exact answer immediately):
-       - Hint 1: Visual/Vague (e.g. "Focus on the architectural style")
-       - Hint 2: Contextual (e.g. "This vegetation is typical of...")
-       - Hint 3: Specific (e.g. "Look near the [Specific Landmark] in the background")
+    6. Generate 3 progressive hints for players.
+       ${context?.evidenceList && context.evidenceList.length > 0
+            ? `CRITICAL: The admin has identified these key "Ground Truth" items: ${JSON.stringify(context.evidenceList.map((e: any) => e.description || e))}. 
+            Your hints must subtly guide the player towards finding these specific items without explicitly naming them in the first two hints.`
+            : "Focus on general visual features."}
+       - Hint 1: Visual/Vague (High-level, e.g. "Focus on the architectural style or the color of the signage").
+       - Hint 2: Contextual (Mid-level, e.g. "The vegetation suggests a tropical climate, look for specific trees").
+       - Hint 3: Specific (Direct clue but still playful, e.g. "A unique feature on the left wall holds the key").
     
     Return a JSON object with:
     - "quality_score": number
