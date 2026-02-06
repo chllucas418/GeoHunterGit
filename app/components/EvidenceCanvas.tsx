@@ -9,7 +9,9 @@ interface EvidenceCanvasProps {
 }
 
 export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, children }: EvidenceCanvasProps) {
-    const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+    const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
+    const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number } | null>(null);
+
     const containerRef = useRef<HTMLDivElement>(null); // The outer responsive container
     const imageContainerRef = useRef<HTMLDivElement>(null); // The inner aspect-ratio locked container
 
@@ -17,10 +19,52 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, childr
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
     const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null); // In Pixels
 
+    // Observer to track container size
+    useEffect(() => {
+        if (!containerRef.current) return;
+
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                setContainerDimensions({
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height
+                });
+            }
+        });
+
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, []);
+
     const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
         const { naturalWidth, naturalHeight } = e.currentTarget;
         if (naturalHeight > 0) {
-            setAspectRatio(naturalWidth / naturalHeight);
+            setImageAspectRatio(naturalWidth / naturalHeight);
+        }
+    };
+
+    // Determine styles for the inner container based on which dimension is limiting
+    const getContainerStyle = () => {
+        if (!imageAspectRatio || !containerDimensions) return { width: '100%', height: '100%' };
+
+        const containerAspectRatio = containerDimensions.width / containerDimensions.height;
+
+        if (containerAspectRatio > imageAspectRatio) {
+            // Container is wider than image -> Height matches container, Width is auto (based on aspect)
+            return {
+                height: '100%',
+                width: 'auto',
+                aspectRatio: `${imageAspectRatio}`,
+                maxWidth: '100%' // Ensure no overflow
+            };
+        } else {
+            // Container is narrower than image -> Width matches container, Height is auto (based on aspect)
+            return {
+                width: '100%',
+                height: 'auto',
+                aspectRatio: `${imageAspectRatio}`,
+                maxHeight: '100%' // Ensure no overflow
+            };
         }
     };
 
@@ -41,7 +85,7 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, childr
 
     const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
         if (disabled) return;
-        // Prevent default only for mouse to avoid selecting text, but allow touch actions if needed
+        // Prevent default only for mouse to avoid selecting text, but allow touch
         if (!('touches' in e)) {
             e.preventDefault();
         }
@@ -102,14 +146,7 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, childr
             <div
                 ref={imageContainerRef}
                 className="relative select-none touch-none"
-                style={{
-                    // Use CSS Variable or fallback to style for dynamic aspect ratio
-                    aspectRatio: aspectRatio ? `${aspectRatio}` : 'auto',
-                    width: aspectRatio ? (aspectRatio > 1 ? '100%' : 'auto') : 'auto',
-                    height: aspectRatio ? (aspectRatio > 1 ? 'auto' : '100%') : '100%',
-                    maxWidth: '100%',
-                    maxHeight: '100%'
-                }}
+                style={getContainerStyle()}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
