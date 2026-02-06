@@ -110,11 +110,7 @@ export default function StudentLiveGame() {
     }, [guess, mapInstance]);
 
 
-    if (!roomState) return <div className="p-8 text-white text-center">Locating Mission Signal...</div>;
-
-    const { room, currentRound } = roomState;
-
-    // --- SUBMIT HANLDER ---
+    // --- SUBMIT HANDLER ---
     const handleSubmit = () => {
         if (!guess) return;
         setSubmitted(true);
@@ -131,6 +127,13 @@ export default function StudentLiveGame() {
             setResult(actionFetcher.data);
         }
     }, [actionFetcher.data]);
+
+    if (!roomState) return <div className="p-8 text-white text-center">Locating Mission Signal...</div>;
+
+    const { room, currentRound } = roomState;
+
+    // --- SUBMIT HANLDER ---
+
 
 
     // --- RENDERS ---
