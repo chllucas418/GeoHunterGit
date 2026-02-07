@@ -9,11 +9,52 @@ export async function loader({ request, params, context }: any) {
     const userId = await requireUser(request);
     const code = params.code;
     const env = context.cloudflare.env as any;
-    return { code, userId, mapsApiKey: env.GOOGLE_MAPS_API_KEY };
+    const db = env.DB as D1Database;
+
+    // 1. Get Room & Current Round to check for existing submission
+    const room = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first<any>();
+    let existingGuess = null;
+
+    if (room && room.status !== 'WAITING') {
+        const item = await db.prepare(
+            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+        ).bind(room.map_set_id, room.current_index).first<any>();
+
+        if (item) {
+            const guessRecord = await db.prepare(
+                "SELECT * FROM room_guesses WHERE room_code = ? AND location_id = ? AND user_id = ?"
+            ).bind(code, item.location_id, userId).first<any>();
+
+            if (guessRecord) {
+                // Parse JSON fields
+                let aiFeedback = null;
+                try {
+                    aiFeedback = guessRecord.ai_feedback ? JSON.parse(guessRecord.ai_feedback) : null;
+                } catch (e) {
+                    console.error("Failed to parse ai_feedback", e);
+                }
+
+                existingGuess = {
+                    lat: guessRecord.lat,
+                    lng: guessRecord.lng,
+                    score: guessRecord.score,
+                    distance: guessRecord.distance, // stored in km? code says "distance * 1000" in submit return but DB might store raw?
+                    // Wait, submit.ts stores: "distance" (km) and "score".
+                    // But the return JSON had "distance: distance * 1000".
+                    // Let's standardise on meters for the UI.
+                    distanceMeters: guessRecord.distance * 1000,
+                    ai_feedback: aiFeedback,
+                    evidence_found: guessRecord.evidence_found // IDs string
+                };
+            }
+        }
+    }
+
+    return { code, userId, mapsApiKey: env.GOOGLE_MAPS_API_KEY, existingGuess };
 }
 
 export default function StudentLiveGame() {
-    const { code, mapsApiKey } = useLoaderData() as any;
+    const { code, mapsApiKey, existingGuess } = useLoaderData() as any;
     const fetcher = useFetcher();
     const actionFetcher = useFetcher();
     // const navigation = useNavigation(); // Not really navigating, just polling
@@ -41,7 +82,44 @@ export default function StudentLiveGame() {
 
     // Parse Metadata & Hints when location changes
     const hintList = location?.hints ? (typeof location.hints === 'string' ? (location.hints.startsWith('[') ? JSON.parse(location.hints) : location.hints.split('\n')) : location.hints) : [];
-    const photographer = location?.image_metadata ? JSON.parse(location.image_metadata).photographer : "";
+
+    // Initialize state from existingGuess if available
+    useEffect(() => {
+        if (existingGuess && !submitted) {
+            // Only restore if we match the current round index?
+            // The loader logic fetches based on room.current_index, so it should be correct for the *current* active round.
+            // However, if the poller updates roomState, we want to make sure we don't overwrite if we moved to next round.
+            // But existingGuess comes from loader which ran on page load.
+            // If page loads, we trust loader.
+
+            setGuess({ lat: existingGuess.lat, lng: existingGuess.lng });
+            setSubmitted(true);
+            setResult({
+                score: existingGuess.score,
+                distance: existingGuess.distanceMeters,
+                fullFeedback: existingGuess.ai_feedback,
+                // We don't have evidenceScore separated easily unless we recalc or store it.
+                // For now, total score is enough.
+                evidenceScore: 0 // Optional display
+            });
+
+            // If we have a map already, place marker
+            if (mapInstance) {
+                const pos = { lat: existingGuess.lat, lng: existingGuess.lng };
+                if (!cursorMarkerRef.current) {
+                    cursorMarkerRef.current = new google.maps.Marker({
+                        position: pos,
+                        map: mapInstance,
+                    });
+                    setMarker(cursorMarkerRef.current);
+                } else {
+                    cursorMarkerRef.current.setPosition(pos);
+                }
+                mapInstance.panTo(pos);
+            }
+        }
+    }, [existingGuess, mapInstance]);
+
 
     // Intro Animation trigger on new round
     useEffect(() => {
@@ -96,6 +174,10 @@ export default function StudentLiveGame() {
                     cursorMarkerRef.current = null;
                 }
                 setMarker(null);
+
+                // Reset Existing Guess (since we moved to new round)
+                // existingGuess from loader is stale now.
+                // We rely on state reset here.
 
                 if (mapInstance) {
                     mapInstance.setZoom(11);
