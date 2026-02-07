@@ -35,6 +35,18 @@ export default function TeacherRoom() {
     const [roomState, setRoomState] = useState<any>(null);
     const [timeLeft, setTimeLeft] = useState(300); // 5 mins default
 
+    // --- ANIMATION STATE ---
+    const [introStage, setIntroStage] = useState(0);
+
+    useEffect(() => {
+        if (roomState?.currentRound?.location?.id) {
+            setIntroStage(0);
+            setTimeout(() => setIntroStage(1), 100);
+            setTimeout(() => setIntroStage(2), 4000);
+            setTimeout(() => setIntroStage(3), 5000);
+        }
+    }, [roomState?.currentRound?.location?.id]);
+
     // --- REVIEW MAP LOGIC ---
     const mapRef = useRef<HTMLDivElement>(null);
     const [reviewMap, setReviewMap] = useState<google.maps.Map | null>(null);
@@ -200,17 +212,7 @@ export default function TeacherRoom() {
         </div>
     );
 
-    // --- ANIMATION STATE ---
-    const [introStage, setIntroStage] = useState(0);
 
-    useEffect(() => {
-        if (roomState?.currentRound?.location?.id) {
-            setIntroStage(0);
-            setTimeout(() => setIntroStage(1), 100);
-            setTimeout(() => setIntroStage(2), 4000);
-            setTimeout(() => setIntroStage(3), 5000);
-        }
-    }, [roomState?.currentRound?.location?.id]);
 
     const renderPlaying = () => (
         <div className="h-full flex flex-col relative">
