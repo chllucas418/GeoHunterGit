@@ -200,6 +200,18 @@ export default function TeacherRoom() {
         </div>
     );
 
+    // --- ANIMATION STATE ---
+    const [introStage, setIntroStage] = useState(0);
+
+    useEffect(() => {
+        if (roomState?.currentRound?.location?.id) {
+            setIntroStage(0);
+            setTimeout(() => setIntroStage(1), 100);
+            setTimeout(() => setIntroStage(2), 4000);
+            setTimeout(() => setIntroStage(3), 5000);
+        }
+    }, [roomState?.currentRound?.location?.id]);
+
     const renderPlaying = () => (
         <div className="h-full flex flex-col relative">
             {/* Header / Timer */}
@@ -214,6 +226,17 @@ export default function TeacherRoom() {
                     <span className="text-lg font-mono font-bold text-green-300">{participants.length} Active</span>
                 </div>
             </div>
+
+            {/* Intro Splash */}
+            {introStage < 3 && currentRound?.location && (
+                <div className={`absolute inset-0 z-[60] flex items-center justify-center pointer-events-none transition-all duration-1000 ease-in-out bg-black/60 backdrop-blur-xl ${introStage === 2 ? 'opacity-0' : 'opacity-100'}`}>
+                    <div className="text-center">
+                        <div className="mb-2 text-[10px] font-mono text-blue-300 tracking-widest uppercase">Incoming Transmission</div>
+                        <h1 className="text-6xl font-black text-white tracking-tighter mb-2">SECTOR {currentRound.location.id?.slice(-4).toUpperCase()}</h1>
+                        <div className="text-4xl font-black text-yellow-400">{"★".repeat(Math.ceil((currentRound.location.difficulty_rating || 1) / 2))}</div>
+                    </div>
+                </div>
+            )}
 
             {/* Full screen Image */}
             {currentRound?.location?.image_url && (

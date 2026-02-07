@@ -46,6 +46,18 @@ export default function StudentLiveGame() {
     // Intro Animation trigger on new round
     useEffect(() => {
         if (location?.id) {
+            // Force State Cleanup on Location Change (Redundant Safety)
+            if (cursorMarkerRef.current) {
+                cursorMarkerRef.current.setMap(null);
+                cursorMarkerRef.current = null;
+            }
+            setMarker(null);
+            setGuess(null);
+            setSubmitted(false);
+            setEvidenceList([]);
+            setHasZoomed(false);
+
+            // Intro Config
             setIntroStage(0);
             setTimeout(() => setIntroStage(1), 100);
             setTimeout(() => setIntroStage(2), 4000);
@@ -334,13 +346,15 @@ export default function StudentLiveGame() {
                         </button>
                     </div>
                 ) : (
-                    <div className="absolute bottom-6 left-6 right-6 z-10">
-                        <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5">
-                            <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
-                            <div className="text-lg font-black">LOCKED IN</div>
-                            <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Awaiting Mission Control Reveal...</div>
+                    room.status === 'PLAYING' && (
+                        <div className="absolute bottom-6 left-6 right-6 z-10">
+                            <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5">
+                                <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
+                                <div className="text-lg font-black">LOCKED IN</div>
+                                <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Awaiting Mission Control Reveal...</div>
+                            </div>
                         </div>
-                    </div>
+                    )
                 )}
             </div>
 
