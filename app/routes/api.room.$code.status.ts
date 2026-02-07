@@ -55,7 +55,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         room: {
             code: room.code,
             status: room.status,
-            hostId: room.host_id
+            hostId: room.host_id,
+            current_index: room.current_index
         },
         participants,
         currentRound
