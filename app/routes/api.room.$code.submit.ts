@@ -37,13 +37,14 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
 
         // Get Current Location
+        // Get Current Location (By offset, not order_index value)
         const item = await db.prepare(
-            "SELECT location_id FROM map_set_items WHERE set_id = ? AND order_index = ?"
+            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
         ).bind(room.map_set_id, room.current_index).first<any>();
 
         if (!item) {
-            console.error(`Map Item not found for Set ${room.map_set_id} Index ${room.current_index}`);
-            return Response.json({ error: "Location data missing for this round" }, { status: 500 });
+            console.error(`Map Item not found for Set ${room.map_set_id} Offset ${room.current_index}`);
+            return Response.json({ error: "Location data missing for this round" }, { status: 400 });
         }
 
         const trueLoc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
