@@ -2,30 +2,41 @@ import type { LoaderFunctionArgs } from "react-router";
 import { requireTeacher } from "~/lib/auth.server";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
-    const userId = await requireTeacher(request);
+    await requireTeacher(request); // Security check
     const code = params.code;
     const url = new URL(request.url);
-    const index = url.searchParams.get("round"); // Note: we access by round index to sync valid guesses
+    const roundIndexParam = url.searchParams.get("round");
 
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 
-    // We need map_set_id to find location_id from index
-    const room = await db.prepare("SELECT map_set_id FROM rooms WHERE code = ?").bind(code).first<any>();
-    if (!room) return Response.json({ error: "No room" }, { status: 404 });
+    const room = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first<any>();
+    if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
 
+    const roundIndex = roundIndexParam ? parseInt(roundIndexParam) : room.current_index;
+
+    // Get Location ID for that round (correctly using OFFSET)
     const item = await db.prepare(
-        "SELECT location_id FROM map_set_items WHERE set_id = ? AND order_index = ?"
-    ).bind(room.map_set_id, index).first<any>();
+        "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+    ).bind(room.map_set_id, roundIndex).first<any>();
 
     if (!item) return Response.json({ guesses: [] });
 
-    const { results: guesses } = await db.prepare(`
-        SELECT rg.lat, rg.lng, rg.distance, rg.score, u.display_name as user_name
+    // Get Location Data
+    const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
+    const evidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+
+    // Fetch Guesses with User Names
+    const guesses = await db.prepare(`
+        SELECT rg.lat, rg.lng, rg.score, rg.distance, rg.evidence_score, rg.distance_score, u.display_name, rg.timestamp, rg.evidence_found
         FROM room_guesses rg
         JOIN users u ON rg.user_id = u.id
         WHERE rg.room_code = ? AND rg.location_id = ?
     `).bind(code, item.location_id).all<any>();
 
-    return Response.json({ guesses });
+    return Response.json({
+        guesses: guesses.results || [],
+        officialLocation: location,
+        officialEvidence: evidence.results || []
+    });
 }

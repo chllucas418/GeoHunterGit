@@ -23,6 +23,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "^1.13.5",
+		"@playwright/test": "^1.58.2",
 		"@react-router/dev": "^7.10.0",
 		"@tailwindcss/vite": "^4.1.13",
 		"@types/google.maps": "^3.58.1",

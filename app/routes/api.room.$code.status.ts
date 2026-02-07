@@ -1,64 +1,74 @@
-import type { LoaderFunctionArgs } from "react-router";
+import { LoaderFunctionArgs } from "react-router";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
     const code = params.code;
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 
-    // 1. Get Room State
-    const room = await db.prepare(
-        "SELECT * FROM rooms WHERE code = ?"
-    ).bind(code).first<any>();
+    const room = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first<any>();
 
     if (!room) {
         return Response.json({ error: "Room not found" }, { status: 404 });
     }
 
-    // 2. Get Participants (Scoreboard)
-    const { results: participants } = await db.prepare(
-        `SELECT u.display_name, rp.score, rp.streak 
-         FROM room_participants rp
-         JOIN users u ON rp.user_id = u.id
-         WHERE rp.room_code = ?
-         ORDER BY rp.score DESC`
+    // Participants
+    const participants = await db.prepare(
+        "SELECT * FROM room_participants WHERE room_code = ? ORDER BY score DESC"
     ).bind(code).all<any>();
 
-    // 3. Get Current Round Info (if playing/review)
+    // Current Round Info
     let currentRound = null;
-    if (room.status !== 'WAITING' && room.status !== 'PODIUM') {
-        const { results: items } = await db.prepare(
-            "SELECT * FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC"
-        ).bind(room.map_set_id).all<any>();
+    if (room.map_set_id) {
+        // Get total count
+        const total = await db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>();
 
-        const currentItem = items[room.current_index];
-        if (currentItem) {
-            const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(currentItem.location_id).first<any>();
+        // Get current item
+        const item = await db.prepare(
+            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+        ).bind(room.map_set_id, room.current_index).first<any>();
 
-            // Fetch Evidence only if REVIEW (or PODIUM) to prevent spoilers
+        if (item) {
+            const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
+            // If in PLAYING mode, hide the Official Evidence from the client to prevent cheating?
+            // Actually, location data usually includes image_url.
+            // We should NOT send "evidence" or "correct coordinates" if the user is a student?
+            // But this endpoint is public.
+            // Teacher needs it for Review. Student needs it for Image.
+            // Best practice: Only send `lat/lng` if status is REVIEW or PODIUM?
+            // For now, let's allow it but maybe frontend hides it.
+            // Wait, if student inspects network, they see lat/lng.
+            // Ideally, we should mask lat/lng if status == PLAYING.
+
+            // Masking Logic
+            let maskedLocation = { ...location };
+            if (room.status === 'PLAYING') {
+                delete maskedLocation.lat;
+                delete maskedLocation.lng;
+                // Also hide hints if we want to reveal them slowly on server side?
+                // For now, just hiding answers is enough.
+            }
+
+            // Evidence
+            // Only fetch evidence if needed (e.g. for Review)
             let evidence = [];
-            if (room.status === 'REVIEW' || room.status === 'PODIUM') {
-                const { results } = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(location.id).all<any>();
-                evidence = results;
+            if (room.status === 'REVIEW') {
+                const evResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+                evidence = evResult.results || [];
             }
 
             currentRound = {
                 index: room.current_index,
-                total: items.length,
+                total: total.count,
                 startTime: room.round_start_time,
-                location: location,
+                location: maskedLocation,
                 evidence: evidence
             };
         }
     }
 
     return Response.json({
-        room: {
-            code: room.code,
-            status: room.status,
-            hostId: room.host_id,
-            current_index: room.current_index
-        },
-        participants,
+        room,
+        participants: participants.results || [],
         currentRound
     });
 }

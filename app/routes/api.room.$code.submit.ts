@@ -37,7 +37,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
 
         // Get Current Location
-        // Get Current Location (By offset, not order_index value)
         const item = await db.prepare(
             "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
         ).bind(room.map_set_id, room.current_index).first<any>();
@@ -109,7 +108,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
             if (fullFeedback.results) {
                 for (const item of fullFeedback.results) {
-                    // Safety check index
                     const userBox = userEvidenceList[item.index]?.box;
                     if (!userBox) continue;
 
@@ -123,7 +121,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                         }
                     }
 
-                    // 2. If AI didn't catch it, fallback to geometry (Intersection Over Union + Center Distance)
+                    // 2. Fallback to geometry
                     if (!matchedAdminId) {
                         for (const adminEv of adminBoxes) {
                             const adminBox = adminEv.box;
@@ -151,7 +149,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                             const adminCy = adminBox.y + adminBox.h / 2;
                             const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
 
-
                             if (iou > 0.3 || dist < 50) {
                                 matchedAdminId = adminEv.id;
                                 break;
@@ -175,39 +172,32 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             }
         } catch (e) {
             console.error("Gemini Error:", e);
-            // Fallback to pure geometry if AI fails? 
-            // Existing code already had geometry backup inside the loop, 
-            // but if the entire AI call fails we might want a pure-geometry loop here.
-            // For now, let's assume if AI fails we just don't get evidence points or we relies on the "Geometry Only" path if we kept it?
-            // Actually, since we replaced the geometry-only block with this try-catch, if this fails we get 0 evidence score.
-            // TODO: Add a pure geometry fallback here if critical. 
-            // Giving the complexity, I'll stick to error logging + fix the server error.
             aiFeedback = { error: "AI verification failed", results: [] };
         }
 
-        const finalScore = distanceScore + evidenceScore + aiBonus;
+        // Cap Evidence Score to prevent overflow?
+        // Let's say max 5 evidence items = 5000pts.
 
-        // Save Guess
+        evidenceScore += aiBonus; // Combine bonus into evidence score for simplicity
+
+        const finalScore = distanceScore + evidenceScore;
+
+        // Save Guess (Update: Added distance_score and evidence_score columns)
         await db.prepare(
-            "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(aiFeedback)).run();
+            "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback, distance_score, evidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(aiFeedback), distanceScore, evidenceScore).run();
 
         // Update Participant Totals
         await db.prepare(
             "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
         ).bind(finalScore, code, userId).run();
 
+        // RETURN SUCCESS BUT NO DATA to prevent client from showing result immediately
         return Response.json({
             success: true,
-            score: finalScore,
-            points: finalScore, // Backward compat
-            distance: distance * 1000, // Return meters for consistency with Game UI
-            distanceScore,
-            evidenceScore,
-            aiBonus,
-            matchedEvidenceIds,
-            adminEvidence: adminBoxes,
-            fullFeedback: aiFeedback
+            message: "Submission Received. Determining Analysis...",
+            // Do NOT return score/distance/feedback here.
+            // Client should show "Waiting for Teacher" state.
         });
 
     } catch (error) {
