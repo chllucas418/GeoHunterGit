@@ -64,6 +64,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             distanceScore = Math.round(MAX_DISTANCE_SCORE * Math.pow(1 - (distance * 1000) / MAX_DISTANCE_METERS, 2));
         }
 
+        // --- STEP 2: IMMEDIATE AI ANALYSIS & SCORING ---
+        // (As requested: Calculate NOW, Store in DB, Reveal Later)
         // --- EVIDENCE VERIFICATION (Hybrid: AI + Geometry) ---
         // Fetch Admin Evidence (Official Intel)
         const adminEvidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(trueLoc.id).all<any>();
@@ -198,6 +200,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             message: "Submission Received. Determining Analysis...",
             // Do NOT return score/distance/feedback here.
             // Client should show "Waiting for Teacher" state.
+            // Step 3: Don't show result yet.
         });
 
     } catch (error) {

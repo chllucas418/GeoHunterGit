@@ -316,7 +316,10 @@ export default function StudentLiveGame() {
                         setResult((prev: any) => ({ ...prev, ...data }));
                     }
                 })
-                .catch(err => console.error("Failed to fetch results", err));
+                .catch(err => {
+                    console.error("Failed to fetch results", err);
+                    setResult((prev: any) => ({ ...prev, message: "Error fetching data. Please refresh." }));
+                });
         }
     }, [room?.status, code, result?.score]);
 
@@ -499,10 +502,14 @@ export default function StudentLiveGame() {
                             </div>
                         </div>
                     ) : (
-                        <div className="p-6 text-center text-slate-500 italic">{result.message || "Processing Telemetry..."}</div>
+                        <div className="p-6 text-center text-slate-500 italic">
+                            {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
+                        </div>
                     )
                 ) : (
-                    <div className="p-6 text-center text-slate-500 italic">Processing Telemetry...</div>
+                    <div className="p-6 text-center text-slate-500 italic">
+                        Analysis Complete. Data Encrypted. Waiting for HQ Reveal...
+                    </div>
                 )}
             </div>
         </div>
