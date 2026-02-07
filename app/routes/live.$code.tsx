@@ -106,16 +106,20 @@ export default function StudentLiveGame() {
             // If we have a map already, place marker
             if (mapInstance) {
                 const pos = { lat: existingGuess.lat, lng: existingGuess.lng };
-                if (!cursorMarkerRef.current) {
-                    cursorMarkerRef.current = new google.maps.Marker({
-                        position: pos,
-                        map: mapInstance,
-                    });
-                    setMarker(cursorMarkerRef.current);
+                if (isFinite(pos.lat) && isFinite(pos.lng)) {
+                    if (!cursorMarkerRef.current) {
+                        cursorMarkerRef.current = new google.maps.Marker({
+                            position: pos,
+                            map: mapInstance,
+                        });
+                        setMarker(cursorMarkerRef.current);
+                    } else {
+                        cursorMarkerRef.current.setPosition(pos);
+                    }
+                    mapInstance.panTo(pos);
                 } else {
-                    cursorMarkerRef.current.setPosition(pos);
+                    console.error("Invalid coordinates in existingGuess:", pos);
                 }
-                mapInstance.panTo(pos);
             }
         }
     }, [existingGuess, mapInstance]);
@@ -266,14 +270,17 @@ export default function StudentLiveGame() {
             } else if (count > hintList.length && !hasZoomed && mapInstance) {
                 if (secondsElapsed > (HINT_START_DELAY + (hintList.length * HINT_INTERVAL))) {
                     setHasZoomed(true);
-                    const offsetLat = (Math.random() - 0.5) * 0.006;
-                    const offsetLng = (Math.random() - 0.5) * 0.006;
-                    mapInstance.panTo({
-                        lat: location.lat + offsetLat, // Adjust for server data shape (lat/lng usually on root of location check schema)
-                        lng: location.lng + offsetLng
-                    });
-                    mapInstance.setZoom(15);
-                    setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
+                    // Only zoom if we actually have coordinates (Server masks them in PLAYING mode)
+                    if (location && typeof location.lat === 'number' && typeof location.lng === 'number') {
+                        const offsetLat = (Math.random() - 0.5) * 0.006;
+                        const offsetLng = (Math.random() - 0.5) * 0.006;
+                        mapInstance.panTo({
+                            lat: location.lat + offsetLat,
+                            lng: location.lng + offsetLng
+                        });
+                        mapInstance.setZoom(15);
+                        setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
+                    }
                 }
             }
         }
