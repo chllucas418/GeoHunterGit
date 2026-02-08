@@ -65,6 +65,7 @@ export default function TeacherRoom() {
 
             importLibrary("maps").then(async () => {
                 const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
+                const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
 
                 const center = currentRound?.location ?
                     { lat: currentRound.location.lat, lng: currentRound.location.lng } :
@@ -79,20 +80,26 @@ export default function TeacherRoom() {
 
                 setReviewMap(map);
 
+                // Official Target
                 if (currentRound?.location) {
-                    new google.maps.Marker({
+                    const pin = new PinElement({
+                        background: "#EF4444",
+                        borderColor: "#7F1D1D",
+                        glyphColor: "white",
+                        scale: 1.2
+                    });
+
+                    new AdvancedMarkerElement({
                         position: { lat: currentRound.location.lat, lng: currentRound.location.lng },
                         map,
                         title: "Official Target",
-                        icon: {
-                            url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png"
-                        }
+                        content: pin.element
                     });
                 }
 
                 // Fetch guesses
                 fetch(`/api/room/${code}/review?round=${room.current_index}`).then(res => res.json()).then((data: any) => {
-                    console.log("Teacher Review Data:", data); // DEBUG
+                    console.log("Teacher Review Data:", data);
                     if (data.guesses) {
                         const bounds = new google.maps.LatLngBounds();
                         if (currentRound?.location) {
@@ -100,31 +107,36 @@ export default function TeacherRoom() {
                         }
 
                         data.guesses.forEach((g: any) => {
-                            // Student Marker: "Pinpoint Head" simulation using SVG
-                            const pinColor = "#3b82f6"; // Blue
-                            const m = new google.maps.Marker({
+                            // Student Profile Marker
+                            const div = document.createElement("div");
+                            div.className = "custom-marker-profile";
+                            div.style.cssText = "width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); overflow: hidden; background: #3b82f6; position: relative; transition: transform 0.2s;";
+
+                            // Avatar or Initials
+                            if (g.profile_picture_url) {
+                                const img = document.createElement("img");
+                                img.src = g.profile_picture_url;
+                                img.style.cssText = "width: 100%; height: 100%; object-fit: cover;";
+                                div.appendChild(img);
+                            } else {
+                                div.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:16px;">${g.display_name ? g.display_name[0].toUpperCase() : "?"}</div>`;
+                            }
+
+                            // Tooltip (Name + Distance) on hover? 
+                            // Default 'title' works for simple tooltip. 
+                            // AdvancedMarker can handle click events too.
+
+                            const m = new AdvancedMarkerElement({
                                 position: { lat: g.lat, lng: g.lng },
                                 map,
-                                icon: {
-                                    path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z", // Simple Pin Path
-                                    fillColor: pinColor,
-                                    fillOpacity: 1,
-                                    strokeWeight: 1,
-                                    strokeColor: "#ffffff",
-                                    scale: 1.5,
-                                    labelOrigin: new google.maps.Point(12, 9),
-                                    anchor: new google.maps.Point(12, 22)
-                                },
-                                label: {
-                                    text: g.user_name[0].toUpperCase(),
-                                    color: "white",
-                                    fontWeight: "bold",
-                                    fontSize: "10px"
-                                },
-                                title: `${g.user_name} (${Math.round(g.distance * 1000)}m)`,
+                                content: div,
+                                title: `${g.display_name} (${Math.round(g.distance * 1000)}m)`,
                                 zIndex: 100
                             });
-                            markersRef.current.push(m);
+
+                            // markersRef.current.push(m); // AdvancedMarkerElement is not same type as Marker. 
+                            // We can just keep it in loop or store if needed for cleanup.
+
                             bounds.extend({ lat: g.lat, lng: g.lng });
                         });
 

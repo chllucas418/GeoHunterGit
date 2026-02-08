@@ -32,6 +32,7 @@ export default [
     route("api/room/:code/action", "routes/api.room.$code.action.ts"),
     route("api/room/:code/join", "routes/api.room.$code.join.ts"),
     route("api/room/:code/review", "routes/api.room.$code.review.ts"),
+    route("api/room/:code/round_result", "routes/api.room.$code.round_result.ts"),
     route("api/room/:code/status", "routes/api.room.$code.status.ts"),
     route("api/room/:code/submit", "routes/api.room.$code.submit.ts")
 ] satisfies RouteConfig;

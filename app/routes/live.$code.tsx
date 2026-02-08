@@ -317,15 +317,25 @@ export default function StudentLiveGame() {
         if (room?.status === 'REVIEW' && !result?.score) {
             // Fetch result from dedicated endpoint
             fetch(`/api/room/${code}/round_result`)
-                .then(res => res.json())
+                .then(async res => {
+                    if (!res.ok) {
+                        const text = await res.text();
+                        console.error("Fetch Result Error:", res.status, text);
+                        throw new Error(`Server Error: ${res.status}`);
+                    }
+                    return res.json();
+                })
                 .then((data: any) => {
                     if (data.score !== undefined) {
                         setResult((prev: any) => ({ ...prev, ...data }));
+                    } else if (data.error) {
+                        console.error("API Returned Error:", data.error);
+                        setResult((prev: any) => ({ ...prev, message: data.error }));
                     }
                 })
                 .catch(err => {
                     console.error("Failed to fetch results", err);
-                    setResult((prev: any) => ({ ...prev, message: "Error fetching data. Please refresh." }));
+                    setResult((prev: any) => ({ ...prev, message: "Error fetching data. Check Console." }));
                 });
         }
     }, [room?.status, code, result?.score]);

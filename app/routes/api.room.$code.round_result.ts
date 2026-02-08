@@ -19,47 +19,53 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     // The "current_index" points to the item we are Playing or Reviewing.
 
     // Get Guess
-    // We need to find the location_id for the current room index
-    const item = await db.prepare(
-        "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-    ).bind(room.map_set_id, room.current_index).first<any>();
+    try {
+        const item = await db.prepare(
+            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+        ).bind(room.map_set_id, room.current_index).first<any>();
 
-    if (!item) return Response.json({ error: "Round data missing" }, { status: 404 });
+        if (!item) return Response.json({ error: "Round data missing" }, { status: 404 });
 
-    const guess = await db.prepare(
-        "SELECT * FROM room_guesses WHERE room_code = ? AND location_id = ? AND user_id = ?"
-    ).bind(code, item.location_id, userId).first<any>();
+        const guess = await db.prepare(
+            "SELECT * FROM room_guesses WHERE room_code = ? AND location_id = ? AND user_id = ?"
+        ).bind(code, item.location_id, userId).first<any>();
 
-    if (!guess) {
+        if (!guess) {
+            return Response.json({
+                notSubmitted: true,
+                message: "No submission for this round"
+            });
+        }
+
+        // Get Official Data (Location + Evidence)
+        const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
+        const evidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+
+        // Parse Guess Data
+        let aiFeedback = null;
+        try {
+            aiFeedback = guess.ai_feedback ? JSON.parse(guess.ai_feedback) : null;
+        } catch (e) {
+            console.error("JSON Parse Error for AI Feedback", e);
+        }
+
+        let evidenceFound = [];
+        try {
+            evidenceFound = guess.evidence_found ? JSON.parse(guess.evidence_found) : [];
+        } catch (e) { }
+
         return Response.json({
-            notSubmitted: true,
-            message: "No submission for this round"
+            score: guess.score,
+            distance: guess.distance * 1000,
+            distanceScore: guess.distance_score || 0,
+            evidenceScore: guess.evidence_score || 0,
+            aiFeedback,
+            evidenceFound,
+            officialLocation: location,
+            officialEvidence: evidence.results || []
         });
+    } catch (error) {
+        console.error("ROUND RESULT ERROR:", error);
+        return Response.json({ error: "Internal Server Error", details: (error as any).message }, { status: 500 });
     }
-
-    // Get Official Data (Location + Evidence)
-    const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
-    const evidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
-
-    // Parse Guess Data
-    let aiFeedback = null;
-    try {
-        aiFeedback = guess.ai_feedback ? JSON.parse(guess.ai_feedback) : null;
-    } catch (e) { }
-
-    let evidenceFound = [];
-    try {
-        evidenceFound = guess.evidence_found ? JSON.parse(guess.evidence_found) : [];
-    } catch (e) { }
-
-    return Response.json({
-        score: guess.score,
-        distance: guess.distance * 1000, // Return legacy meters if needed, or just distance (km) and let frontend handle
-        distanceScore: guess.distance_score || 0,
-        evidenceScore: guess.evidence_score || 0,
-        aiFeedback,
-        evidenceFound,
-        officialLocation: location, // Students can see it now
-        officialEvidence: evidence.results || []
-    });
 }
