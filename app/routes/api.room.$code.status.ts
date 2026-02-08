@@ -12,9 +12,14 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     }
 
     // Participants
-    const participants = await db.prepare(
-        "SELECT * FROM room_participants WHERE room_code = ? ORDER BY score DESC"
-    ).bind(code).all<any>();
+    // Participants (Joined with Users for Display Name & Avatar)
+    const participants = await db.prepare(`
+        SELECT rp.*, u.display_name, u.profile_picture_url 
+        FROM room_participants rp
+        JOIN users u ON rp.user_id = u.id
+        WHERE rp.room_code = ? 
+        ORDER BY rp.score DESC
+    `).bind(code).all<any>();
 
     // Current Round Info
     let currentRound = null;
