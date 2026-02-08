@@ -246,12 +246,16 @@ export default function AddLocation() {
         }
     };
 
+    const searchRef = useRef<HTMLInputElement>(null);
+
     useEffect(() => {
         if (!mapsApiKey) return;
-        setOptions({ key: mapsApiKey, v: "weekly" });
+        setOptions({ key: mapsApiKey, v: "weekly", libraries: ["places"] }); // Add places library
         const initMap = async () => {
             const { Map } = await importLibrary("maps") as google.maps.MapsLibrary;
             const { Marker } = await importLibrary("marker") as google.maps.MarkerLibrary;
+            const { Autocomplete } = await importLibrary("places") as google.maps.PlacesLibrary;
+
             if (mapRef.current) {
                 const center = marker || { lat: 22.3193, lng: 114.1694 };
                 const map = new Map(mapRef.current, { center, zoom: marker ? 15 : 11 });
@@ -281,10 +285,36 @@ export default function AddLocation() {
                         }
                     }
                 });
+
+                // Setup Autocomplete
+                if (searchRef.current) {
+                    const autocomplete = new Autocomplete(searchRef.current, {
+                        fields: ["geometry", "name"],
+                    });
+                    autocomplete.bindTo("bounds", map);
+
+                    autocomplete.addListener("place_changed", () => {
+                        const place = autocomplete.getPlace();
+                        if (!place.geometry || !place.geometry.location) {
+                            return;
+                        }
+
+                        if (place.geometry.viewport) {
+                            map.fitBounds(place.geometry.viewport);
+                        } else {
+                            map.setCenter(place.geometry.location);
+                            map.setZoom(17);
+                        }
+                        // Explicitly NOT setting marker here, as requested by user.
+                    });
+                }
             }
         };
-        initMap();
-    }, [mapsApiKey]);
+        // Re-run initMap when evidenceStep changes back to false (mounting map)
+        if (!evidenceStep) {
+            initMap();
+        }
+    }, [mapsApiKey, evidenceStep]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-50 p-8">
@@ -376,7 +406,16 @@ export default function AddLocation() {
 
                             <div className="space-y-4">
                                 <label className="block text-sm font-medium text-slate-400">Step 2: Pinpoint on Map</label>
-                                <div className="h-64 rounded-2xl overflow-hidden border border-slate-800" ref={mapRef} />
+                                <div className="space-y-2">
+                                    <input
+                                        ref={searchRef}
+                                        type="text"
+                                        placeholder="Search area (e.g. 'Tokyo Tower')"
+                                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:border-blue-500 outline-none"
+                                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }} // Prevent form submission
+                                    />
+                                    <div className="h-64 rounded-2xl overflow-hidden border border-slate-800" ref={mapRef} />
+                                </div>
                             </div>
 
                             {/* Evidence List Preview */}
