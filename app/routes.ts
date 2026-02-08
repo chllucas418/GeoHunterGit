@@ -36,6 +36,5 @@ export default [
     route("api/room/:code/status", "routes/api.room.$code.status.ts"),
     route("api/room/:code/submit", "routes/api.room.$code.submit.ts"),
 
-    // Migration Route
-    route("api/migrate-images", "routes/api.migrate-images.ts")
+    // Migration Route (Deleted)
 ] satisfies RouteConfig;
