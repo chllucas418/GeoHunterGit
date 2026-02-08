@@ -215,7 +215,7 @@ export default function StudentLiveGame() {
                 // We can re-use the round_result endpoint
                 const resultFetcher = fetch(`/api/room/${code}/round_result`).then(res => res.json()).then((data: any) => {
                     if (data.score !== undefined) {
-                        setResult(prev => ({ ...prev, ...data }));
+                        setResult((prev: any) => ({ ...prev, ...data }));
                     }
                 });
             }
@@ -594,101 +594,76 @@ export default function StudentLiveGame() {
                 })()
             )}
 
-        </div> // End of Column 3 (wait, this is getting nested inside Column 3???)
-            {/* The previous code ended Column 2, then started Column 3. */ }
-    {/* I need to place this Modal OUTSIDE columns, at the root of the layout. */ }
-    {/* Let's verify line numbers. Line 534 starts Column 3. Line 547 closes Column 3 div. */ }
-    {/* AND Line 547 was "</div>" which closed the row flex container? */ }
-    {/* Let's look at file view 775. Line 547 is "</div>". */ }
-    {/* Line 398 opens the main container. */ }
-    {/* Line 401 opens Col 1. */ }
-    {/* Line 506 closes Col 1. */ }
-    {/* Line 509 opens Col 2. */ }
-    {/* Line 531 closes Col 2. */ }
-    {/* Line 534 opens Col 3. */ }
-    {/* Line 547 closes Col 3? Wait. */ }
-    {/* If line 547 is </div>, and line 398 is the main container... */ }
-    {/* I should place the modal BEFORE the final closing div of the main container. */ }
-    {/* If 547 is the closing of Col 3, then I need to find the closing of Main. */ }
-    {/* But the provided view ended at 600. */ }
-    {/* Let's check where the main container closes. */ }
-    {/* Actually, I can just put it inside Col 3 if Col 3 is full screen in Result mode? */ }
-    {/* But I want it to cover everything. `absolute inset-0` on `fixed`? */ }
-    {/* Using `fixed inset-0` is safer. */ }
+            {result ? (
+                result.score !== undefined ? (
+                    <div className="p-6">
+                        <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
+                        <p className="text-xs text-green-400 uppercase">Score</p>
+                        <hr className="border-white/10 my-4" />
 
-    {
-        result ? (
-            result.score !== undefined ? (
-                <div className="p-6">
-                    <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
-                    <p className="text-xs text-green-400 uppercase">Score</p>
-                    <hr className="border-white/10 my-4" />
+                        <div className="text-xl font-bold">
+                            {result.distance !== undefined && !isNaN(result.distance)
+                                ? `${Math.round(result.distance)}m`
+                                : "-- m"}
+                        </div>
+                        <p className="text-xs text-slate-500 uppercase">Deviation</p>
 
-                    <div className="text-xl font-bold">
-                        {result.distance !== undefined && !isNaN(result.distance)
-                            ? `${Math.round(result.distance)}m`
-                            : "-- m"}
-                    </div>
-                    <p className="text-xs text-slate-500 uppercase">Deviation</p>
-
-                    <div className="mt-8 space-y-4">
-                        <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
-                        {result.aiFeedback && result.aiFeedback.results && result.aiFeedback.results.length > 0 ? (
-                            result.aiFeedback.results.map((item: any, i: number) => (
-                                <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
-                                    <div className="flex justify-between">
-                                        <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
-                                    </div>
-                                    <p className="opacity-80 leading-snug">{item.explanation}</p>
-                                </div>
-                            ))
-                        ))
-                        ) : (
-                        <p className="text-xs text-slate-500 italic mb-4">No anomalies detected by agent.</p>
-                                )}
-
-                        {/* Missed Evidence List */}
-                        {(result?.officialEvidence || currentRound?.evidence)?.length > 0 && (
-                            <div className="mt-4 space-y-2">
-                                <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
-                                {(result?.officialEvidence || currentRound?.evidence).map((ev: any) => (
-                                    <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
+                        <div className="mt-8 space-y-4">
+                            <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
+                            {result.aiFeedback && result.aiFeedback.results && result.aiFeedback.results.length > 0 ? (
+                                result.aiFeedback.results.map((item: any, i: number) => (
+                                    <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
                                         <div className="flex justify-between">
-                                            <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                            <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
                                         </div>
-                                        {ev.ai_analysis && (
-                                            <p className="opacity-70 leading-snug">{ev.ai_analysis}</p>
-                                        )}
+                                        <p className="opacity-80 leading-snug">{item.explanation}</p>
                                     </div>
-                                ))}
-                            </div>
-                        )}
+                                ))
+                            ) : (
+                                <p className="text-xs text-slate-500 italic mb-4">No anomalies detected by agent.</p>
+                            )}
 
-                        {/* Matched Evidence Summary */}
-                        {result.evidenceScore > 0 && (
-                            <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
-                                <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
-                                <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
-                            </div>
-                        )}
-                    </div>
+                            {/* Missed Evidence List */}
+                            {(result?.officialEvidence || currentRound?.evidence)?.length > 0 && (
+                                <div className="mt-4 space-y-2">
+                                    <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
+                                    {(result?.officialEvidence || currentRound?.evidence).map((ev: any) => (
+                                        <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
+                                            <div className="flex justify-between">
+                                                <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                            </div>
+                                            {ev.ai_analysis && (
+                                                <p className="opacity-70 leading-snug">{ev.ai_analysis}</p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
 
-                    <div className="mt-8">
-                        <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
+                            {/* Matched Evidence Summary */}
+                            {result.evidenceScore > 0 && (
+                                <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
+                                    <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
+                                    <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-8">
+                            <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="p-6 text-center text-slate-500 italic">
+                        {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
+                    </div>
+                )
             ) : (
                 <div className="p-6 text-center text-slate-500 italic">
-                    {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
+                    Analysis Complete. Data Encrypted. Waiting for HQ Reveal...
                 </div>
             )
-        ) : (
-            <div className="p-6 text-center text-slate-500 italic">
-                Analysis Complete. Data Encrypted. Waiting for HQ Reveal...
-            </div>
-        )
-    }
-            </div >
-        </div >
+            }
+        </div>
     );
 }

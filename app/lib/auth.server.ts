@@ -15,6 +15,7 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 
 const ENCODER = new TextEncoder();
 
+
 /**
  * Hashing a password with PBKDF2
  */
@@ -97,10 +98,10 @@ export const sessionStorage = createCookieSessionStorage({
         httpOnly: true,
         path: "/",
         sameSite: "lax",
-        secrets: [sessionSecret],
-        secure: true, // Only sends over HTTPS
     },
 });
+
+export const { commitSession, destroySession } = sessionStorage;
 
 // ... imports ...
 
