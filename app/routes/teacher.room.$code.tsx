@@ -150,7 +150,25 @@ export default function TeacherRoom() {
             setReviewMap(null);
             markersRef.current = [];
         }
-    }, [roomState, mapsApiKey]); // Depend on roomState, not room.status which might crash
+    }, [roomState, mapsApiKey]);
+
+    // Trigger animation on mount if in playing state
+    // Trigger animation on mount or when data first arrives if in playing state
+    useEffect(() => {
+        if (roomState?.room?.status === 'PLAYING') {
+            // Only trigger if we haven't shown it yet or if it's a fresh load (introStage is default 3? No, default 0?)
+            // Actually, we want it to run once per round.
+            // The polling effect handles round changes.
+            // This effect handles the INITIAL load if the user refreshes mid-game.
+            setIntroStage(0);
+            setTimeout(() => setIntroStage(1), 500);
+            setTimeout(() => setIntroStage(2), 3500);
+            setTimeout(() => setIntroStage(3), 4500);
+        }
+    }, []); // Run ONCE on mount using the initial loader data (if any)
+    // Wait, roomState comes from loader?? 
+    // If roomState is from useState(loaderData), it's set initially.
+    // Let's verify initial state.
 
 
     // Polling Logic
@@ -162,7 +180,7 @@ export default function TeacherRoom() {
             if (fetcher.state === "idle") {
                 fetcher.load(`/api/room/${code}/status`);
             }
-        }, 2000);
+        }, 1000); // Poll faster (1s) to catch state changes, though timer handles local tick
         return () => clearInterval(interval);
     }, [code]);
 
@@ -170,7 +188,17 @@ export default function TeacherRoom() {
     useEffect(() => {
         if (fetcher.data) {
             const data = fetcher.data as any;
+
+            // Detect Round Change for Animation
+            if (data.currentRound?.index !== roomState?.currentRound?.index) {
+                setIntroStage(0);
+                setTimeout(() => setIntroStage(1), 1000);
+                setTimeout(() => setIntroStage(2), 4000);
+                setTimeout(() => setIntroStage(3), 5000); // End intro
+            }
+
             setRoomState(data);
+            // ... rest of logic
 
             // Sync Timer if playing
             if (data.room.status === 'PLAYING' && data.currentRound) {
@@ -195,7 +223,7 @@ export default function TeacherRoom() {
     const renderLobby = () => (
         <div className="flex flex-col items-center justify-center h-full space-y-12 animate-in fade-in">
             <div className="text-center space-y-4">
-                <p className="text-2xl uppercase font-bold text-blue-400 tracking-widest">Join at geohunter.com/join</p>
+                <p className="text-2xl uppercase font-bold text-blue-400 tracking-widest">Join at hkgeohunter.com/join</p>
                 <h1 className="text-9xl font-black text-white tracking-tighter bg-white/10 px-12 py-6 rounded-3xl border-4 border-dashed border-white/20">
                     {code}
                 </h1>
@@ -327,8 +355,13 @@ export default function TeacherRoom() {
                                             height: `${ev.box.h / 10}%`
                                         }}
                                     >
-                                        <div className="bg-yellow-500 text-black text-[9px] font-bold px-1 rounded-sm shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap max-w-[150px]">
-                                            {ev.ai_analysis ? `🤖 AI: ${ev.ai_analysis}` : ev.description}
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] bg-slate-900 border border-yellow-500/50 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[150px] pointer-events-none">
+                                            {ev.ai_analysis ? (
+                                                <>
+                                                    <span className="text-yellow-400 block mb-1">🤖 AI Analysis:</span>
+                                                    {ev.ai_analysis}
+                                                </>
+                                            ) : ev.description}
                                         </div>
                                     </div>
                                 ))}
@@ -368,31 +401,19 @@ export default function TeacherRoom() {
                             Deployment Log
                         </h3>
                         {participants.map((p: any, i: number) => (
-                            <div key={i} className={`flex items-center justify-between p-2 rounded-lg border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
-                                <div key={p.user_id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 group">
-                                    <div className="flex items-center gap-3">
-                                        {p.profile_picture_url ? (
-                                            <img src={p.profile_picture_url} alt={p.display_name} className="w-8 h-8 rounded-full border border-white/20 object-cover" />
-                                        ) : (
-                                            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white">
-                                                {p.display_name[0]}
-                                            </div>
-                                        )}
-                                        <div>
-                                            <div className="text-sm font-bold text-white">{p.display_name}</div>
-                                            <div className="text-[10px] text-slate-400 font-mono">Score: {p.score}</div>
-                                        </div>
+                            <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-white'}`}>
+                                        {i + 1}
                                     </div>
-                                    <fetcher.Form method="delete" action={`/api/room/${code}/participants`}>
-                                        <input type="hidden" name="studentId" value={p.user_id} />
-                                        <button
-                                            className="text-[10px] text-red-500 hover:text-red-400 uppercase font-bold opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={(e) => !confirm("Remove this student?") && e.preventDefault()}
-                                        >
-                                            Remove
-                                        </button>
-                                    </fetcher.Form>
-                                </div></div>))}
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-lg text-white truncate max-w-[200px]">{p.display_name}</span>
+                                        {i === 0 && <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest">Current Leader</span>}
+                                    </div>
+                                </div>
+                                <span className="font-mono text-2xl text-blue-300 font-black">{p.score}</span>
+                            </div>
+                        ))}
                     </div>
 
                     <div className="p-6 border-t border-white/10 bg-slate-900">

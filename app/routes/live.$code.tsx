@@ -154,7 +154,7 @@ export default function StudentLiveGame() {
             if (fetcher.state === "idle") {
                 fetcher.load(`/api/room/${code}/status`);
             }
-        }, 2000);
+        }, 1000);
         return () => clearInterval(interval);
     }, [code]);
 
@@ -174,7 +174,15 @@ export default function StudentLiveGame() {
     useEffect(() => {
         if (fetcher.data) {
             const newData = fetcher.data as any;
-            const newIndex = newData.room.current_index;
+            const newIndex = newData.room?.current_index;
+
+            // Detect Round Change for Animation
+            if (lastRoundIndex.current !== -1 && lastRoundIndex.current !== newIndex) {
+                setIntroStage(0);
+                setTimeout(() => setIntroStage(1), 500);
+                setTimeout(() => setIntroStage(2), 3500);
+                setTimeout(() => setIntroStage(3), 4500);
+            }
 
             // Detect Round Change using Ref to prevent stale closures
             if (lastRoundIndex.current !== -1 && lastRoundIndex.current !== newIndex) {
@@ -200,7 +208,17 @@ export default function StudentLiveGame() {
 
             lastRoundIndex.current = newIndex;
             setRoomState(newData);
-            // Timer is now handled by the separate effect above
+
+            // Fetch Detailed Result on Review
+            if (newData.room.status === 'REVIEW' && !result?.officialEvidence) {
+                // We need distinct result fetch to get the official Evidence comparison
+                // We can re-use the round_result endpoint
+                const resultFetcher = fetch(`/api/room/${code}/round_result`).then(res => res.json()).then((data: any) => {
+                    if (data.score !== undefined) {
+                        setResult(prev => ({ ...prev, ...data }));
+                    }
+                });
+            }
         }
     }, [fetcher.data]);
 
@@ -390,6 +408,9 @@ export default function StudentLiveGame() {
                             <div className="mb-2 text-[10px] font-mono text-blue-300 tracking-widest uppercase">Incoming Transmission</div>
                             <h1 className="text-6xl font-black text-white tracking-tighter mb-2">SECTOR {location.id?.slice(-4).toUpperCase()}</h1>
                             <div className="text-4xl font-black text-yellow-400">{"★".repeat(Math.ceil((location.difficulty_rating || 1) / 2))}</div>
+                            <div className="mt-2 text-[10px] font-mono font-bold text-blue-300 uppercase tracking-widest border border-blue-500/30 px-2 py-1 rounded bg-blue-500/10 inline-block">
+                                {currentRound.evidenceCount || 0} Intel Items
+                            </div>
                         </div>
                     </div>
                 )}
@@ -433,17 +454,48 @@ export default function StudentLiveGame() {
                                 </div>
                             ))}
 
-                            {/* Official Evidence (Yellow) - Only in Review */}
-                            {room.status === 'REVIEW' && currentRound?.evidence?.map((ev: any) => {
+                            {/* Official Evidence - Only in Review */}
+                            {room.status === 'REVIEW' && (result?.officialEvidence || currentRound?.evidence)?.map((ev: any) => {
                                 let box;
                                 try { box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box; } catch (e) { return null; }
                                 if (!box) return null;
+
+                                // Check if user found this evidence
+                                // result.evidenceFound is usually an array of IDs of OFFICIAL evidence found.
+                                // Or check result.userEvidence? 
+                                // Submit API saves "evidence_found" as list of IDs.
+                                // round_result returns "evidenceFound" (parsed).
+                                const isFound = result?.evidenceFound?.includes(ev.id); // result might differ structure, checking logic...
+                                // In round_result.ts: evidenceFound = guess.evidence_found ? JSON.parse...
+                                // Wait, round_result.ts didn't return "evidenceFound" explicitly in JSON!
+                                // It returned `userEvidence` (which is room_evidence table) and `guesses`.
+                                // Let's check api.room.$code.round_result.ts return structure again.
+                                // Step 710: returns { guesses, userEvidence, officialEvidence ... }
+                                // It does NOT return `evidenceFound` array explicitly, but `guesses` has `evidence_found` string.
+
+                                let foundIds: string[] = [];
+                                if (result?.guesses && result.guesses.length > 0) {
+                                    try { foundIds = JSON.parse(result.guesses[0].evidence_found || "[]"); } catch (e) { }
+                                } else if (result?.evidence_found) {
+                                    // From existingGuess or direct result
+                                    try { foundIds = typeof result.evidence_found === 'string' ? JSON.parse(result.evidence_found) : result.evidence_found; } catch (e) { }
+                                }
+
+                                const wasFound = foundIds.includes(ev.id);
+
                                 return (
-                                    <div key={ev.id} className="absolute border-2 border-yellow-400 bg-yellow-400/10 flex flex-col items-start p-1"
+                                    <div key={ev.id} className={`absolute border-2 ${wasFound ? 'border-yellow-400 bg-yellow-400/10' : 'border-red-500 bg-red-500/10'} flex flex-col items-start p-1`}
                                         style={{ left: `${box.x / 10}%`, top: `${box.y / 10}%`, width: `${box.w / 10}%`, height: `${box.h / 10}%` }}
                                     >
-                                        <div className="bg-yellow-500 text-black text-[9px] font-bold px-1 rounded-sm shadow opacity-0 group-hover:opacity-100 transition-opacity">
-                                            {ev.description}
+                                        <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] ${wasFound ? 'bg-yellow-500 text-black' : 'bg-red-600 text-white'} text-[9px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[150px] pointer-events-none`}>
+                                            {ev.ai_analysis ? (
+                                                <>
+                                                    <span className={`block mb-1 ${wasFound ? 'text-black' : 'text-red-200'}`}>
+                                                        {wasFound ? "✅ Verified Intel:" : "❌ Missed Intel:"}
+                                                    </span>
+                                                    {ev.ai_analysis}
+                                                </>
+                                            ) : ev.description}
                                         </div>
                                     </div>
                                 );

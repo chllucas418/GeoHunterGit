@@ -78,9 +78,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <NavigationOverlay />
 
         {/* Theme Toggle (Fixed) */}
-        <div className="fixed bottom-6 left-6 z-50">
-          <ThemeToggle />
-        </div>
+
 
         <footer className="relative z-20 py-8 mt-auto text-center border-t border-white/5 bg-black/40 backdrop-blur-md transition-colors duration-500 footer-glass">
           <div className="flex justify-center gap-6 text-[10px] uppercase font-bold tracking-[0.2em] text-white/40 mb-2">
@@ -99,22 +97,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ThemeToggle() {
-  const toggleTheme = () => {
-    const isLight = document.body.classList.toggle("light-mode");
-    localStorage.setItem("theme", isLight ? "light" : "dark");
-  };
 
-  return (
-    <button
-      onClick={toggleTheme}
-      className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-all shadow-lg text-[10px]"
-      title="Toggle Visual Mode"
-    >
-      ◐
-    </button>
-  );
-}
 
 export default function App() {
   return <Outlet />;

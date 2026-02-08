@@ -56,9 +56,11 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             // Evidence
             // Only fetch evidence if needed (e.g. for Review)
             let evidence = [];
+            const allEvidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+            const evidenceCount = allEvidence.results?.length || 0;
+
             if (room.status === 'REVIEW') {
-                const evResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
-                evidence = evResult.results || [];
+                evidence = allEvidence.results || [];
             }
 
             // Submission Count (for Loading Status)
@@ -72,6 +74,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                 startTime: room.round_start_time,
                 location: maskedLocation,
                 evidence: evidence,
+                evidenceCount: evidenceCount,
                 submissionCount: submissionCount?.count || 0,
                 timeLimit: room.time_limit || 120 // Default 120 if not set
             };
