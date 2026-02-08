@@ -50,5 +50,14 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
     }
 
+    if (action === "UPDATE_SETTINGS") {
+        const hintInterval = parseInt(formData.get("hintInterval") as string);
+        if (hintInterval && hintInterval > 0) {
+            await db.prepare(
+                "UPDATE rooms SET hint_interval = ? WHERE code = ?"
+            ).bind(hintInterval, code).run();
+        }
+    }
+
     return Response.json({ success: true });
 }

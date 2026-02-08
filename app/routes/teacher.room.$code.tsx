@@ -220,6 +220,8 @@ export default function TeacherRoom() {
 
     // --- RENDERERS ---
 
+    // --- RENDERERS ---
+
     const renderLobby = () => (
         <div className="flex flex-col items-center justify-center h-full space-y-12 animate-in fade-in">
             <div className="text-center space-y-4">
@@ -242,6 +244,31 @@ export default function TeacherRoom() {
                 </div>
             </div>
 
+            {/* Settings Config */}
+            <div className="bg-slate-900 border border-white/10 p-6 rounded-xl flex gap-8 items-center">
+                <div className="flex flex-col">
+                    <label className="text-xs uppercase font-bold text-slate-400 mb-2">Hint Frequency</label>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="number"
+                            defaultValue={room.hint_interval || 30}
+                            min="5" max="120"
+                            className="bg-black/50 border border-white/20 rounded px-3 py-2 text-white font-mono w-20 text-center"
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (val > 0) {
+                                    const fd = new FormData();
+                                    fd.append("action", "UPDATE_SETTINGS");
+                                    fd.append("hintInterval", val.toString());
+                                    actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
+                                }
+                            }}
+                        />
+                        <span className="text-sm text-slate-400">seconds</span>
+                    </div>
+                </div>
+            </div>
+
             <div className="fixed bottom-12 inset-x-0 flex justify-center">
                 <button
                     onClick={() => actionFetcher.submit({ action: "START_GAME" }, { method: "post", action: `/api/room/${code}/action` })}
@@ -255,57 +282,81 @@ export default function TeacherRoom() {
 
 
 
-    const renderPlaying = () => (
-        <div className="h-full flex flex-col relative">
-            {/* Header / Timer */}
-            <div className="absolute top-0 inset-x-0 z-50 p-6 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent">
-                <div className="bg-black/60 backdrop-blur-md px-6 py-2 rounded-xl border border-white/10">
-                    <span className="text-lg font-mono font-bold text-blue-300">ROUND {currentRound.index + 1}/{currentRound.total}</span>
-                </div>
-                <div className={`text-6xl font-black font-mono tracking-tighter drop-shadow-lg ${timeLeft < 30 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-                    {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-                </div>
-                <div className="bg-black/60 backdrop-blur-md px-6 py-2 rounded-xl border border-white/10">
-                    <span className="text-lg font-mono font-bold text-green-300">{participants.length} Active</span>
-                </div>
-            </div>
+    const renderPlaying = () => {
+        // Calculate Hint Status
+        const HINT_INTERVAL = room?.hint_interval || 30;
+        const HINT_START_DELAY = 5;
+        // How long has round been running?
+        const secondsElapsed = currentRound.startTime ? Math.floor((Date.now() - currentRound.startTime) / 1000) : 0;
+        const timeUntilNextHint = Math.max(0, HINT_INTERVAL - ((secondsElapsed - HINT_START_DELAY) % HINT_INTERVAL));
+        const hintCount = Math.floor((secondsElapsed - HINT_START_DELAY) / HINT_INTERVAL) + 1;
 
-            {/* Intro Splash */}
-            {introStage < 3 && currentRound?.location && (
-                <div className={`absolute inset-0 z-[60] flex items-center justify-center pointer-events-none transition-all duration-1000 ease-in-out bg-black/60 backdrop-blur-xl ${introStage === 2 ? 'opacity-0' : 'opacity-100'}`}>
-                    <div className="text-center">
-                        <div className="mb-2 text-[10px] font-mono text-blue-300 tracking-widest uppercase">Incoming Transmission</div>
-                        <h1 className="text-6xl font-black text-white tracking-tighter mb-2">SECTOR {currentRound.location.id?.slice(-4).toUpperCase()}</h1>
-                        <div className="text-4xl font-black text-yellow-400">{"★".repeat(Math.ceil((currentRound.location.difficulty_rating || 1) / 2))}</div>
+        return (
+            <div className="h-full flex flex-col relative">
+                {/* Header / Timer */}
+                <div className="absolute top-0 inset-x-0 z-50 p-6 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent">
+                    <div className="bg-black/60 backdrop-blur-md px-6 py-2 rounded-xl border border-white/10 flex flex-col items-center">
+                        <span className="text-xs text-slate-400 uppercase tracking-widest mb-1">Mission Progress</span>
+                        <span className="text-lg font-mono font-bold text-blue-300">ROUND {currentRound.index + 1}/{currentRound.total}</span>
+                    </div>
+
+                    <div className="flex flex-col items-center">
+                        <div className={`text-6xl font-black font-mono tracking-tighter drop-shadow-lg ${timeLeft < 30 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                            {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                        </div>
+
+                        {/* Hint Timer Display for Teacher */}
+                        <div className="mt-2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-1 border border-white/10">
+                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                            <span className="text-xs text-yellow-100 font-mono uppercase">
+                                Hint {Math.max(0, hintCount)} incoming in {timeUntilNextHint}s
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="bg-black/60 backdrop-blur-md px-6 py-2 rounded-xl border border-white/10 flex flex-col items-center">
+                        <span className="text-xs text-slate-400 uppercase tracking-widest mb-1">Active Agents</span>
+                        <span className="text-lg font-mono font-bold text-green-300">{participants.length} Online</span>
                     </div>
                 </div>
-            )}
 
-            {/* Full screen Image */}
-            {currentRound?.location?.image_url && (
-                <div className="absolute inset-0 z-0">
-                    <img
-                        src={currentRound.location.image_url}
-                        className="w-full h-full object-cover"
-                        alt="Location"
-                    />
+                {/* Intro Splash */}
+                {introStage < 3 && currentRound?.location && (
+                    <div className={`absolute inset-0 z-[60] flex items-center justify-center pointer-events-none transition-all duration-1000 ease-in-out bg-black/60 backdrop-blur-xl ${introStage === 2 ? 'opacity-0' : 'opacity-100'}`}>
+                        <div className="text-center">
+                            <div className="mb-2 text-[10px] font-mono text-blue-300 tracking-widest uppercase">Incoming Transmission</div>
+                            <h1 className="text-6xl font-black text-white tracking-tighter mb-2">SECTOR {currentRound.location.id?.slice(-4).toUpperCase()}</h1>
+                            <div className="text-4xl font-black text-yellow-400">{"★".repeat(Math.ceil((currentRound.location.difficulty_rating || 1) / 2))}</div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Full screen Image */}
+                {currentRound?.location?.image_url && (
+                    <div className="absolute inset-0 z-0">
+                        <img
+                            src={currentRound.location.image_url}
+                            className="w-full h-full object-cover"
+                            alt="Location"
+                        />
+                    </div>
+                )}
+
+                {/* Teacher Control */}
+                <div className="absolute bottom-12 right-12 z-50">
+                    <button
+                        onClick={() => actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` })}
+                        className="px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 rounded-2xl text-white font-bold uppercase tracking-widest hover:scale-105 transition-all flex flex-col items-center"
+                    >
+                        <span>Reveal Intel →</span>
+                        <span className="text-[10px] text-blue-300 mt-1">
+                            {roomState.currentRound?.submissionCount || 0} / {participants.length} Reported
+                        </span>
+                    </button>
                 </div>
-            )}
-
-            {/* Teacher Control */}
-            <div className="absolute bottom-12 right-12 z-50">
-                <button
-                    onClick={() => actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` })}
-                    className="px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 rounded-2xl text-white font-bold uppercase tracking-widest hover:scale-105 transition-all flex flex-col items-center"
-                >
-                    <span>Reveal Intel →</span>
-                    <span className="text-[10px] text-blue-300 mt-1">
-                        {roomState.currentRound?.submissionCount || 0} / {participants.length} Reported
-                    </span>
-                </button>
             </div>
-        </div>
-    );
+        );
+    }
 
     // --- REVIEW MAP LOGIC MOVED TO TOP ---
 

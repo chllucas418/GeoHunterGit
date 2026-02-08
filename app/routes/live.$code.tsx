@@ -276,7 +276,7 @@ export default function StudentLiveGame() {
     }, [guess, mapInstance]);
 
     // 3. Hint Logic
-    const HINT_INTERVAL = 10;
+    const HINT_INTERVAL = room?.hint_interval || 30; // Default to 30s if not set
     const HINT_START_DELAY = 5;
     const timeUntilNext = Math.max(0, HINT_INTERVAL - ((secondsElapsed - HINT_START_DELAY) % HINT_INTERVAL));
     const progress = Math.min(100, Math.max(0, ((HINT_INTERVAL - timeUntilNext) / HINT_INTERVAL) * 100));
@@ -288,25 +288,63 @@ export default function StudentLiveGame() {
             if (count > 0 && count <= hintList.length) {
                 if (visibleHints.length < count) {
                     setVisibleHints(hintList.slice(0, count));
+
+                    // Smart Map Movement: Only move if user is NOT looking at the target area
+                    if (mapInstance && location.lat && location.lng) {
+                        const currentCenter = mapInstance.getCenter();
+                        const currentZoom = mapInstance.getZoom();
+
+                        // Simple distance check (approximate degrees)
+                        // 0.005 degrees is roughly 500m
+                        const distLat = Math.abs(currentCenter!.lat() - location.lat);
+                        const distLng = Math.abs(currentCenter!.lng() - location.lng);
+                        const isClose = (distLat < 0.005 && distLng < 0.005);
+                        const isZoomedIn = (currentZoom !== undefined && currentZoom >= 14);
+
+                        if (!isClose || !isZoomedIn) {
+                            const offsetLat = (Math.random() - 0.5) * 0.006;
+                            const offsetLng = (Math.random() - 0.5) * 0.006;
+                            mapInstance.panTo({
+                                lat: location.lat + offsetLat,
+                                lng: location.lng + offsetLng
+                            });
+                            mapInstance.setZoom(15);
+                        } else {
+                            // User is already close, maybe just flash a message?
+                            // For now, silently add the hint without disrupting their view
+                        }
+                    }
                 }
             } else if (count > hintList.length && !hasZoomed && mapInstance) {
+                // Final "Vicinity Scan" zoom if they haven't found it yet
                 if (secondsElapsed > (HINT_START_DELAY + (hintList.length * HINT_INTERVAL))) {
-                    setHasZoomed(true);
-                    // Only zoom if we actually have coordinates (Server masks them in PLAYING mode)
-                    if (location && typeof location.lat === 'number' && typeof location.lng === 'number') {
-                        const offsetLat = (Math.random() - 0.5) * 0.006;
-                        const offsetLng = (Math.random() - 0.5) * 0.006;
-                        mapInstance.panTo({
-                            lat: location.lat + offsetLat,
-                            lng: location.lng + offsetLng
-                        });
-                        mapInstance.setZoom(15);
-                        setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
+
+                    // Same smart check
+                    const currentCenter = mapInstance.getCenter();
+                    const currentZoom = mapInstance.getZoom();
+                    const distLat = Math.abs(currentCenter!.lat() - location.lat);
+                    const distLng = Math.abs(currentCenter!.lng() - location.lng);
+                    const isClose = (distLat < 0.005 && distLng < 0.005);
+                    const isZoomedIn = (currentZoom !== undefined && currentZoom >= 14);
+
+                    if (!isClose || !isZoomedIn) {
+                        setHasZoomed(true);
+                        // Only zoom if we actual have coordinates
+                        if (location && typeof location.lat === 'number' && typeof location.lng === 'number') {
+                            const offsetLat = (Math.random() - 0.5) * 0.006;
+                            const offsetLng = (Math.random() - 0.5) * 0.006;
+                            mapInstance.panTo({
+                                lat: location.lat + offsetLat,
+                                lng: location.lng + offsetLng
+                            });
+                            mapInstance.setZoom(15);
+                            setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
+                        }
                     }
                 }
             }
         }
-    }, [secondsElapsed, hintList, mapInstance, hasZoomed, submitted]);
+    }, [secondsElapsed, hintList, mapInstance, hasZoomed, submitted, HINT_INTERVAL]);
 
     // --- HANDLERS ---
     const handleBoxDrawn = (box: BoxCoordinates | null) => {
