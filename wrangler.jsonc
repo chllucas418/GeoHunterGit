@@ -17,6 +17,12 @@
 			"database_id": "ee235934-df1c-49d2-a16c-38fc5fed440e"
 		}
 	],
+	"r2_buckets": [
+		{
+			"binding": "ASSETS_BUCKET",
+			"bucket_name": "geohunter-assets"
+		}
+	],
 	"observability": {
 		"enabled": true
 	},

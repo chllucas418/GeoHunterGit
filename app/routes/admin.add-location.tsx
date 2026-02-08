@@ -75,22 +75,44 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
+    const bucket = env.ASSETS_BUCKET as R2Bucket;
     const existingId = formData.get("existingId") as string;
 
     const metadata = photographer ? JSON.stringify({ photographer }) : null;
 
     try {
         let locationId = existingId;
+        if (!locationId) {
+            locationId = `loc_${Math.random().toString(36).substring(2, 9)}`;
+        }
+
+        // Handle Image Upload to R2 if it's a base64 string
+        let finalImageUrl = imageUrl;
+        if (imageUrl.startsWith("data:")) {
+            // Extract base64 data
+            const matches = imageUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches.length === 3) {
+                const contentType = matches[1];
+                const buffer = Uint8Array.from(atob(matches[2]), c => c.charCodeAt(0));
+
+                const key = `locations/${locationId}.jpg`; // Normalize to jpg or determine extension from contentType
+
+                await bucket.put(key, buffer, {
+                    httpMetadata: { contentType: contentType }
+                });
+
+                finalImageUrl = `https://assets.hkgeohunter.com/${key}`;
+            }
+        }
 
         if (existingId) {
             await db.prepare(
                 "UPDATE locations SET image_url = ?, lat = ?, lng = ?, difficulty_rating = ?, quality_score = ?, hints = ?, image_metadata = ? WHERE id = ?"
-            ).bind(imageUrl, lat, lng, difficulty, qualityScore, hints, metadata, existingId).run();
+            ).bind(finalImageUrl, lat, lng, difficulty, qualityScore, hints, metadata, existingId).run();
         } else {
-            locationId = `loc_${Math.random().toString(36).substring(2, 9)}`;
             await db.prepare(
                 "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini, hints, image_metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            ).bind(locationId, imageUrl, lat, lng, difficulty, qualityScore, 1, hints, metadata).run();
+            ).bind(locationId, finalImageUrl, lat, lng, difficulty, qualityScore, 1, hints, metadata).run();
         }
 
         // Handle Evidence
