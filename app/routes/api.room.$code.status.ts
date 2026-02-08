@@ -72,7 +72,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                 startTime: room.round_start_time,
                 location: maskedLocation,
                 evidence: evidence,
-                submissionCount: submissionCount?.count || 0
+                submissionCount: submissionCount?.count || 0,
+                timeLimit: room.time_limit || 120 // Default 120 if not set
             };
         }
     }

@@ -175,7 +175,8 @@ export default function TeacherRoom() {
             // Sync Timer if playing
             if (data.room.status === 'PLAYING' && data.currentRound) {
                 const elapsedSec = Math.floor((Date.now() - data.currentRound.startTime) / 1000);
-                const remaining = Math.max(0, 300 - elapsedSec);
+                const limit = data.currentRound.timeLimit || 120; // Default 120s
+                const remaining = Math.max(0, limit - elapsedSec);
                 setTimeLeft(remaining);
 
                 if (remaining === 0) {
@@ -368,15 +369,30 @@ export default function TeacherRoom() {
                         </h3>
                         {participants.map((p: any, i: number) => (
                             <div key={i} className={`flex items-center justify-between p-2 rounded-lg border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-white'}`}>
-                                        {i + 1}
+                                <div key={p.user_id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 group">
+                                    <div className="flex items-center gap-3">
+                                        {p.profile_picture_url ? (
+                                            <img src={p.profile_picture_url} alt={p.display_name} className="w-8 h-8 rounded-full border border-white/20 object-cover" />
+                                        ) : (
+                                            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white">
+                                                {p.display_name[0]}
+                                            </div>
+                                        )}
+                                        <div>
+                                            <div className="text-sm font-bold text-white">{p.display_name}</div>
+                                            <div className="text-[10px] text-slate-400 font-mono">Score: {p.score}</div>
+                                        </div>
                                     </div>
-                                    <span className="font-bold text-sm text-white truncate max-w-[100px]">{p.display_name}</span>
-                                </div>
-                                <span className="font-mono text-xs text-blue-300 font-bold">{p.score}</span>
-                            </div>
-                        ))}
+                                    <fetcher.Form method="delete" action={`/api/room/${code}/participants`}>
+                                        <input type="hidden" name="studentId" value={p.user_id} />
+                                        <button
+                                            className="text-[10px] text-red-500 hover:text-red-400 uppercase font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={(e) => !confirm("Remove this student?") && e.preventDefault()}
+                                        >
+                                            Remove
+                                        </button>
+                                    </fetcher.Form>
+                                </div></div>))}
                     </div>
 
                     <div className="p-6 border-t border-white/10 bg-slate-900">

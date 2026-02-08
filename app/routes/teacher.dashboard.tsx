@@ -53,12 +53,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
     if (intent === "create_room") {
         const setId = formData.get("setId") as string;
 
+        const timeLimit = parseInt(formData.get("timeLimit") as string) || 120;
+
         // Generate flexible 6-digit code
         const code = Math.floor(100000 + Math.random() * 900000).toString();
 
         await db.prepare(
-            "INSERT INTO rooms (code, host_id, map_set_id, status) VALUES (?, ?, ?, 'WAITING')"
-        ).bind(code, userId, setId).run();
+            "INSERT INTO rooms (code, host_id, map_set_id, status, time_limit) VALUES (?, ?, ?, 'WAITING', ?)"
+        ).bind(code, userId, setId, timeLimit).run();
 
         return redirect(`/teacher/room/${code}`);
     }
@@ -195,9 +197,26 @@ export default function TeacherDashboard() {
                                     </div>
 
                                     <div className="relative z-10 mt-auto">
-                                        <Form method="post">
+                                        <Form method="post" className="space-y-4">
                                             <input type="hidden" name="intent" value="create_room" />
                                             <input type="hidden" name="setId" value={set.id} />
+
+                                            {/* Customization Options */}
+                                            <div className="bg-black/20 p-4 rounded-xl space-y-3">
+                                                <div>
+                                                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Time Limit (Sec)</label>
+                                                    <input
+                                                        type="number"
+                                                        name="timeLimit"
+                                                        defaultValue={120}
+                                                        min={30}
+                                                        max={600}
+                                                        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white text-sm font-mono"
+                                                    />
+                                                </div>
+                                                {/* Future: Location Filter UI (Too complex for this card, maybe just 'Limit Count') */}
+                                            </div>
+
                                             <button
                                                 disabled={isSubmitting}
                                                 className="w-full py-4 bg-white text-black rounded-xl font-black uppercase tracking-widest hover:bg-sky-50 transition-all shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 group-hover:shadow-sky-500/20"

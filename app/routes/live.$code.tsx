@@ -147,7 +147,7 @@ export default function StudentLiveGame() {
         }
     }, [location?.id]);
 
-    // 1. Polling & Sync
+    // 1. Polling & Sync (State + Timer)
     useEffect(() => {
         fetcher.load(`/api/room/${code}/status`);
         const interval = setInterval(() => {
@@ -157,6 +157,19 @@ export default function StudentLiveGame() {
         }, 2000);
         return () => clearInterval(interval);
     }, [code]);
+
+    // Timer Interval (Runs every 1s locally)
+    useEffect(() => {
+        const timer = setInterval(() => {
+            if (roomState?.currentRound?.startTime) {
+                const now = Date.now();
+                const start = roomState.currentRound.startTime;
+                const diff = Math.floor((now - start) / 1000);
+                setSecondsElapsed(diff >= 0 ? diff : 0);
+            }
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [roomState?.currentRound?.startTime]);
 
     useEffect(() => {
         if (fetcher.data) {
@@ -179,10 +192,6 @@ export default function StudentLiveGame() {
                 }
                 setMarker(null);
 
-                // Reset Existing Guess (since we moved to new round)
-                // existingGuess from loader is stale now.
-                // We rely on state reset here.
-
                 if (mapInstance) {
                     mapInstance.setZoom(11);
                     mapInstance.setCenter({ lat: 22.3193, lng: 114.1694 });
@@ -191,12 +200,7 @@ export default function StudentLiveGame() {
 
             lastRoundIndex.current = newIndex;
             setRoomState(newData);
-
-            // Sync Timer
-            if (newData.currentRound?.startTime) {
-                const elapsed = Math.floor((Date.now() - newData.currentRound.startTime) / 1000);
-                setSecondsElapsed(elapsed);
-            }
+            // Timer is now handled by the separate effect above
         }
     }, [fetcher.data]);
 

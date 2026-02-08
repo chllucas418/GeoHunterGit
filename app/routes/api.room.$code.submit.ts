@@ -52,16 +52,32 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             return Response.json({ error: "Target location not found in database" }, { status: 500 });
         }
 
-        // Determine Score
-        // 5000 pts max for distance. 
-        // Quadratic Curve: 5000 * (1 - d/7000)^2, clamped at 0
-        const distance = getDistance(lat, lng, trueLoc.lat, trueLoc.lng);
+        // Determine Score (Total 8000 Max = 5000 Dist + 2000 Evidence + 1000 Time)
+
+        // 1. Distance Score: Stricter Cubic Curve
+        // Max 5000 pts. 3km cutoff for 0 pts.
         const MAX_DISTANCE_SCORE = 5000;
-        const MAX_DISTANCE_METERS = 7000; // 7km cutoff
+        const MAX_DISTANCE_METERS = 3000; // 3km limit (was 7km)
+        const distance = getDistance(lat, lng, trueLoc.lat, trueLoc.lng);
 
         let distanceScore = 0;
-        if (distance * 1000 < MAX_DISTANCE_METERS) { // distance is km
-            distanceScore = Math.round(MAX_DISTANCE_SCORE * Math.pow(1 - (distance * 1000) / MAX_DISTANCE_METERS, 2));
+        if ((distance * 1000) < MAX_DISTANCE_METERS) {
+            // Cubic Decay: (1 - d/max)^3
+            // 0m = 1.0, 1.5km = 0.125, 3km = 0
+            distanceScore = Math.round(MAX_DISTANCE_SCORE * Math.pow(1 - (distance * 1000) / MAX_DISTANCE_METERS, 3));
+        }
+
+        // 2. Time Score: Speed Bonus
+        // Max 1000 pts. Decays over 60 seconds (or Round Duration).
+        // If undefined duration, assume 120s max.
+        // Bonus = 1000 * (1 - elapsed/120)
+        let timeScore = 0;
+        if (room.round_start_time) {
+            const elapsedSeconds = (Date.now() - room.round_start_time) / 1000;
+            const TIME_LIMIT = 120; // Default 2 mins for bonus decay
+            if (elapsedSeconds < TIME_LIMIT) {
+                timeScore = Math.round(1000 * (1 - elapsedSeconds / TIME_LIMIT));
+            }
         }
 
         // --- STEP 2: IMMEDIATE AI ANALYSIS & SCORING ---
@@ -182,7 +198,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
         evidenceScore += aiBonus; // Combine bonus into evidence score for simplicity
 
-        const finalScore = distanceScore + evidenceScore;
+        // Total Score
+        const finalScore = distanceScore + evidenceScore + timeScore;
 
         // Save Guess (Update: Added distance_score and evidence_score columns)
         await db.prepare(
