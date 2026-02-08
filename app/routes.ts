@@ -27,6 +27,7 @@ export default [
     route("admin/users/:userId", "routes/admin.users.$userId.tsx"),
     route("admin/datasets", "routes/admin.datasets.tsx"),
     route("admin/datasets/:setId", "routes/admin.datasets.$setId.tsx"),
+    route("admin/mass-add", "routes/admin.mass-add.tsx"),
 
     // Room APIs
     route("api/room/:code/action", "routes/api.room.$code.action.ts"),

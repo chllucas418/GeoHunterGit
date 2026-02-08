@@ -67,14 +67,14 @@ export default function AdminDashboard() {
                     </Link>
 
                     {/* Add New Location */}
-                    <Link to="/admin/add-location" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-blue-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            +
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Deploy Sensor</h3>
-                            <p className="text-sm text-white/50">Add a new location to the global database.</p>
-                        </div>
+                    <Link to="/admin/add-location" className="block p-6 bg-emerald-600 rounded-lg text-center hover:bg-emerald-500 transition">
+                        <h2 className="text-xl font-bold">Add Location (Single)</h2>
+                        <p className="text-sm opacity-80">Add one location manually</p>
+                    </Link>
+
+                    <Link to="/admin/mass-add" className="block p-6 bg-blue-600 rounded-lg text-center hover:bg-blue-500 transition">
+                        <h2 className="text-xl font-bold">Mass Upload</h2>
+                        <p className="text-sm opacity-80">Drag & Drop Multiple Photos</p>
                     </Link>
                 </div>
             </div>
