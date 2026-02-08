@@ -75,6 +75,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                 location: maskedLocation,
                 evidence: evidence,
                 evidenceCount: evidenceCount,
+                focusedEvidenceId: room.focused_evidence_id,
                 submissionCount: submissionCount?.count || 0,
                 timeLimit: room.time_limit || 120 // Default 120 if not set
             };

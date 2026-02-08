@@ -345,9 +345,13 @@ export default function TeacherRoom() {
                             >
                                 {/* Overlay Official Boxes */}
                                 {officialEvidence?.map((ev: any) => (
-                                    <div
+                                    <button
                                         key={ev.id}
-                                        className="absolute border-2 border-yellow-400 bg-yellow-400/10 flex flex-col items-start p-1"
+                                        onClick={() => actionFetcher.submit(
+                                            { action: "FOCUS_EVIDENCE", evidenceId: ev.id },
+                                            { method: "post", action: `/api/room/${code}/action` }
+                                        )}
+                                        className="absolute border-2 border-yellow-400 bg-yellow-400/10 flex flex-col items-start p-1 transition-all hover:bg-yellow-400/30 hover:scale-105 active:scale-95 cursor-pointer group"
                                         style={{
                                             left: `${ev.box.x / 10}%`,
                                             top: `${ev.box.y / 10}%`,
@@ -355,15 +359,23 @@ export default function TeacherRoom() {
                                             height: `${ev.box.h / 10}%`
                                         }}
                                     >
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] bg-slate-900 border border-yellow-500/50 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[150px] pointer-events-none">
+                                        {/* Tooltip on Hover */}
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] bg-slate-900/90 backdrop-blur-md border border-yellow-500 text-white text-[10px] font-bold px-3 py-2 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[200px] pointer-events-none">
                                             {ev.ai_analysis ? (
                                                 <>
-                                                    <span className="text-yellow-400 block mb-1">🤖 AI Analysis:</span>
-                                                    {ev.ai_analysis}
+                                                    <span className="text-yellow-400 font-black block mb-1 uppercase tracking-wider text-[9px]">🤖 AI Analysis</span>
+                                                    <span className="text-slate-200 font-medium leading-relaxed">{ev.ai_analysis}</span>
                                                 </>
                                             ) : ev.description}
                                         </div>
-                                    </div>
+
+                                        {/* Click Hint */}
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                            <span className="bg-black/50 text-white text-[8px] uppercase font-bold px-1 rounded backdrop-blur">
+                                                Tap to Reveal
+                                            </span>
+                                        </div>
+                                    </button>
                                 ))}
                             </EvidenceCanvas>
                         ) : <div className="flex items-center justify-center h-full text-slate-500">No Image Data</div>}
@@ -416,6 +428,21 @@ export default function TeacherRoom() {
                         ))}
                     </div>
 
+                    {/* Official Evidence List Toggle/View */}
+                    {officialEvidence?.length > 0 && (
+                        <div className="p-4 border-t border-white/10 bg-slate-900/50">
+                            <h4 className="text-[10px] uppercase font-bold text-yellow-500 tracking-wider mb-2">Official Intel</h4>
+                            <div className="space-y-1 max-h-[100px] overflow-y-auto custom-scrollbar">
+                                {officialEvidence.map((ev: any) => (
+                                    <div key={ev.id} className="text-[10px] text-slate-400 border-l-2 border-yellow-500/20 pl-2 hover:border-yellow-500 hover:text-white transition-colors cursor-help group relative">
+                                        <span className="block truncate">{ev.description}</span>
+                                        {/* Optional tooltip for full text if truncated */}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="p-6 border-t border-white/10 bg-slate-900">
                         <button
                             onClick={() => actionFetcher.submit({ action: "NEXT_ROUND" }, { method: "post", action: `/api/room/${code}/action` })}
@@ -425,6 +452,48 @@ export default function TeacherRoom() {
                         </button>
                     </div>
                 </div>
+
+                {/* Teacher Evidence Reveal Modal (Syncs with Students) */}
+                {roomState.currentRound?.focusedEvidenceId && (
+                    (() => {
+                        const focusedItem = officialEvidence.find((e: any) => e.id === roomState.currentRound.focusedEvidenceId);
+                        if (!focusedItem) return null;
+
+                        return (
+                            <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
+                                <div className="bg-slate-900 border-2 border-yellow-500 rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col gap-6">
+
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                            <div className="text-yellow-400 text-xs font-black uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                                                <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                                Broadcasting Intel
+                                            </div>
+                                            <h2 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter">
+                                                {focusedItem.description}
+                                            </h2>
+                                            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                                                <h3 className="text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-2">AI Analysis</h3>
+                                                <p className="text-slate-300 text-sm leading-relaxed">
+                                                    {focusedItem.ai_analysis || "No analysis data."}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end gap-4 pt-4 border-t border-white/10">
+                                        <button
+                                            onClick={() => actionFetcher.submit({ action: "CLEAR_FOCUS" }, { method: "post", action: `/api/room/${code}/action` })}
+                                            className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest rounded-lg shadow-lg hover:scale-105 transition-all"
+                                        >
+                                            Dismiss for Class
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()
+                )}
             </div>
         );
     };
