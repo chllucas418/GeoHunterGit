@@ -36,6 +36,14 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, childr
         return () => observer.disconnect();
     }, []);
 
+    // Check for cached image on mount
+    useEffect(() => {
+        const img = imageContainerRef.current?.querySelector('img');
+        if (img && img.complete && img.naturalHeight > 0) {
+            setImageAspectRatio(img.naturalWidth / img.naturalHeight);
+        }
+    }, [imageUrl]);
+
     const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
         const { naturalWidth, naturalHeight } = e.currentTarget;
         if (naturalHeight > 0) {
@@ -47,23 +55,24 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, childr
     const getContainerStyle = () => {
         if (!imageAspectRatio || !containerDimensions) return { width: '100%', height: '100%' };
 
-        const containerAspectRatio = containerDimensions.width / containerDimensions.height;
+        const { width: cW, height: cH } = containerDimensions;
+        const containerAspectRatio = cW / cH;
 
         if (containerAspectRatio > imageAspectRatio) {
-            // Container is wider than image -> Height matches container, Width is auto (based on aspect)
+            // Container is wider -> Height limited by container, Width calculated
+            const targetHeight = cH;
+            const targetWidth = targetHeight * imageAspectRatio;
             return {
-                height: '100%',
-                width: 'auto',
-                aspectRatio: `${imageAspectRatio}`,
-                maxWidth: '100%' // Ensure no overflow
+                height: `${targetHeight}px`,
+                width: `${targetWidth}px`,
             };
         } else {
-            // Container is narrower than image -> Width matches container, Height is auto (based on aspect)
+            // Container is narrower -> Width limited by container, Height calculated
+            const targetWidth = cW;
+            const targetHeight = targetWidth / imageAspectRatio;
             return {
-                width: '100%',
-                height: 'auto',
-                aspectRatio: `${imageAspectRatio}`,
-                maxHeight: '100%' // Ensure no overflow
+                width: `${targetWidth}px`,
+                height: `${targetHeight}px`,
             };
         }
     };
