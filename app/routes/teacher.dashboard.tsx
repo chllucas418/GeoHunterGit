@@ -54,13 +54,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const setId = formData.get("setId") as string;
 
         const timeLimit = parseInt(formData.get("timeLimit") as string) || 120;
+        const hintInterval = parseInt(formData.get("hintInterval") as string) || 30;
 
         // Generate flexible 6-digit code
         const code = Math.floor(100000 + Math.random() * 900000).toString();
 
         await db.prepare(
-            "INSERT INTO rooms (code, host_id, map_set_id, status, time_limit) VALUES (?, ?, ?, 'WAITING', ?)"
-        ).bind(code, userId, setId, timeLimit).run();
+            "INSERT INTO rooms (code, host_id, map_set_id, status, time_limit, hint_interval) VALUES (?, ?, ?, 'WAITING', ?, ?)"
+        ).bind(code, userId, setId, timeLimit, hintInterval).run();
 
         return redirect(`/teacher/room/${code}`);
     }
@@ -205,13 +206,25 @@ export default function TeacherDashboard() {
                                             <div className="bg-black/20 p-4 rounded-xl space-y-3">
                                                 <div>
                                                     <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Time Limit (Sec)</label>
+                                                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Time Limit (Sec)</label>
                                                     <input
                                                         type="number"
                                                         name="timeLimit"
                                                         defaultValue={120}
                                                         min={30}
                                                         max={600}
-                                                        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white text-sm font-mono"
+                                                        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white text-sm font-mono focus:border-blue-500 focus:outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Hint Frequency (Sec)</label>
+                                                    <input
+                                                        type="number"
+                                                        name="hintInterval"
+                                                        defaultValue={30}
+                                                        min={10}
+                                                        max={120}
+                                                        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white text-sm font-mono focus:border-blue-500 focus:outline-none"
                                                     />
                                                 </div>
                                                 {/* Future: Location Filter UI (Too complex for this card, maybe just 'Limit Count') */}
