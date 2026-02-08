@@ -217,6 +217,10 @@ export default function AddLocation() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // Auto-populate photographer attribute with filename (without extension)
+            const fileName = file.name.split('.').slice(0, -1).join('.');
+            setPhotographer(fileName);
+
             const reader = new FileReader();
             reader.onloadend = () => {
                 const result = reader.result as string;
