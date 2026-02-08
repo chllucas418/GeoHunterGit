@@ -52,7 +52,7 @@ async function callGeminiApi(
         throw new Error(`Gemini API Error: ${response.status} ${response.statusText} - ${await response.text()}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     // Extract text from standard Gemini response structure
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
@@ -64,14 +64,28 @@ export async function checkEvidenceListWithGemini(
     locationName: string,
     adminEvidence: any[] = [],
     baseUrl?: string,
-    gatewayToken?: string
+    gatewayToken?: string,
+    directBase64?: string // Optional: Pass base64 directly if image is local
 ) {
-    const response = await fetch(imageUrl);
-    if (!response.ok) throw new Error("Failed to fetch image");
+    let base64Data = "";
+    let mimeType = "image/jpeg";
 
-    const arrayBuffer = await response.arrayBuffer();
-    const base64Data = arrayBufferToBase64(arrayBuffer);
-    const mimeType = response.headers.get("content-type") || "image/jpeg";
+    if (directBase64) {
+        if (directBase64.startsWith("data:")) {
+            const parts = directBase64.split(",");
+            mimeType = parts[0].split(":")[1].split(";")[0];
+            base64Data = parts[1];
+        } else {
+            base64Data = directBase64;
+        }
+    } else {
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error("Failed to fetch image");
+
+        const arrayBuffer = await response.arrayBuffer();
+        base64Data = arrayBufferToBase64(arrayBuffer);
+        mimeType = response.headers.get("content-type") || "image/jpeg";
+    }
 
     // Prepare Admin Context String for the AI
     const adminContextStr = adminEvidence.map((e, i) =>
@@ -228,5 +242,58 @@ export async function analyzeImageQuality(
     } catch (e) {
         console.error("Gemini API Call Error:", e);
         return { quality_score: 0, precontext: "Reference failed", recommendation: "Error", generated_hints: [] };
+    }
+}
+
+export async function generateEvidenceDescription(
+    apiKey: string,
+    imageUrl: string,
+    evidenceBox: { x: number; y: number; w: number; h: number },
+    baseUrl?: string,
+    gatewayToken?: string,
+    directBase64?: string // Optional: Pass base64 directly if image is local
+) {
+    let base64Data = "";
+    let mimeType = "image/jpeg";
+
+    if (directBase64) {
+        if (directBase64.startsWith("data:")) {
+            const parts = directBase64.split(",");
+            mimeType = parts[0].split(":")[1].split(";")[0];
+            base64Data = parts[1];
+        } else {
+            base64Data = directBase64;
+        }
+    } else {
+        // 1. Fetch image to base64
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error("Failed to fetch image");
+        const arrayBuffer = await response.arrayBuffer();
+        base64Data = arrayBufferToBase64(arrayBuffer);
+        mimeType = response.headers.get("content-type") || "image/jpeg";
+    }
+
+    const prompt = `
+    Analyze the specific region of the image defined by this bounding box:
+    x: ${evidenceBox.x}%, y: ${evidenceBox.y}%, width: ${evidenceBox.w}%, height: ${evidenceBox.h}% (Percentages of image dimensions).
+    
+    1. Identify the object or feature inside this box.
+    2. Provide a concise, 1-sentence analytical description of what this evidence represents in the context of a geolocation game (e.g., "Unique architectural style of the 19th century", "Specific street sign font used in this region").
+    3. Keep it under 30 words.
+    `;
+
+    try {
+        const description = await callGeminiApi(
+            apiKey,
+            "gemini-1.5-flash",
+            prompt,
+            { mimeType, data: base64Data },
+            baseUrl,
+            gatewayToken
+        );
+        return description.trim();
+    } catch (e) {
+        console.error("Gemini Description gen failed", e);
+        return "Analysis unavailable.";
     }
 }

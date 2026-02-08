@@ -1,4 +1,4 @@
-import { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import { requireUser } from "~/lib/auth.server";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {

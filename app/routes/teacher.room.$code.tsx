@@ -327,8 +327,8 @@ export default function TeacherRoom() {
                                             height: `${ev.box.h / 10}%`
                                         }}
                                     >
-                                        <div className="bg-yellow-500 text-black text-[9px] font-bold px-1 rounded-sm shadow opacity-0 group-hover:opacity-100 transition-opacity">
-                                            {ev.description}
+                                        <div className="bg-yellow-500 text-black text-[9px] font-bold px-1 rounded-sm shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap max-w-[150px]">
+                                            {ev.ai_analysis ? `🤖 AI: ${ev.ai_analysis}` : ev.description}
                                         </div>
                                     </div>
                                 ))}

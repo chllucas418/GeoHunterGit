@@ -97,43 +97,48 @@ export async function action({ request, context }: ActionFunctionArgs) {
         if (evidenceListJson) {
             const evidenceList = JSON.parse(evidenceListJson);
 
-            // Should properly clear old evidence if updating, but for now we just add new ones or ignore?
-            // Better to clear old ones for this location if we are in "Edit Mode" fully, but for "Add" it's fine.
-            // Let's safe-guard: delete all existing dev-evidence for this location and re-insert.
+            // Safe-guard: delete old evidence for this location
             await db.prepare("DELETE FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(locationId).run();
 
-            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified) VALUES (?, ?, ?, ?, 1)");
-            const batch = evidenceList.map((ev: any) =>
+            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
+
+            // Process sequentially to manage API load
+            const processedEvidence = await Promise.all(evidenceList.map(async (ev: any) => {
+                let analysis = "Pending analysis...";
+                try {
+                    const { generateEvidenceDescription } = await import("~/lib/gemini.server");
+
+                    // Check if we have a base64 image (fresh upload) or URL (update)
+                    const isBase64 = imageUrl.startsWith("data:");
+
+                    analysis = await generateEvidenceDescription(
+                        env.GEMINI_API_KEY,
+                        isBase64 ? "" : imageUrl, // URL ignored if base64 provided
+                        ev.box,
+                        env.GEMINI_BASE_URL,
+                        env.GEMINI_GATEWAY_TOKEN,
+                        isBase64 ? imageUrl : undefined // Pass base64 directly
+                    );
+                } catch (e) {
+                    console.error("AI Gen Error", e);
+                    analysis = "Analysis unavailable.";
+                }
+                return { ...ev, analysis };
+            }));
+
+            const batch = processedEvidence.map((ev: any) =>
                 stmt.bind(
                     `ev_${Math.random().toString(36).substring(2, 9)}`,
                     locationId,
                     JSON.stringify(ev.box),
-                    ev.description
+                    ev.description,
+                    ev.analysis
                 )
             );
             if (batch.length > 0) await db.batch(batch);
         }
 
-        // Handle Evidence
-        if (evidenceListJson) {
-            const evidenceList = JSON.parse(evidenceListJson);
 
-            // Should properly clear old evidence if updating, but for now we just add new ones or ignore?
-            // Better to clear old ones for this location if we are in "Edit Mode" fully, but for "Add" it's fine.
-            // Let's safe-guard: delete all existing dev-evidence for this location and re-insert.
-            await db.prepare("DELETE FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(locationId).run();
-
-            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified) VALUES (?, ?, ?, ?, 1)");
-            const batch = evidenceList.map((ev: any) =>
-                stmt.bind(
-                    `ev_${Math.random().toString(36).substring(2, 9)}`,
-                    locationId,
-                    JSON.stringify(ev.box),
-                    ev.description
-                )
-            );
-            if (batch.length > 0) await db.batch(batch);
-        }
 
         // Handle Dataset Assignment
         const setId = formData.get("addToSet") as string;
