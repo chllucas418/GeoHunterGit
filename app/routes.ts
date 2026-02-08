@@ -34,5 +34,9 @@ export default [
     route("api/room/:code/review", "routes/api.room.$code.review.ts"),
     route("api/room/:code/round_result", "routes/api.room.$code.round_result.ts"),
     route("api/room/:code/status", "routes/api.room.$code.status.ts"),
-    route("api/room/:code/submit", "routes/api.room.$code.submit.ts")
+    route("api/room/:code/status", "routes/api.room.$code.status.ts"),
+    route("api/room/:code/submit", "routes/api.room.$code.submit.ts"),
+
+    // Migration Route
+    route("api/migrate-images", "routes/api.migrate-images.ts")
 ] satisfies RouteConfig;
