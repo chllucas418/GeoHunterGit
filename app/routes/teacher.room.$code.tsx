@@ -267,9 +267,12 @@ export default function TeacherRoom() {
             <div className="absolute bottom-12 right-12 z-50">
                 <button
                     onClick={() => actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` })}
-                    className="px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 rounded-2xl text-white font-bold uppercase tracking-widest hover:scale-105 transition-all"
+                    className="px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 rounded-2xl text-white font-bold uppercase tracking-widest hover:scale-105 transition-all flex flex-col items-center"
                 >
-                    Reveal Intel →
+                    <span>Reveal Intel →</span>
+                    <span className="text-[10px] text-blue-300 mt-1">
+                        {roomState.currentRound?.submissionCount || 0} / {participants.length} Reported
+                    </span>
                 </button>
             </div>
         </div>

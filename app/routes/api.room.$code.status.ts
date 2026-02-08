@@ -1,4 +1,4 @@
-import { LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
     const code = params.code;
@@ -56,12 +56,18 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                 evidence = evResult.results || [];
             }
 
+            // Submission Count (for Loading Status)
+            const submissionCount = await db.prepare(
+                "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
+            ).bind(code, item.location_id).first<any>();
+
             currentRound = {
                 index: room.current_index,
                 total: total.count,
                 startTime: room.round_start_time,
                 location: maskedLocation,
-                evidence: evidence
+                evidence: evidence,
+                submissionCount: submissionCount?.count || 0
             };
         }
     }
