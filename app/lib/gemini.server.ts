@@ -125,8 +125,13 @@ export async function checkEvidenceListWithGemini(
 
     CRITICAL: ALWAYS Provide a "summary_explanation".
     - If the user missed key evidence or provided no evidence, explain clearly how the GROUND TRUTH items help identify this location. 
-    - e.g. "You missed the [Clue A] and [Clue B]. These are critical because..."
+    - Focus on the "HOW" and "WHY". e.g. "The width of the crosswalk stripes indicates Region A, while the blue sign is specific to District B."
     - Be educational and encouraging.
+
+    For each "Common Match" or "Novel Discovery" item explanation:
+    - Do NOT just say "Correctly identified".
+    - Explain WHY it matters. e.g. "Correct! This specific tactile paving pattern is unique to Hong Kong."
+
 
     Return a JSON OBJECT with:
     - "results": ARRAY of objects (same as before: index, validity, matched_admin_index, description, explanation)

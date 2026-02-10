@@ -439,6 +439,24 @@ export default function StudentLiveGame() {
             <div className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
                 ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full md:w-1/2"}`}
             >
+                {/* Header / Timer & Hints */}
+                {room.status === 'PLAYING' && (
+                    <div className="absolute top-0 inset-x-0 z-[60] p-4 flex justify-between items-start pointer-events-none">
+                        <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex flex-col items-center mx-auto pointer-events-auto">
+                            <div className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${((currentRound.timeLimit || 120) - secondsElapsed) < 30 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                                {Math.floor(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) / 60)}:{(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) % 60).toString().padStart(2, '0')}
+                            </div>
+                            {/* Hint Timer */}
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                                <span className="text-[10px] text-yellow-100 font-mono uppercase">
+                                    Hint in {Math.max(0, (room.hint_interval || 30) - ((secondsElapsed - 5) % (room.hint_interval || 30)))}s
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Intro Splash */}
                 {introStage < 3 && location && (
                     <div className={`absolute inset-0 z-50 flex items-center justify-center pointer-events-none transition-all duration-1000 ease-in-out bg-black/60 backdrop-blur-xl ${introStage === 2 ? 'opacity-0' : 'opacity-100'}`}>
@@ -632,7 +650,8 @@ export default function StudentLiveGame() {
                 })()
             )}
 
-            {result ? (
+            {/* Hints Overlay */}
+            {(result && (layoutMode === "result" || submitted)) ? (
                 result.score !== undefined ? (
                     <div className="p-6">
                         <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
