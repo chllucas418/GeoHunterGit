@@ -39,9 +39,62 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             });
         }
 
+
         // Get Official Data (Location + Evidence)
         const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
-        const evidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+        const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+        let officialEvidence = evidenceResult.results || [];
+
+        // Check if any official evidence is missing 'ai_analysis'
+        const missingAnalysis = officialEvidence.filter((e: any) => !e.ai_analysis || e.ai_analysis === "Analysis unavailable.");
+
+        if (missingAnalysis.length > 0) {
+            console.log(`[RoundResult] Found ${missingAnalysis.length} items missing analysis. Triggering On-Demand AI...`);
+
+            // Trigger AI (Ensure we have keys)
+            const GEMINI_API_KEY = env.GEMINI_API_KEY;
+            const GEMINI_BASE_URL = env.GEMINI_BASE_URL;
+            const GEMINI_GATEWAY_TOKEN = env.GEMINI_GATEWAY_TOKEN;
+
+            if (GEMINI_API_KEY) {
+                try {
+                    // Import dynamically or assuming it's available
+                    const { batchAnalyzeOfficialEvidence } = await import("~/lib/gemini.server");
+
+                    // Parse boxes if stored as JSON string (likely stored as JSON string in DB?)
+                    // DB schema says 'box' is likely text/json. passing it as is or parsing?
+                    // Usually it's stored as JSON string in SQLite.
+                    const itemsToAnalyze = missingAnalysis.map((e: any) => ({
+                        id: e.id,
+                        box: typeof e.box === 'string' ? JSON.parse(e.box) : e.box,
+                        description: e.description
+                    }));
+
+                    const analysisResults = await batchAnalyzeOfficialEvidence(
+                        GEMINI_API_KEY,
+                        location.image_url,
+                        itemsToAnalyze,
+                        GEMINI_BASE_URL,
+                        GEMINI_GATEWAY_TOKEN
+                    );
+
+                    // Update DB and local array
+                    for (const res of analysisResults) {
+                        if (res.ai_analysis) {
+                            await db.prepare("UPDATE map_evidence SET ai_analysis = ? WHERE id = ?")
+                                .bind(res.ai_analysis, res.id).run();
+
+                            // Update local object to return immediately
+                            const localItem = officialEvidence.find((e: any) => e.id === res.id);
+                            if (localItem) localItem.ai_analysis = res.ai_analysis;
+                        }
+                    }
+
+                } catch (e) {
+                    console.error("[RoundResult] On-Demand Analysis Failed:", e);
+                }
+            }
+        }
 
         // Parse Guess Data
         let aiFeedback = null;
@@ -64,7 +117,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             aiFeedback,
             evidenceFound,
             officialLocation: location,
-            officialEvidence: evidence.results || []
+            officialEvidence // Returned updated evidence
         });
     } catch (error) {
         console.error("ROUND RESULT ERROR:", error);

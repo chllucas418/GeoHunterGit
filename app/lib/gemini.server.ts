@@ -302,3 +302,64 @@ export async function generateEvidenceDescription(
         return "Analysis unavailable.";
     }
 }
+
+export async function batchAnalyzeOfficialEvidence(
+    apiKey: string,
+    imageUrl: string,
+    items: { id: string; box: any; description: string }[],
+    baseUrl?: string,
+    gatewayToken?: string
+) {
+    // 1. Fetch image
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error("Failed to fetch image");
+    const arrayBuffer = await response.arrayBuffer();
+    const base64Data = arrayBufferToBase64(arrayBuffer);
+    const mimeType = response.headers.get("content-type") || "image/jpeg";
+
+    // 2. Build Context
+    const itemsStr = items.map((item, i) =>
+        `Item ${i}: ID="${item.id}", Description="${item.description}", Box=${JSON.stringify(item.box)}`
+    ).join("\n");
+
+    const prompt = `
+    Analyze the following "Official Evidence" items in the image.
+    
+    ITEMS:
+    ${itemsStr}
+    
+    For each item:
+    1. Look at the region defined by the 'Box' (x, y, w, h in %) within the image.
+    2. Provide a sophisticated, educational "ai_analysis" (max 2 sentences) describing WHY this feature is a unique identifier for the location.
+    3. Refer to the visual details (e.g., "The specific blue hue of the sign...", "The colonial style of the pillar...").
+    
+    Return a JSON object:
+    {
+        "results": [
+            { "id": "item_id_from_input", "ai_analysis": "The analysis text..." }
+        ]
+    }
+    `;
+
+    try {
+        const responseText = await callGeminiApi(
+            apiKey,
+            "gemini-1.5-flash",
+            prompt,
+            { mimeType, data: base64Data },
+            baseUrl,
+            gatewayToken
+        );
+
+        const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return parsed.results || [];
+        }
+        return [];
+    } catch (e) {
+        console.error("Batch Analysis Failed", e);
+        return [];
+    }
+}
