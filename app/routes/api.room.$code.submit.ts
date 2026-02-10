@@ -175,66 +175,75 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                     }
 
                     // Scoring
-                } else {
-                    // Novel Discovery
-                    aiBonus += 250;
-                }
-            } else if (matchedAdminId) {
-                // Geometry Match Only (Gemini missed it, but box overlaps)
-                // We must add this to results so it shows in UI
-                if (!matchedEvidenceIds.includes(matchedAdminId)) {
-                    evidenceScore += 1000;
-                    matchedEvidenceIds.push(matchedAdminId);
+                    // Scoring
+                    if (item.validity > 0.7) {
+                        // AI Confirmed
+                        if (matchedAdminId) {
+                            if (!matchedEvidenceIds.includes(matchedAdminId)) {
+                                evidenceScore += 1000;
+                                matchedEvidenceIds.push(matchedAdminId);
+                            }
+                        } else {
+                            // Novel Discovery
+                            aiBonus += 250;
+                        }
+                    } else if (matchedAdminId) {
+                        // Geometry Match Only (Gemini missed it, but box overlaps)
+                        // We must add this to results so it shows in UI
+                        if (!matchedEvidenceIds.includes(matchedAdminId)) {
+                            evidenceScore += 1000;
+                            matchedEvidenceIds.push(matchedAdminId);
 
-                    const adminItem = adminBoxes.find(a => a.id === matchedAdminId);
-                    if (adminItem) {
-                        // Inject into feedback
-                        if (!aiFeedback.results) aiFeedback.results = [];
-                        aiFeedback.results.push({
-                            index: item.index,
-                            description: adminItem.description,
-                            explanation: "Visual confirmation via scanner alignment.",
-                            validity: 1.0
-                        });
+                            const adminItem = adminBoxes.find(a => a.id === matchedAdminId);
+                            if (adminItem) {
+                                // Inject into feedback
+                                if (!aiFeedback.results) aiFeedback.results = [];
+                                aiFeedback.results.push({
+                                    index: item.index,
+                                    description: adminItem.description,
+                                    explanation: "Visual confirmation via scanner alignment.",
+                                    validity: 1.0
+                                });
+                            }
+                        }
                     }
+
                 }
-            }
-        }
             }
         } catch (e) {
-    console.error("Gemini Error:", e);
-    aiFeedback = { error: "AI verification failed", results: [] };
-}
+            console.error("Gemini Error:", e);
+            aiFeedback = { error: "AI verification failed", results: [] };
+        }
 
-// Cap Evidence Score to prevent overflow?
-// Let's say max 5 evidence items = 5000pts.
+        // Cap Evidence Score to prevent overflow?
+        // Let's say max 5 evidence items = 5000pts.
 
-evidenceScore += aiBonus; // Combine bonus into evidence score for simplicity
+        evidenceScore += aiBonus; // Combine bonus into evidence score for simplicity
 
-// Total Score
-const finalScore = distanceScore + evidenceScore + timeScore;
+        // Total Score
+        const finalScore = distanceScore + evidenceScore + timeScore;
 
-// Save Guess (Update: Added distance_score and evidence_score columns)
-await db.prepare(
-    "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback, distance_score, evidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(aiFeedback), distanceScore, evidenceScore).run();
+        // Save Guess (Update: Added distance_score and evidence_score columns)
+        await db.prepare(
+            "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback, distance_score, evidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(aiFeedback), distanceScore, evidenceScore).run();
 
-// Update Participant Totals
-await db.prepare(
-    "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
-).bind(finalScore, code, userId).run();
+        // Update Participant Totals
+        await db.prepare(
+            "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
+        ).bind(finalScore, code, userId).run();
 
-// RETURN SUCCESS BUT NO DATA to prevent client from showing result immediately
-return Response.json({
-    success: true,
-    message: "Submission Received. Determining Analysis...",
-    // Do NOT return score/distance/feedback here.
-    // Client should show "Waiting for Teacher" state.
-    // Step 3: Don't show result yet.
-});
+        // RETURN SUCCESS BUT NO DATA to prevent client from showing result immediately
+        return Response.json({
+            success: true,
+            message: "Submission Received. Determining Analysis...",
+            // Do NOT return score/distance/feedback here.
+            // Client should show "Waiting for Teacher" state.
+            // Step 3: Don't show result yet.
+        });
 
     } catch (error) {
-    console.error("SUBMIT ERROR:", error);
-    return Response.json({ error: "Internal Server Error", details: (error as any).message }, { status: 500 });
-}
+        console.error("SUBMIT ERROR:", error);
+        return Response.json({ error: "Internal Server Error", details: (error as any).message }, { status: 500 });
+    }
 }
