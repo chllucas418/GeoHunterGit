@@ -315,36 +315,38 @@ export default function StudentLiveGame() {
                         }
                     }
                 }
-            } else if (count > hintList.length && !hasZoomed && mapInstance) {
-                // Final "Vicinity Scan" zoom if they haven't found it yet
-                if (secondsElapsed > (HINT_START_DELAY + (hintList.length * HINT_INTERVAL))) {
-
-                    // Same smart check
-                    const currentCenter = mapInstance.getCenter();
-                    const currentZoom = mapInstance.getZoom();
-                    const distLat = Math.abs(currentCenter!.lat() - location.lat);
-                    const distLng = Math.abs(currentCenter!.lng() - location.lng);
-                    const isClose = (distLat < 0.005 && distLng < 0.005);
-                    const isZoomedIn = (currentZoom !== undefined && currentZoom >= 14);
-
-                    if (!isClose || !isZoomedIn) {
-                        setHasZoomed(true);
-                        // Only zoom if we actual have coordinates
-                        if (location && typeof location.lat === 'number' && typeof location.lng === 'number') {
-                            const offsetLat = (Math.random() - 0.5) * 0.006;
-                            const offsetLng = (Math.random() - 0.5) * 0.006;
-                            mapInstance.panTo({
-                                lat: location.lat + offsetLat,
-                                lng: location.lng + offsetLng
-                            });
-                            mapInstance.setZoom(15);
-                            setVisibleHints(prev => [...prev, "Satellite Uplink Establishing... Vicinity scan activated."]);
-                        }
-                    }
-                }
+            } else if (count >= hintList.length && !hasZoomed && mapInstance) {
+                // All hints shown. Enable Vicinity Scan button.
+                // We don't auto-zoom anymore.
             }
         }
     }, [secondsElapsed, hintList, mapInstance, hasZoomed, submitted, HINT_INTERVAL]);
+
+    const handleVicinityScan = () => {
+        if (!mapInstance || !location || !location.lat || !location.lng) return;
+
+        const currentCenter = mapInstance.getCenter();
+        const distLat = Math.abs(currentCenter!.lat() - location.lat);
+        const distLng = Math.abs(currentCenter!.lng() - location.lng);
+        // 0.003 degrees is approx 300m
+        const isClose = (distLat < 0.003 && distLng < 0.003);
+
+        if (isClose) {
+            // Already close
+            alert("SAT-NAV: Target signal strong in current sector. No scan needed.");
+            return;
+        }
+
+        setHasZoomed(true);
+        const offsetLat = (Math.random() - 0.5) * 0.006;
+        const offsetLng = (Math.random() - 0.5) * 0.006;
+        mapInstance.panTo({
+            lat: location.lat + offsetLat,
+            lng: location.lng + offsetLng
+        });
+        mapInstance.setZoom(15);
+        setVisibleHints(prev => [...prev, "Satellite Scan: Vicinity Locked."]);
+    };
 
     // --- HANDLERS ---
     const handleBoxDrawn = (box: BoxCoordinates | null) => {
@@ -446,13 +448,15 @@ export default function StudentLiveGame() {
                             <div className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${((currentRound.timeLimit || 120) - secondsElapsed) < 30 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                                 {Math.floor(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) / 60)}:{(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) % 60).toString().padStart(2, '0')}
                             </div>
-                            {/* Hint Timer */}
-                            <div className="flex items-center gap-2 mt-1">
-                                <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-                                <span className="text-[10px] text-yellow-100 font-mono uppercase">
-                                    Hint in {Math.max(0, (room.hint_interval || 30) - ((secondsElapsed - 5) % (room.hint_interval || 30)))}s
-                                </span>
-                            </div>
+                            {/* Hint Timer - Only show if hints remaining */}
+                            {(Math.floor((secondsElapsed - 5) / (room.hint_interval || 30)) + 1) <= hintList.length && (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
+                                    <span className="text-[10px] text-yellow-100 font-mono uppercase">
+                                        Hint in {Math.max(0, (room.hint_interval || 30) - ((secondsElapsed - 5) % (room.hint_interval || 30)))}s
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -568,11 +572,26 @@ export default function StudentLiveGame() {
                 <div ref={mapRef} className="w-full h-full" />
 
                 {!submitted ? (
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-                        <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'}`}>
-                            CONFIRM COORDINATES
-                        </button>
-                    </div>
+                    <>
+                        {/* Vicinity Scan Button */}
+                        {!submitted && visibleHints.length >= hintList.length && !hasZoomed && (
+                            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-xs px-4 z-20">
+                                <button
+                                    onClick={handleVicinityScan}
+                                    className="w-full py-3 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 animate-pulse"
+                                >
+                                    <span className="text-lg">📡</span>
+                                    Initiate Vicinity Scan
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+                            <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'}`}>
+                                CONFIRM COORDINATES
+                            </button>
+                        </div>
+                    </>
                 ) : (
                     room.status === 'PLAYING' && (
                         <div className="absolute bottom-6 left-6 right-6 z-10">
@@ -651,76 +670,73 @@ export default function StudentLiveGame() {
             )}
 
             {/* Hints Overlay */}
-            {(result && (layoutMode === "result" || submitted)) ? (
-                result.score !== undefined ? (
-                    <div className="p-6">
-                        <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
-                        <p className="text-xs text-green-400 uppercase">Score</p>
-                        <hr className="border-white/10 my-4" />
+            {(result && (layoutMode === "result" || submitted)) && (
+                <div className="w-full md:w-[20%] bg-slate-900 border-l border-white/10 overflow-y-auto">
+                    {result.score !== undefined ? (
+                        <div className="p-6">
+                            <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
+                            <p className="text-xs text-green-400 uppercase">Score</p>
+                            <hr className="border-white/10 my-4" />
 
-                        <div className="text-xl font-bold">
-                            {result.distance !== undefined && !isNaN(result.distance)
-                                ? `${Math.round(result.distance)}m`
-                                : "-- m"}
-                        </div>
-                        <p className="text-xs text-slate-500 uppercase">Deviation</p>
+                            <div className="text-xl font-bold">
+                                {result.distance !== undefined && !isNaN(result.distance)
+                                    ? `${Math.round(result.distance)}m`
+                                    : "-- m"}
+                            </div>
+                            <p className="text-xs text-slate-500 uppercase">Deviation</p>
 
-                        <div className="mt-8 space-y-4">
-                            <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
-                            {result.aiFeedback && result.aiFeedback.results && result.aiFeedback.results.length > 0 ? (
-                                result.aiFeedback.results.map((item: any, i: number) => (
-                                    <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
-                                        <div className="flex justify-between">
-                                            <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
-                                        </div>
-                                        <p className="opacity-80 leading-snug">{item.explanation}</p>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="text-xs text-slate-500 italic mb-4">No anomalies detected by agent.</p>
-                            )}
-
-                            {/* Missed Evidence List */}
-                            {(result?.officialEvidence || currentRound?.evidence)?.length > 0 && (
-                                <div className="mt-4 space-y-2">
-                                    <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
-                                    {(result?.officialEvidence || currentRound?.evidence).map((ev: any) => (
-                                        <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
+                            <div className="mt-8 space-y-4">
+                                <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
+                                {result.aiFeedback && result.aiFeedback.results && result.aiFeedback.results.length > 0 ? (
+                                    result.aiFeedback.results.map((item: any, i: number) => (
+                                        <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
                                             <div className="flex justify-between">
-                                                <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                                <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
                                             </div>
-                                            {ev.ai_analysis && (
-                                                <p className="opacity-70 leading-snug">{ev.ai_analysis}</p>
-                                            )}
+                                            <p className="opacity-80 leading-snug">{item.explanation}</p>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
+                                    ))
+                                ) : (
+                                    <p className="text-xs text-slate-500 italic mb-4">No anomalies detected by agent.</p>
+                                )}
 
-                            {/* Matched Evidence Summary */}
-                            {result.evidenceScore > 0 && (
-                                <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
-                                    <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
-                                    <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
-                                </div>
-                            )}
-                        </div>
+                                {/* Missed Evidence List */}
+                                {(result?.officialEvidence || currentRound?.evidence)?.length > 0 && (
+                                    <div className="mt-4 space-y-2">
+                                        <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
+                                        {(result?.officialEvidence || currentRound?.evidence).map((ev: any) => (
+                                            <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
+                                                <div className="flex justify-between">
+                                                    <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                                </div>
+                                                {ev.ai_analysis && (
+                                                    <p className="opacity-70 leading-snug">{ev.ai_analysis}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
 
-                        <div className="mt-8">
-                            <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
+                                {/* Matched Evidence Summary */}
+                                {result.evidenceScore > 0 && (
+                                    <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
+                                        <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
+                                        <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-8">
+                                <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
+                            </div>
                         </div>
-                    </div>
-                ) : (
-                    <div className="p-6 text-center text-slate-500 italic">
-                        {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
-                    </div>
-                )
-            ) : (
-                <div className="p-6 text-center text-slate-500 italic">
-                    Analysis Complete. Data Encrypted. Waiting for HQ Reveal...
+                    ) : (
+                        <div className="p-6 text-center text-slate-500 italic">
+                            {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
+                        </div>
+                    )}
                 </div>
-            )
-            }
+            )}
         </div>
     );
 }

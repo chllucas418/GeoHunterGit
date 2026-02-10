@@ -306,12 +306,20 @@ export default function TeacherRoom() {
                         </div>
 
                         {/* Hint Timer Display for Teacher */}
-                        <div className="mt-2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-1 border border-white/10">
-                            <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-                            <span className="text-xs text-yellow-100 font-mono uppercase">
-                                Hint {Math.max(0, hintCount)} incoming in {timeUntilNextHint}s
-                            </span>
-                        </div>
+                        {(() => {
+                            const hints = currentRound?.location?.hints ? (typeof currentRound.location.hints === 'string' ? (currentRound.location.hints.startsWith('[') ? JSON.parse(currentRound.location.hints) : currentRound.location.hints.split('\n')) : currentRound.location.hints) : [];
+                            if (hintCount <= hints.length) {
+                                return (
+                                    <div className="mt-2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-1 border border-white/10">
+                                        <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                        <span className="text-xs text-yellow-100 font-mono uppercase">
+                                            Hint {Math.max(1, hintCount)} incoming in {timeUntilNextHint}s
+                                        </span>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
                     </div>
 
                     <div className="bg-black/60 backdrop-blur-md px-6 py-2 rounded-xl border border-white/10 flex flex-col items-center">
