@@ -385,6 +385,15 @@ export default function StudentLiveGame() {
                 .then((data: any) => {
                     if (data.score !== undefined) {
                         setResult((prev: any) => ({ ...prev, ...data }));
+                    } else if (data.notSubmitted) {
+                        setResult((prev: any) => ({
+                            ...prev,
+                            message: data.message || "No report filed.",
+                            officialEvidence: data.officialEvidence, // Still need official evidence for map/canvas
+                            officialLocation: data.officialLocation,
+                            score: 0,
+                            distance: -1
+                        }));
                     } else if (data.error) {
                         console.error("API Returned Error:", data.error);
                         setResult((prev: any) => ({ ...prev, message: data.error }));

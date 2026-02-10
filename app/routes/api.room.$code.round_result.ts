@@ -33,7 +33,9 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         if (!guess) {
             return Response.json({
                 notSubmitted: true,
-                message: "No submission for this round"
+                message: "No submission for this round",
+                officialLocation: await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>(),
+                officialEvidence: (await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>()).results || []
             });
         }
 
