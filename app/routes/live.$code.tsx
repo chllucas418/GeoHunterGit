@@ -281,6 +281,27 @@ export default function StudentLiveGame() {
     const timeUntilNext = Math.max(0, HINT_INTERVAL - ((secondsElapsed - HINT_START_DELAY) % HINT_INTERVAL));
     const progress = Math.min(100, Math.max(0, ((HINT_INTERVAL - timeUntilNext) / HINT_INTERVAL) * 100));
 
+    const [isTargetInRange, setIsTargetInRange] = useState(false);
+
+    // Track proximity for button state
+    useEffect(() => {
+        if (!mapInstance || !location?.lat || !location?.lng) return;
+
+        const checkProximity = () => {
+            const currentCenter = mapInstance.getCenter();
+            if (!currentCenter) return;
+
+            const distLat = Math.abs(currentCenter.lat() - location.lat);
+            const distLng = Math.abs(currentCenter.lng() - location.lng);
+            // 0.003 degrees approx 300m
+            const inRange = (distLat < 0.003 && distLng < 0.003);
+            setIsTargetInRange(inRange);
+        };
+
+        const listener = mapInstance.addListener("idle", checkProximity);
+        return () => google.maps.event.removeListener(listener);
+    }, [mapInstance, location]);
+
     useEffect(() => {
         if (submitted || !location) return;
         if (secondsElapsed >= HINT_START_DELAY) {
@@ -288,39 +309,11 @@ export default function StudentLiveGame() {
             if (count > 0 && count <= hintList.length) {
                 if (visibleHints.length < count) {
                     setVisibleHints(hintList.slice(0, count));
-
-                    // Smart Map Movement: Only move if user is NOT looking at the target area
-                    if (mapInstance && location.lat && location.lng) {
-                        const currentCenter = mapInstance.getCenter();
-                        const currentZoom = mapInstance.getZoom();
-
-                        // Simple distance check (approximate degrees)
-                        // 0.005 degrees is roughly 500m
-                        const distLat = Math.abs(currentCenter!.lat() - location.lat);
-                        const distLng = Math.abs(currentCenter!.lng() - location.lng);
-                        const isClose = (distLat < 0.005 && distLng < 0.005);
-                        const isZoomedIn = (currentZoom !== undefined && currentZoom >= 14);
-
-                        if (!isClose || !isZoomedIn) {
-                            const offsetLat = (Math.random() - 0.5) * 0.006;
-                            const offsetLng = (Math.random() - 0.5) * 0.006;
-                            mapInstance.panTo({
-                                lat: location.lat + offsetLat,
-                                lng: location.lng + offsetLng
-                            });
-                            mapInstance.setZoom(15);
-                        } else {
-                            // User is already close, maybe just flash a message?
-                            // For now, silently add the hint without disrupting their view
-                        }
-                    }
+                    // Removed auto-zoom logic here. Hints just appear textually.
                 }
-            } else if (count >= hintList.length && !hasZoomed && mapInstance) {
-                // All hints shown. Enable Vicinity Scan button.
-                // We don't auto-zoom anymore.
             }
         }
-    }, [secondsElapsed, hintList, mapInstance, hasZoomed, submitted, HINT_INTERVAL]);
+    }, [secondsElapsed, hintList, mapInstance, hasZoomed, submitted, HINT_INTERVAL, location, visibleHints.length]);
 
     const handleVicinityScan = () => {
         if (!mapInstance || !location || !location.lat || !location.lng) return;
@@ -575,14 +568,21 @@ export default function StudentLiveGame() {
                     <>
                         {/* Vicinity Scan Button */}
                         {!submitted && visibleHints.length >= hintList.length && !hasZoomed && (
-                            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-xs px-4 z-20">
-                                <button
-                                    onClick={handleVicinityScan}
-                                    className="w-full py-3 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 animate-pulse"
-                                >
-                                    <span className="text-lg">📡</span>
-                                    Initiate Vicinity Scan
-                                </button>
+                            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-20">
+                                {isTargetInRange ? (
+                                    <div className="w-full py-3 bg-red-500/20 text-red-300 border border-red-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 animate-in fade-in transition-all">
+                                        <span className="text-lg">📶</span>
+                                        Signal Strong • Scan Disabled
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={handleVicinityScan}
+                                        className="w-full py-3 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 animate-pulse"
+                                    >
+                                        <span className="text-lg">📡</span>
+                                        Initiate Vicinity Scan
+                                    </button>
+                                )}
                             </div>
                         )}
 
