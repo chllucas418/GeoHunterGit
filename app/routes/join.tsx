@@ -80,6 +80,12 @@ export default function JoinGame() {
                             {isSubmitting ? "Connecting..." : "Join Mission"}
                         </button>
                     </Form>
+
+                    <Form action="/auth/logout" method="post" className="mt-8">
+                        <button type="submit" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-red-400 transition-colors">
+                            SIGN OUT OF TERMINAL
+                        </button>
+                    </Form>
                 </div>
             </div>
         </div>

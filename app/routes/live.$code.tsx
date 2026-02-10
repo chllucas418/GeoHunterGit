@@ -606,12 +606,10 @@ export default function StudentLiveGame() {
             </div>
 
             {/* Logout Button */}
-            <div className="absolute top-6 left-6 z-50 pointer-events-auto">
-                <form action="/auth/logout" method="post">
-                    <button type="submit" className="px-4 py-2 bg-red-500/10 hover:bg-red-500/30 text-red-400 text-xs font-bold uppercase tracking-widest rounded-lg border border-red-500/20 backdrop-blur-md transition-all">
-                        Abort Mission
-                    </button>
-                </form>
+            <div className="absolute top-4 left-4 z-50">
+                <Link to="/join" className="px-4 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 backdrop-blur-md rounded-lg text-red-400 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
+                    <span>⚠</span> ABORT MISSION
+                </Link>
             </div>
 
             {/* Evidence Reveal Modal (Syncs with Teacher) */}

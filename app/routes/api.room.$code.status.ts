@@ -56,10 +56,10 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
         // Masking Logic
         let maskedLocation = { ...location };
-        if (room.status === 'PLAYING') {
-            delete maskedLocation.lat;
-            delete maskedLocation.lng;
-        }
+        // if (room.status === 'PLAYING') {
+        //     delete maskedLocation.lat;
+        //     delete maskedLocation.lng;
+        // }
 
         let evidence: any[] = [];
         if (room.status === 'REVIEW') {
