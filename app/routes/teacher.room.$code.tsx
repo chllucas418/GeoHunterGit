@@ -51,6 +51,7 @@ export default function TeacherRoom() {
     const mapRef = useRef<HTMLDivElement>(null);
     const [reviewMap, setReviewMap] = useState<google.maps.Map | null>(null);
     const markersRef = useRef<google.maps.Marker[]>([]);
+    const hasAutoSkipped = useRef(false);
 
     useEffect(() => {
         const room = roomState?.room;
@@ -195,6 +196,7 @@ export default function TeacherRoom() {
                 setTimeout(() => setIntroStage(1), 1000);
                 setTimeout(() => setIntroStage(2), 4000);
                 setTimeout(() => setIntroStage(3), 5000); // End intro
+                hasAutoSkipped.current = false; // Reset auto-skip
             }
 
             setRoomState(data);
@@ -207,8 +209,9 @@ export default function TeacherRoom() {
                 const remaining = Math.max(0, limit - elapsedSec);
                 setTimeLeft(remaining);
 
-                if (remaining === 0) {
-                    // Auto-skip logic could go here, but safer to let teacher control or backend handle
+                if (remaining === 0 && !hasAutoSkipped.current && actionFetcher.state === "idle") {
+                    hasAutoSkipped.current = true;
+                    actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` });
                 }
             }
         }
@@ -285,11 +288,11 @@ export default function TeacherRoom() {
     const renderPlaying = () => {
         // Calculate Hint Status
         const HINT_INTERVAL = room?.hint_interval || 30;
-        const HINT_START_DELAY = 5;
         // How long has round been running?
         const secondsElapsed = currentRound.startTime ? Math.floor((Date.now() - currentRound.startTime) / 1000) : 0;
-        const timeUntilNextHint = Math.max(0, HINT_INTERVAL - ((secondsElapsed - HINT_START_DELAY) % HINT_INTERVAL));
-        const hintCount = Math.floor((secondsElapsed - HINT_START_DELAY) / HINT_INTERVAL) + 1;
+        const timeUntilNextHint = Math.max(0, HINT_INTERVAL - (secondsElapsed % HINT_INTERVAL));
+        // Next hint index (1-based for display "Hint 1 incoming")
+        const nextHintIndex = Math.floor(secondsElapsed / HINT_INTERVAL) + 1;
 
         return (
             <div className="h-full flex flex-col relative">
@@ -308,12 +311,12 @@ export default function TeacherRoom() {
                         {/* Hint Timer Display for Teacher */}
                         {(() => {
                             const hints = currentRound?.location?.hints ? (typeof currentRound.location.hints === 'string' ? (currentRound.location.hints.startsWith('[') ? JSON.parse(currentRound.location.hints) : currentRound.location.hints.split('\n')) : currentRound.location.hints) : [];
-                            if (hintCount <= hints.length) {
+                            if (nextHintIndex <= hints.length) {
                                 return (
                                     <div className="mt-2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-1 border border-white/10">
                                         <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
                                         <span className="text-xs text-yellow-100 font-mono uppercase">
-                                            Hint {Math.max(1, hintCount)} incoming in {timeUntilNextHint}s
+                                            Hint {Math.max(1, nextHintIndex)} incoming in {timeUntilNextHint}s
                                         </span>
                                     </div>
                                 );

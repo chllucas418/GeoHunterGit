@@ -277,9 +277,8 @@ export default function StudentLiveGame() {
 
     // 3. Hint Logic
     const HINT_INTERVAL = room?.hint_interval || 30; // Default to 30s if not set
-    const HINT_START_DELAY = 5;
-    const timeUntilNext = Math.max(0, HINT_INTERVAL - ((secondsElapsed - HINT_START_DELAY) % HINT_INTERVAL));
-    const progress = Math.min(100, Math.max(0, ((HINT_INTERVAL - timeUntilNext) / HINT_INTERVAL) * 100));
+    const timeUntilNext = Math.max(0, HINT_INTERVAL - (secondsElapsed % HINT_INTERVAL));
+    // const progress = Math.min(100, Math.max(0, ((HINT_INTERVAL - timeUntilNext) / HINT_INTERVAL) * 100));
 
     const [isTargetInRange, setIsTargetInRange] = useState(false);
 
@@ -304,13 +303,16 @@ export default function StudentLiveGame() {
 
     useEffect(() => {
         if (submitted || !location) return;
-        if (secondsElapsed >= HINT_START_DELAY) {
-            const count = Math.floor((secondsElapsed - HINT_START_DELAY) / HINT_INTERVAL) + 1;
-            if (count > 0 && count <= hintList.length) {
-                if (visibleHints.length < count) {
-                    setVisibleHints(hintList.slice(0, count));
-                    // Removed auto-zoom logic here. Hints just appear textually.
-                }
+
+        // Calculate hints based strictly on interval
+        // T=0 -> 0 hints
+        // T=10 (if interval=10) -> 1 hint
+        const count = Math.floor(secondsElapsed / HINT_INTERVAL);
+
+        if (count > 0 && count <= hintList.length) {
+            if (visibleHints.length < count) {
+                setVisibleHints(hintList.slice(0, count));
+                // Removed auto-zoom logic here. Hints just appear textually.
             }
         }
     }, [secondsElapsed, hintList, mapInstance, hasZoomed, submitted, HINT_INTERVAL, location, visibleHints.length]);
@@ -337,7 +339,7 @@ export default function StudentLiveGame() {
             lat: location.lat + offsetLat,
             lng: location.lng + offsetLng
         });
-        mapInstance.setZoom(15);
+        mapInstance.setZoom(17);
         setVisibleHints(prev => [...prev, "Satellite Scan: Vicinity Locked."]);
     };
 
@@ -442,11 +444,11 @@ export default function StudentLiveGame() {
                                 {Math.floor(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) / 60)}:{(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) % 60).toString().padStart(2, '0')}
                             </div>
                             {/* Hint Timer - Only show if hints remaining */}
-                            {(Math.floor((secondsElapsed - 5) / (room.hint_interval || 30)) + 1) <= hintList.length && (
+                            {(Math.floor(secondsElapsed / (room.hint_interval || 30)) + 1) <= hintList.length && (
                                 <div className="flex items-center gap-2 mt-1">
                                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
                                     <span className="text-[10px] text-yellow-100 font-mono uppercase">
-                                        Hint in {Math.max(0, (room.hint_interval || 30) - ((secondsElapsed - 5) % (room.hint_interval || 30)))}s
+                                        Hint in {Math.max(0, (room.hint_interval || 30) - (secondsElapsed % (room.hint_interval || 30)))}s
                                     </span>
                                 </div>
                             )}
