@@ -1,5 +1,12 @@
 import type { LoaderFunctionArgs } from "react-router";
 
+// Helper to safely serialize BigInt and other types for JSON response
+function safeJson(data: any) {
+    return JSON.parse(JSON.stringify(data, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value
+    ));
+}
+
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
     const code = params.code;
     const env = context.cloudflare.env as any;
@@ -11,80 +18,73 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         return Response.json({ error: "Room not found" }, { status: 404 });
     }
 
-    // Participants
-    // Participants (Joined with Users for Display Name & Avatar)
-    const participants = await db.prepare(`
-        SELECT rp.*, u.display_name, u.profile_picture_url 
-        FROM room_participants rp
-        JOIN users u ON rp.user_id = u.id
-        WHERE rp.room_code = ? 
-        ORDER BY rp.score DESC
-    `).bind(code).all<any>();
+    // Parallelize fetching Participants and Map/Item Basic Info
+    const [participantsResult, mapSetInfo] = await Promise.all([
+        db.prepare(`
+            SELECT rp.*, u.display_name, u.profile_picture_url 
+            FROM room_participants rp
+            JOIN users u ON rp.user_id = u.id
+            WHERE rp.room_code = ? 
+            ORDER BY rp.score DESC
+        `).bind(code).all<any>(),
+
+        // Combine Total + Current Item check if map_set_id exists
+        room.map_set_id ? Promise.all([
+            db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>(),
+            db.prepare(
+                "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+            ).bind(room.map_set_id, room.current_index).first<any>()
+        ]) : Promise.resolve([null, null])
+    ]);
+
+    const participants = participantsResult.results || [];
+    const [total, item] = mapSetInfo;
 
     // Current Round Info
     let currentRound = null;
-    if (room.map_set_id) {
-        // Get total count
-        const total = await db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>();
 
-        // Get current item
-        const item = await db.prepare(
-            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-        ).bind(room.map_set_id, room.current_index).first<any>();
-
-        if (item) {
-            const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
-            // If in PLAYING mode, hide the Official Evidence from the client to prevent cheating?
-            // Actually, location data usually includes image_url.
-            // We should NOT send "evidence" or "correct coordinates" if the user is a student?
-            // But this endpoint is public.
-            // Teacher needs it for Review. Student needs it for Image.
-            // Best practice: Only send `lat/lng` if status is REVIEW or PODIUM?
-            // For now, let's allow it but maybe frontend hides it.
-            // Wait, if student inspects network, they see lat/lng.
-            // Ideally, we should mask lat/lng if status == PLAYING.
-
-            // Masking Logic
-            let maskedLocation = { ...location };
-            if (room.status === 'PLAYING') {
-                delete maskedLocation.lat;
-                delete maskedLocation.lng;
-                // Also hide hints if we want to reveal them slowly on server side?
-                // For now, just hiding answers is enough.
-            }
-
-            // Evidence
-            // Only fetch evidence if needed (e.g. for Review)
-            let evidence = [];
-            const allEvidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
-            const evidenceCount = allEvidence.results?.length || 0;
-
-            if (room.status === 'REVIEW') {
-                evidence = allEvidence.results || [];
-            }
-
-            // Submission Count (for Loading Status)
-            const submissionCount = await db.prepare(
+    if (item) {
+        // Parallelize fetching Location Details, Evidence, and Submission Count
+        // Only fetch Location & Evidence if we have an item
+        const [location, allEvidence, submissionCountResult] = await Promise.all([
+            db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>(),
+            db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>(),
+            db.prepare(
                 "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
-            ).bind(code, item.location_id).first<any>();
+            ).bind(code, item.location_id).first<any>()
+        ]);
 
-            currentRound = {
-                index: room.current_index,
-                total: total.count,
-                startTime: room.round_start_time,
-                location: maskedLocation,
-                evidence: evidence,
-                evidenceCount: evidenceCount,
-                focusedEvidenceId: room.focused_evidence_id,
-                submissionCount: submissionCount?.count || 0,
-                timeLimit: room.time_limit || 120 // Default 120 if not set
-            };
+        // Masking Logic
+        let maskedLocation = { ...location };
+        if (room.status === 'PLAYING') {
+            delete maskedLocation.lat;
+            delete maskedLocation.lng;
         }
+
+        let evidence: any[] = [];
+        if (room.status === 'REVIEW') {
+            evidence = allEvidence.results || [];
+        }
+
+        const evidenceCount = allEvidence.results?.length || 0;
+
+        currentRound = {
+            index: room.current_index,
+            total: total.count,
+            startTime: room.round_start_time,
+            location: maskedLocation,
+            evidence: evidence,
+            evidenceCount: evidenceCount,
+            focusedEvidenceId: room.focused_evidence_id,
+            submissionCount: submissionCountResult?.count || 0,
+            timeLimit: room.time_limit || 120
+        };
     }
 
-    return Response.json({
+    // Use safeJson to handle potential BigInts (e.g. from COUNT or Timestamps)
+    return Response.json(safeJson({
         room,
-        participants: participants.results || [],
+        participants,
         currentRound
-    });
+    }));
 }
