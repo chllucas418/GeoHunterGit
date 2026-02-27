@@ -347,7 +347,7 @@ export default function TeacherRoom() {
                     <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
                         <img
                             src={currentRound.location.image_url}
-                            className="max-w-full max-h-full object-contain"
+                            className="w-full h-full object-contain"
                             alt="Location"
                         />
                     </div>

@@ -279,7 +279,7 @@ export default function StudentLiveGame() {
     // 3. Hint Logic
     const HINT_INTERVAL = room?.hint_interval || 30; // Default to 30s if not set
     const timeUntilNext = Math.max(0, HINT_INTERVAL - (secondsElapsed % HINT_INTERVAL));
-    // const progress = Math.min(100, Math.max(0, ((HINT_INTERVAL - timeUntilNext) / HINT_INTERVAL) * 100));
+    const isVicinityScanAvailable = secondsElapsed >= (hintList.length + 1) * HINT_INTERVAL;
 
     const [isTargetInRange, setIsTargetInRange] = useState(false);
 
@@ -626,7 +626,7 @@ export default function StudentLiveGame() {
                 {!submitted ? (
                     <>
                         {/* Vicinity Scan Button */}
-                        {!submitted && visibleHints.length >= hintList.length && !hasZoomed && (
+                        {!submitted && isVicinityScanAvailable && !hasZoomed && (
                             <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-20">
                                 {isTargetInRange ? (
                                     <div className="w-full py-3 bg-red-500/20 text-red-300 border border-red-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 animate-in fade-in transition-all">
