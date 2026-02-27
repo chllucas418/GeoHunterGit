@@ -11,4 +11,9 @@ export default defineConfig({
     reactRouter(),
     tsconfigPaths(),
   ],
+  ssr: {
+    optimizeDeps: {
+      include: ["exifr", "react-dropzone", "@react-google-maps/api"]
+    }
+  }
 });
