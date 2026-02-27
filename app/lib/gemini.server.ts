@@ -141,7 +141,7 @@ export async function checkEvidenceListWithGemini(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-3-flash", // User explicitly requested this model
+            "gemini-3-flash-preview", // User explicitly requested this model
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -229,7 +229,7 @@ export async function analyzeImageQuality(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-3-flash",
+            "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -290,7 +290,7 @@ export async function generateEvidenceDescription(
     try {
         const description = await callGeminiApi(
             apiKey,
-            "gemini-3-flash",
+            "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -344,7 +344,7 @@ export async function batchAnalyzeOfficialEvidence(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-3-flash",
+            "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
