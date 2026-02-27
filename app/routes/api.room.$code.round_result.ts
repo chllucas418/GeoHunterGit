@@ -46,7 +46,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         let officialEvidence = evidenceResult.results || [];
 
         // Check if any official evidence is missing 'ai_analysis'
-        const missingAnalysis = officialEvidence.filter((e: any) => !e.ai_analysis || e.ai_analysis === "Analysis unavailable.");
+        const missingAnalysis = officialEvidence.filter((e: any) => !e.ai_analysis || e.ai_analysis === "Analysis unavailable." || e.ai_analysis.startsWith("Analysis failed:"));
 
         if (missingAnalysis.length > 0) {
             console.log(`[RoundResult] Found ${missingAnalysis.length} items missing analysis. Triggering On-Demand AI...`);

@@ -37,7 +37,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                     let officialEvidence = evidenceResult.results || [];
 
                     // Check for missing analysis
-                    const missingAnalysis = officialEvidence.filter((e: any) => !e.ai_analysis || e.ai_analysis === "Analysis unavailable.");
+                    const missingAnalysis = officialEvidence.filter((e: any) => !e.ai_analysis || e.ai_analysis === "Analysis unavailable." || e.ai_analysis.startsWith("Analysis failed:"));
 
                     if (missingAnalysis.length > 0) {
                         console.log(`[Action:SKIP_TIMER] Found ${missingAnalysis.length} items missing analysis. Triggering AI...`);
