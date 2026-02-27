@@ -68,8 +68,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 
 export default function DebugGemini() {
-    const { location, evidence } = useLoaderData<typeof loader>();
-    const actionData = useActionData<typeof action>();
+    const { location, evidence } = useLoaderData<typeof loader>() as any;
+    const actionData = useActionData<typeof action>() as any;
     const navigation = useNavigation();
     const isSubmitting = navigation.state === "submitting";
 
