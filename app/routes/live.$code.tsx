@@ -550,6 +550,7 @@ export default function StudentLiveGame() {
                 <div className={`w-full h-full relative ${isEvidenceMode ? 'cursor-crosshair' : ''}`}>
                     {location?.image_url ? (
                         <EvidenceCanvas
+                            key={location?.id || 'default'}
                             imageUrl={location.image_url}
                             onBoxChange={isEvidenceMode ? handleBoxDrawn : () => { }}
                             disabled={submitted || !isEvidenceMode}
@@ -760,16 +761,27 @@ export default function StudentLiveGame() {
                                 {(result?.officialEvidence || currentRound?.evidence)?.filter((ev: any) => !result.evidenceFound?.includes(ev.id)).length > 0 && (
                                     <div className="mt-4 space-y-2">
                                         <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
-                                        {(result?.officialEvidence || currentRound?.evidence).filter((ev: any) => !result.evidenceFound?.includes(ev.id)).map((ev: any) => (
-                                            <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
-                                                <div className="flex justify-between">
-                                                    <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                        {(result?.officialEvidence || currentRound?.evidence).filter((ev: any) => !result.evidenceFound?.includes(ev.id)).map((ev: any) => {
+                                            // Look for a personalized Gemini explanation
+                                            let personalizedExplanation = null;
+                                            if (result.aiFeedback?.missed_evidence_explanations && Array.isArray(result.aiFeedback.missed_evidence_explanations)) {
+                                                const AIExplanation = result.aiFeedback.missed_evidence_explanations.find((m: any) => m.admin_id === ev.id);
+                                                if (AIExplanation && AIExplanation.explanation) {
+                                                    personalizedExplanation = AIExplanation.explanation;
+                                                }
+                                            }
+
+                                            return (
+                                                <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
+                                                    <div className="flex justify-between">
+                                                        <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                                    </div>
+                                                    {(personalizedExplanation || ev.ai_analysis) && (
+                                                        <p className="opacity-70 leading-snug">{personalizedExplanation || ev.ai_analysis}</p>
+                                                    )}
                                                 </div>
-                                                {ev.ai_analysis && (
-                                                    <p className="opacity-70 leading-snug">{ev.ai_analysis}</p>
-                                                )}
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
 

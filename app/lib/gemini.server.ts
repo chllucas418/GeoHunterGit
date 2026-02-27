@@ -89,7 +89,7 @@ export async function checkEvidenceListWithGemini(
 
     // Prepare Admin Context String for the AI
     const adminContextStr = adminEvidence.map((e, i) =>
-        `Official Clue #${i + 1}: "${e.description}"`
+        `Official Clue #${i + 1} (Database ID: '${e.id}'): "${e.description}"`
     ).join("\n");
 
     const prompt = `
@@ -124,18 +124,15 @@ export async function checkEvidenceListWithGemini(
        - Explanation: "Generic feature (e.g. wall, road, sky) or unclear."
 
     CRITICAL: ALWAYS Provide a "summary_explanation".
-    - If the user missed key evidence or provided no evidence, explain clearly how the GROUND TRUTH items help identify this location. 
-    - Focus on the "HOW" and "WHY". e.g. "The width of the crosswalk stripes indicates Region A, while the blue sign is specific to District B."
+    - Focus on the "HOW" and "WHY" of the overall location identification. e.g. "The width of the crosswalk stripes indicates Region A, while the blue sign is specific to District B."
     - Be educational and encouraging.
 
-    For each "Common Match" or "Novel Discovery" item explanation:
-    - Do NOT just say "Correctly identified".
-    - Explain WHY it matters. e.g. "Correct! This specific tactile paving pattern is unique to Hong Kong."
-
+    CRITICAL: For each GROUND TRUTH item that the user DID NOT successfully match (based on the steps above), provide a dynamic educational explanation of *why* they missed it or *where* it is located in the context of their image analysis. 
 
     Return a JSON OBJECT with:
-    - "results": ARRAY of objects (same as before: index, validity, matched_admin_index, description, explanation)
+    - "results": ARRAY of objects (index, validity, matched_admin_index, description, explanation)
     - "summary_explanation": string (The educational summary)
+    - "missed_evidence_explanations": ARRAY of objects containing {"admin_id": string, "explanation": string} using the Database IDs provided in the GROUND TRUTH section.
   `;
 
     try {
