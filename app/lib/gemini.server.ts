@@ -141,7 +141,7 @@ export async function checkEvidenceListWithGemini(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-3-flash-preview", // User explicitly requested this model
+            "gemini-3-flash", // User explicitly requested this model
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -229,7 +229,7 @@ export async function analyzeImageQuality(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-3-flash-preview",
+            "gemini-3-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -244,9 +244,9 @@ export async function analyzeImageQuality(
         }
         return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually", generated_hints: [] };
 
-    } catch (e) {
+    } catch (e: any) {
         console.error("Gemini API Call Error:", e);
-        return { quality_score: 0, precontext: "Reference failed", recommendation: "Error", generated_hints: [] };
+        return { quality_score: 0, precontext: `Analysis failed: ${e.message}`, recommendation: "Error", generated_hints: [] };
     }
 }
 
@@ -290,16 +290,16 @@ export async function generateEvidenceDescription(
     try {
         const description = await callGeminiApi(
             apiKey,
-            "gemini-1.5-flash",
+            "gemini-3-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
             gatewayToken
         );
         return description.trim();
-    } catch (e) {
+    } catch (e: any) {
         console.error("Gemini Description gen failed", e);
-        return "Analysis unavailable.";
+        return `Analysis failed: ${e.message}`;
     }
 }
 
@@ -344,7 +344,7 @@ export async function batchAnalyzeOfficialEvidence(
     try {
         const responseText = await callGeminiApi(
             apiKey,
-            "gemini-1.5-flash",
+            "gemini-3-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -357,9 +357,9 @@ export async function batchAnalyzeOfficialEvidence(
             const parsed = JSON.parse(jsonMatch[0]);
             return parsed.results || [];
         }
-        return [];
-    } catch (e) {
+        return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: Invalid JSON response - ${responseText.substring(0, 100)}` }));
+    } catch (e: any) {
         console.error("Batch Analysis Failed", e);
-        return [];
+        return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: ${e.message}` }));
     }
 }
