@@ -140,9 +140,10 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, childr
             if (relativeBox.w > 20 && relativeBox.h > 20) {
                 onBoxChange(relativeBox);
             } else {
-                setDrawRect(null); // Clear if too small
                 onBoxChange(null);
             }
+            // Unconditionally clear the transient drawing box
+            setDrawRect(null);
         }
     };
 

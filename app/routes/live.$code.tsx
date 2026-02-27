@@ -198,6 +198,14 @@ export default function StudentLiveGame() {
                     cursorMarkerRef.current.setMap(null);
                     cursorMarkerRef.current = null;
                 }
+                if (officialMarkerRef.current) {
+                    officialMarkerRef.current.setMap(null);
+                    officialMarkerRef.current = null;
+                }
+                if (polylineRef.current) {
+                    polylineRef.current.setMap(null);
+                    polylineRef.current = null;
+                }
                 setMarker(null);
 
                 if (mapInstance) {
@@ -209,22 +217,15 @@ export default function StudentLiveGame() {
             lastRoundIndex.current = newIndex;
             setRoomState(newData);
 
-            // Fetch Detailed Result on Review
-            if (newData.room.status === 'REVIEW' && !result?.officialEvidence) {
-                // We need distinct result fetch to get the official Evidence comparison
-                // We can re-use the round_result endpoint
-                const resultFetcher = fetch(`/api/room/${code}/round_result`).then(res => res.json()).then((data: any) => {
-                    if (data.score !== undefined) {
-                        setResult((prev: any) => ({ ...prev, ...data }));
-                    }
-                });
-            }
+            // Removed duplicate fetch logic in favor of robust useEffect below
         }
     }, [fetcher.data]);
 
     // 2. Map Init
     const mapRef = useRef<HTMLDivElement>(null);
     const cursorMarkerRef = useRef<google.maps.Marker | null>(null); // Ref for reliable cleanup
+    const officialMarkerRef = useRef<any>(null);
+    const polylineRef = useRef<google.maps.Polyline | null>(null);
 
     useEffect(() => {
         if (room?.status === 'PLAYING' && !mapInstance && mapRef.current) {
@@ -371,7 +372,7 @@ export default function StudentLiveGame() {
 
     // Fetch Full Result when entering REVIEW mode
     useEffect(() => {
-        if (room?.status === 'REVIEW' && !result?.score) {
+        if (room?.status === 'REVIEW' && !result?.officialEvidence) {
             // Fetch result from dedicated endpoint
             fetch(`/api/room/${code}/round_result`)
                 .then(async res => {
@@ -404,7 +405,53 @@ export default function StudentLiveGame() {
                     setResult((prev: any) => ({ ...prev, message: "Error fetching data. Check Console." }));
                 });
         }
-    }, [room?.status, code, result?.score]);
+    }, [room?.status, code, result?.officialEvidence]);
+
+    // Draw Official Pin & Line in REVIEW mode
+    useEffect(() => {
+        if (room?.status === 'REVIEW' && result?.officialLocation && mapInstance) {
+            importLibrary("marker").then(async () => {
+                const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
+
+                if (!officialMarkerRef.current) {
+                    const pin = new PinElement({
+                        background: "#EF4444",
+                        borderColor: "#7F1D1D",
+                        glyphColor: "white",
+                        scale: 1.2
+                    });
+
+                    officialMarkerRef.current = new AdvancedMarkerElement({
+                        position: { lat: result.officialLocation.lat, lng: result.officialLocation.lng },
+                        map: mapInstance,
+                        title: "Official Location",
+                        content: pin.element
+                    });
+
+                    if (guess && !polylineRef.current) {
+                        polylineRef.current = new google.maps.Polyline({
+                            path: [guess, { lat: result.officialLocation.lat, lng: result.officialLocation.lng }],
+                            geodesic: true,
+                            strokeColor: "#EF4444",
+                            strokeOpacity: 0,
+                            strokeWeight: 2,
+                            icons: [{
+                                icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 },
+                                offset: '0',
+                                repeat: '20px'
+                            }],
+                            map: mapInstance
+                        });
+                    }
+
+                    const bounds = new google.maps.LatLngBounds();
+                    bounds.extend({ lat: result.officialLocation.lat, lng: result.officialLocation.lng });
+                    if (guess) bounds.extend(guess);
+                    mapInstance.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+                }
+            });
+        }
+    }, [room?.status, result?.officialLocation, mapInstance, guess]);
 
 
     // --- RENDERS ---
@@ -679,7 +726,7 @@ export default function StudentLiveGame() {
             )}
 
             {/* Hints Overlay */}
-            {(result && (layoutMode === "result" || submitted)) && (
+            {(result && layoutMode === "result") && (
                 <div className="w-full md:w-[20%] bg-slate-900 border-l border-white/10 overflow-y-auto">
                     {result.score !== undefined ? (
                         <div className="p-6">
