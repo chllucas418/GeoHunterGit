@@ -710,10 +710,10 @@ export default function StudentLiveGame() {
                                 )}
 
                                 {/* Missed Evidence List */}
-                                {(result?.officialEvidence || currentRound?.evidence)?.length > 0 && (
+                                {(result?.officialEvidence || currentRound?.evidence)?.filter((ev: any) => !result.evidenceFound?.includes(ev.id)).length > 0 && (
                                     <div className="mt-4 space-y-2">
                                         <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
-                                        {(result?.officialEvidence || currentRound?.evidence).map((ev: any) => (
+                                        {(result?.officialEvidence || currentRound?.evidence).filter((ev: any) => !result.evidenceFound?.includes(ev.id)).map((ev: any) => (
                                             <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
                                                 <div className="flex justify-between">
                                                     <span className="font-bold text-red-300 block mb-1">{ev.description}</span>

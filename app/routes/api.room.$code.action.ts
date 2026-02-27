@@ -48,7 +48,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                         if (location && location.image_url && env.GEMINI_API_KEY) {
                             const itemsToAnalyze = missingAnalysis.map((e: any) => ({
                                 id: e.id,
-                                box: typeof e.box === 'string' ? JSON.parse(e.box) : e.box,
+                                box: typeof e.bounding_box === 'string' ? JSON.parse(e.bounding_box) : e.bounding_box,
                                 description: e.description
                             }));
 

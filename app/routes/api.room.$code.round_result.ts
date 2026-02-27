@@ -66,7 +66,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                     // Usually it's stored as JSON string in SQLite.
                     const itemsToAnalyze = missingAnalysis.map((e: any) => ({
                         id: e.id,
-                        box: typeof e.box === 'string' ? JSON.parse(e.box) : e.box,
+                        box: typeof e.bounding_box === 'string' ? JSON.parse(e.bounding_box) : e.bounding_box,
                         description: e.description
                     }));
 
