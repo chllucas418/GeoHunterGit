@@ -125,6 +125,21 @@ export default function MassAdd() {
     const [analyzingIds, setAnalyzingIds] = useState<Set<number>>(new Set());
     const [editingId, setEditingId] = useState<number | null>(null); // Index of file being edited
 
+    // Auto-prompt developer to add map evidence
+    useEffect(() => {
+        if (files.length === 0 || analyzingIds.size > 0 || editingId !== null) return;
+        // Find first file that has AI desc but no evidence and hasn't been prompted
+        const indexToPrompt = files.findIndex(f => f.description !== "" && f.evidence.length === 0 && !f.prompted);
+        if (indexToPrompt !== -1) {
+            setEditingId(indexToPrompt);
+            setFiles(prev => {
+                const cp = [...prev];
+                if (cp[indexToPrompt]) cp[indexToPrompt].prompted = true;
+                return cp;
+            });
+        }
+    }, [files, analyzingIds, editingId]);
+
     const submit = useSubmit();
     const actionData = useActionData<typeof action>();
     const navigation = useNavigation();
@@ -136,7 +151,43 @@ export default function MassAdd() {
         libraries: LIBRARIES
     });
 
+    const analyzeFile = async (fileId: number, fileObj: File) => {
+        setAnalyzingIds(prev => new Set(prev).add(fileId));
+        const formData = new FormData();
+        formData.append('intent', 'analyze');
+        formData.append('image', fileObj);
+
+        try {
+            const res = await fetch('/admin/mass-add', { method: 'POST', body: formData });
+            const data = (await res.json()) as { success: boolean, aiData?: any };
+
+            if (data.success && data.aiData) {
+                setFiles(prev => prev.map(f => {
+                    if (f.id === fileId) {
+                        return {
+                            ...f,
+                            description: data.aiData.precontext,
+                            difficulty: data.aiData.difficulty_rating,
+                            hints: data.aiData.generated_hints || ["", "", ""],
+                            status: f.lat ? 'reviewed' : 'needs_gps'
+                        };
+                    }
+                    return f;
+                }));
+            }
+        } catch (e) {
+            console.error("AI Failed for", fileObj.name, e);
+        } finally {
+            setAnalyzingIds(prev => {
+                const next = new Set(prev);
+                next.delete(fileId);
+                return next;
+            });
+        }
+    };
+
     const onDrop = async (acceptedFiles: File[]) => {
+        const timestamp = Date.now();
         const newFiles = await Promise.all(acceptedFiles.map(async (file, index) => {
             let lat = null, lng = null;
             try {
@@ -150,8 +201,21 @@ export default function MassAdd() {
                 console.warn("No GPS found for", file.name);
             }
 
+            // Auto sort based on filename matching map set name
+            let matchedSet = "";
+            const filenameLower = file.name.substring(0, file.name.lastIndexOf('.')).toLowerCase() || file.name.toLowerCase();
+            if (mapSets) {
+                for (const set of mapSets) {
+                    if (filenameLower.includes(set.name.toLowerCase()) ||
+                        set.name.toLowerCase().includes(filenameLower)) {
+                        matchedSet = set.id;
+                        break;
+                    }
+                }
+            }
+
             return {
-                id: Date.now() + index,
+                id: timestamp + index,
                 file,
                 preview: URL.createObjectURL(file), // Provide preview
                 lat,
@@ -161,58 +225,23 @@ export default function MassAdd() {
                 difficulty: 5,
                 hints: ["", "", ""],
                 evidence: [],
-                addToSet: "",
-                status: lat ? 'ready' : 'needs_gps'
+                addToSet: matchedSet, // Set matched set based on filename
+                status: lat ? 'analyzing' : 'needs_gps',
+                prompted: false // Tracker to avoid repeating the prompt loop
             };
         }));
 
+        // Add to state
         setFiles(prev => [...prev, ...newFiles]);
+
+        // Auto-run AI check
+        newFiles.forEach(nf => {
+            analyzeFile(nf.id, nf.file);
+        });
     };
 
     const { getRootProps, getInputProps } = useDropzone({ onDrop, accept: { 'image/*': [] } });
 
-    // AI Handler
-    const generateAi = async (index: number) => {
-        const fileData = files[index];
-        setAnalyzingIds(prev => new Set(prev).add(index));
-
-        const formData = new FormData();
-        formData.append('intent', 'analyze');
-        formData.append('image', fileData.file);
-
-        // We use fetcher to avoid page reload for individual AI calls? 
-        // Or just use submit and handle action data?
-        // Using fetch for cleaner "component-level" loading state without global nav reload might be better, 
-        // but Remix standard is useFetcher.
-        // For simplicity let's use standard fetch here to not complexify the actionData routing.
-
-        try {
-            const res = await fetch('/admin/mass-add', { method: 'POST', body: formData });
-            const data = (await res.json()) as { success: boolean, aiData?: any };
-
-            if (data.success && data.aiData) {
-                setFiles(prev => {
-                    const copy = [...prev];
-                    copy[index] = {
-                        ...copy[index],
-                        description: data.aiData.precontext,
-                        difficulty: data.aiData.difficulty_rating,
-                        hints: data.aiData.generated_hints || ["", "", ""],
-                        status: copy[index].lat ? 'reviewed' : 'needs_gps'
-                    };
-                    return copy;
-                });
-            }
-        } catch (e) {
-            alert("AI Failed");
-        } finally {
-            setAnalyzingIds(prev => {
-                const next = new Set(prev);
-                next.delete(index);
-                return next;
-            });
-        }
-    };
 
     const removeFile = (index: number) => {
         setFiles(files.filter((_, i) => i !== index));
@@ -222,6 +251,11 @@ export default function MassAdd() {
         const item = files[index];
         if (!item.lat || !item.lng) {
             alert("Missing GPS!");
+            return;
+        }
+        if (item.evidence.length === 0) {
+            alert("Please add map evidence and a descriptive visual summary before saving!");
+            setEditingId(index);
             return;
         }
 
@@ -590,11 +624,11 @@ export default function MassAdd() {
 
                         <div className="p-3 bg-gray-950/50 flex gap-2 border-t border-gray-800">
                             <button
-                                onClick={() => generateAi(idx)}
-                                disabled={analyzingIds.has(idx)}
+                                onClick={() => analyzeFile(file.id, file.file)}
+                                disabled={analyzingIds.has(file.id)}
                                 className="flex-1 px-3 py-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded text-sm disabled:opacity-50"
                             >
-                                {analyzingIds.has(idx) ? 'Thinking...' : 'AI Generate'}
+                                {analyzingIds.has(file.id) ? 'Thinking...' : 'AI Generate'}
                             </button>
                             <button
                                 onClick={() => setEditingId(idx)}
@@ -602,12 +636,21 @@ export default function MassAdd() {
                             >
                                 Edit
                             </button>
-                            <button
-                                onClick={() => saveLocation(idx)}
-                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-sm text-white"
-                            >
-                                Save
-                            </button>
+                            {file.evidence.length === 0 ? (
+                                <button
+                                    onClick={() => setEditingId(idx)}
+                                    className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded text-sm text-white font-bold animate-pulse"
+                                >
+                                    Add Evidence
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => saveLocation(idx)}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-sm text-white"
+                                >
+                                    Save
+                                </button>
+                            )}
                             <button onClick={() => removeFile(idx)} className="px-2 text-gray-500 hover:text-red-400">×</button>
                         </div>
                     </div>

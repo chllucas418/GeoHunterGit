@@ -555,16 +555,42 @@ export default function StudentLiveGame() {
                             onBoxChange={isEvidenceMode ? handleBoxDrawn : () => { }}
                             disabled={submitted || !isEvidenceMode}
                         >
-                            {/* User Evidence (Green) */}
-                            {evidenceList.map((ev) => (
-                                <div key={ev.id} className="absolute border-2 border-green-400 bg-green-400/10"
-                                    style={{ left: `${ev.box.x / 10}%`, top: `${ev.box.y / 10}%`, width: `${ev.box.w / 10}%`, height: `${ev.box.h / 10}%` }}
-                                >
-                                    {!submitted && (
-                                        <button onClick={(e) => { e.stopPropagation(); setEvidenceList(prev => prev.filter(i => i.id !== ev.id)); }} className="bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs absolute -top-2 -right-2 rounded-full">✕</button>
-                                    )}
-                                </div>
-                            ))}
+                            {/* User Evidence */}
+                            {evidenceList.map((ev, index) => {
+                                // Default color: Yellow (Guessing phase)
+                                let borderColorClass = "border-yellow-400";
+                                let bgColorClass = "bg-yellow-400/20";
+
+                                // Review phase: dynamically color based on AI Validity
+                                if (room.status === 'REVIEW' && result?.aiFeedback?.results) {
+                                    const grading = result.aiFeedback.results.find((r: any) => r.index === index);
+                                    if (grading) {
+                                        if (grading.validity > 0.7) {
+                                            // Correct
+                                            borderColorClass = "border-green-400";
+                                            bgColorClass = "bg-green-400/20";
+                                        } else if (grading.validity <= 0.1) {
+                                            // Did not help locating effort (Generic/Sky/Wall)
+                                            borderColorClass = "border-blue-500";
+                                            bgColorClass = "bg-blue-500/20";
+                                        } else {
+                                            // Incorrect / Missed actual feature
+                                            borderColorClass = "border-red-500";
+                                            bgColorClass = "bg-red-500/20";
+                                        }
+                                    }
+                                }
+
+                                return (
+                                    <div key={ev.id} className={`absolute border-2 ${borderColorClass} ${bgColorClass} transition-colors duration-500`}
+                                        style={{ left: `${ev.box.x / 10}%`, top: `${ev.box.y / 10}%`, width: `${ev.box.w / 10}%`, height: `${ev.box.h / 10}%` }}
+                                    >
+                                        {!submitted && (
+                                            <button onClick={(e) => { e.stopPropagation(); setEvidenceList(prev => prev.filter(i => i.id !== ev.id)); }} className="bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs absolute -top-2 -right-2 rounded-full">✕</button>
+                                        )}
+                                    </div>
+                                );
+                            })}
 
                             {/* Official Evidence - Only in Review */}
                             {room.status === 'REVIEW' && (result?.officialEvidence || currentRound?.evidence)?.map((ev: any) => {
