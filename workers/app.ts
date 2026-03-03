@@ -14,6 +14,8 @@ const requestHandler = createRequestHandler(
   import.meta.env.MODE
 );
 
+export { GeoHunterRoomDO } from "../app/durable-objects/GeoHunterRoomDO";
+
 export default {
   async fetch(request, env, ctx) {
     return requestHandler(request, {

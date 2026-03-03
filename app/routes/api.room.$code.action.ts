@@ -111,5 +111,12 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
     }
 
+    if (action === "TOGGLE_PAUSE") {
+        const isPaused = formData.get("isPaused") === "true" ? 1 : 0;
+        await db.prepare(
+            "UPDATE rooms SET is_paused = ? WHERE code = ?"
+        ).bind(isPaused, code).run();
+    }
+
     return Response.json({ success: true });
 }

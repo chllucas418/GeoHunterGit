@@ -360,3 +360,68 @@ export async function batchAnalyzeOfficialEvidence(
         return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: ${e.message}` }));
     }
 }
+
+export async function generateSocraticHint(
+    apiKey: string,
+    imageUrl: string,
+    locationName: string,
+    studentQuery: string,
+    curriculumFocus: string,
+    baseUrl?: string,
+    gatewayToken?: string,
+    directBase64?: string
+) {
+    let base64Data = "";
+    let mimeType = "image/jpeg";
+
+    if (directBase64) {
+        if (directBase64.startsWith("data:")) {
+            const parts = directBase64.split(",");
+            mimeType = parts[0].split(":")[1].split(";")[0];
+            base64Data = parts[1];
+        } else {
+            base64Data = directBase64;
+        }
+    } else {
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error("Failed to fetch image");
+        const arrayBuffer = await response.arrayBuffer();
+        base64Data = arrayBufferToBase64(arrayBuffer);
+        mimeType = response.headers.get("content-type") || "image/jpeg";
+    }
+
+    const focusInstruction = curriculumFocus !== "None"
+        ?\`CRITICAL: Frame your clue around this Tuen Mun specific curriculum focus: "\${curriculumFocus}". Highlight elements like Light Rail stations, specific Public Estate designs, terrain, or cultural landmarks that match this focus.\`
+        : \`Frame your clue around Tuen Mun area specifics (estates, LRT, geography).\`;
+
+    const prompt = \`
+    You are an AI Socratic Tutor for a geography identification game set in Tuen Mun, Hong Kong.
+    The true location of this image is: "\${locationName}".
+    
+    The student is asking: "\${studentQuery}"
+    
+    \${focusInstruction}
+
+    RULES for Socratic Hints:
+    1. DO NOT give them the direct answer or the name of the location.
+    2. Respond with a thought-provoking question or a subtle observation about the image.
+    3. Encourage them to look at specific visual evidence (e.g. signage color, building age, background mountains).
+    4. Keep it concise (1-2 sentences).
+    5. Be encouraging and mysterious ("Agent, consider...")
+    \`;
+
+    try {
+        const responseText = await callGeminiApi(
+            apiKey,
+            "gemini-3-flash-preview",
+            prompt,
+            { mimeType, data: base64Data },
+            baseUrl,
+            gatewayToken
+        );
+        return responseText.trim();
+    } catch (e: any) {
+        console.error("Socratic Hint Generation Error:", e);
+        return "Warning: Info-Link degraded. Check the architectural style again.";
+    }
+}

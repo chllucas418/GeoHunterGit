@@ -54,17 +54,25 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
         // Determine Score (Total 8000 Max = 5000 Dist + 2000 Evidence + 1000 Time)
 
-        // 1. Distance Score: Stricter Cubic Curve
-        // Max 5000 pts. 3km cutoff for 0 pts.
+        // 1. Distance Score: Stricter Curved Scale for Tuen Mun area
         const MAX_DISTANCE_SCORE = 5000;
-        const MAX_DISTANCE_METERS = 3000; // 3km limit (was 7km)
         const distance = getDistance(lat, lng, trueLoc.lat, trueLoc.lng);
+        const distanceMeters = distance * 1000;
 
         let distanceScore = 0;
-        if ((distance * 1000) < MAX_DISTANCE_METERS) {
-            // Cubic Decay: (1 - d/max)^3
-            // 0m = 1.0, 1.5km = 0.125, 3km = 0
-            distanceScore = Math.round(MAX_DISTANCE_SCORE * Math.pow(1 - (distance * 1000) / MAX_DISTANCE_METERS, 3));
+        if (distanceMeters <= 100) {
+            // Highly rewarded proximity: max 5000 down to 4500 at 100m
+            distanceScore = Math.round(MAX_DISTANCE_SCORE - (distanceMeters * 5));
+        } else if (distanceMeters <= 300) {
+            // Dropoff from 100m to 300m
+            distanceScore = Math.round(4500 - ((distanceMeters - 100) * 7.5));
+        } else if (distanceMeters < 3000) {
+            // Tail trailing down to 0 at 3km
+            const fraction = (3000 - distanceMeters) / 2700;
+            distanceScore = Math.round(3000 * Math.pow(fraction, 2));
+        } else {
+            // Out of bounds / Guessed Wrong
+            distanceScore = 0;
         }
 
         // 2. Time Score: Speed Bonus
@@ -223,6 +231,17 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         // Total Score
         const finalScore = distanceScore + evidenceScore + timeScore;
 
+        // Tuen Mun Elo Update Calculation
+        let eloChange = 0;
+        if (distanceMeters <= 500) {
+            eloChange = Math.round(20 + (500 - distanceMeters) / 25);
+        } else if (distanceMeters <= 1500) {
+            eloChange = Math.round(5 - (distanceMeters - 500) / 100);
+        } else {
+            eloChange = Math.round(-15 - (distanceMeters - 1500) / 100);
+        }
+        eloChange = Math.max(-40, Math.min(40, eloChange));
+
         // Save Guess (Update: Added distance_score and evidence_score columns)
         await db.prepare(
             "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback, distance_score, evidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -232,6 +251,12 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         await db.prepare(
             "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
         ).bind(finalScore, code, userId).run();
+
+        // Update User Elo & Accuracies specifically (Teacher DB may not use total_score here)
+        // Wait, ensure current_elo doesn't go below 0
+        await db.prepare(
+            "UPDATE users SET current_elo = MAX(0, current_elo + ?) WHERE id = ?"
+        ).bind(eloChange, userId).run();
 
         // RETURN SUCCESS BUT NO DATA to prevent client from showing result immediately
         return Response.json({

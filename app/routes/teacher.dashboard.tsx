@@ -55,13 +55,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         const timeLimit = parseInt(formData.get("timeLimit") as string) || 120;
         const hintInterval = parseInt(formData.get("hintInterval") as string) || 30;
+        const hasGuidedPlaythrough = formData.get("hasGuidedPlaythrough") === "on" ? 1 : 0;
+        const curriculumFocus = formData.get("curriculumFocus") as string || "None";
 
         // Generate flexible 6-digit code
         const code = Math.floor(100000 + Math.random() * 900000).toString();
 
         await db.prepare(
-            "INSERT INTO rooms (code, host_id, map_set_id, status, time_limit, hint_interval) VALUES (?, ?, ?, 'WAITING', ?, ?)"
-        ).bind(code, userId, setId, timeLimit, hintInterval).run();
+            "INSERT INTO rooms (code, host_id, map_set_id, status, time_limit, hint_interval, has_guided_playthrough, curriculum_focus) VALUES (?, ?, ?, 'WAITING', ?, ?, ?, ?)"
+        ).bind(code, userId, setId, timeLimit, hintInterval, hasGuidedPlaythrough, curriculumFocus).run();
 
         return redirect(`/teacher/room/${code}`);
     }
@@ -227,7 +229,26 @@ export default function TeacherDashboard() {
                                                         className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-white text-sm font-mono focus:border-blue-500 focus:outline-none"
                                                     />
                                                 </div>
-                                                {/* Future: Location Filter UI (Too complex for this card, maybe just 'Limit Count') */}
+                                                <div>
+                                                    <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Curriculum Focus (Tuen Mun)</label>
+                                                    <select
+                                                        name="curriculumFocus"
+                                                        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-2 text-white text-sm font-bold focus:border-blue-500 focus:outline-none"
+                                                    >
+                                                        <option value="None">None (General deduction)</option>
+                                                        <option value="Architecture & Estates">Architecture & Public Estates</option>
+                                                        <option value="Transport & LRT">Transport & Light Rail (LRT)</option>
+                                                        <option value="History & Culture">Local History & Culture</option>
+                                                        <option value="Environment & Nature">Environment & Topography</option>
+                                                    </select>
+                                                </div>
+                                                <div className="pt-2">
+                                                    <label className="flex items-center gap-2 cursor-pointer cursor-custom">
+                                                        <input type="checkbox" name="hasGuidedPlaythrough" className="form-checkbox text-blue-500 rounded bg-slate-900 border-white/10" defaultChecked />
+                                                        <span className="text-[10px] uppercase font-bold text-emerald-400">Include Guided Playthrough First Round</span>
+                                                    </label>
+                                                </div>
+                                                {/* Future: Location Filter UI */}
                                             </div>
 
                                             <button

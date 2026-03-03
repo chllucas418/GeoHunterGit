@@ -75,6 +75,15 @@ export default function StudentLiveGame() {
     const [visibleHints, setVisibleHints] = useState<string[]>([]);
     const [hasZoomed, setHasZoomed] = useState(false);
 
+    // Tutorial Flow State
+    const [tutorialStep, setTutorialStep] = useState(0);
+
+    // AI Socratic Hint State
+    const [aiQuestion, setAiQuestion] = useState("");
+    const [aiHintResponse, setAiHintResponse] = useState<string | null>(null);
+    const [isAskingAi, setIsAskingAi] = useState(false);
+    const [hasAskedAi, setHasAskedAi] = useState(false);
+
     // Derived Data
     const room = roomState?.room;
     const currentRound = roomState?.currentRound;
@@ -144,6 +153,11 @@ export default function StudentLiveGame() {
             setTimeout(() => setIntroStage(1), 100);
             setTimeout(() => setIntroStage(2), 4000);
             setTimeout(() => setIntroStage(3), 5000);
+
+            // Reset Tutorial for this round if applicable
+            if (roomState?.room?.has_guided_playthrough && roomState?.room?.current_index === 0) {
+                setTutorialStep(1);
+            }
         }
     }, [location?.id]);
 
@@ -193,6 +207,12 @@ export default function StudentLiveGame() {
                 setVisibleHints([]); // Clear hints
                 setHasZoomed(false);
 
+                // Clear AI States
+                setHasAskedAi(false);
+                setAiHintResponse(null);
+                setAiQuestion("");
+                setIsAskingAi(false);
+
                 // Cleanup Marker using Ref
                 if (cursorMarkerRef.current) {
                     cursorMarkerRef.current.setMap(null);
@@ -221,11 +241,77 @@ export default function StudentLiveGame() {
         }
     }, [fetcher.data]);
 
-    // 2. Map Init
+    // 2. Map & WebSocket Init
     const mapRef = useRef<HTMLDivElement>(null);
     const cursorMarkerRef = useRef<google.maps.Marker | null>(null); // Ref for reliable cleanup
     const officialMarkerRef = useRef<any>(null);
     const polylineRef = useRef<google.maps.Polyline | null>(null);
+
+    // WS Refs
+    const wsRef = useRef<WebSocket | null>(null);
+    const incomingLaserMarkerRef = useRef<google.maps.Marker | null>(null);
+
+    // Setup WebSocket for Live Comms
+    useEffect(() => {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/api/room/${code}/ws`;
+
+        let socket: WebSocket;
+        let reconnectTimer: NodeJS.Timeout;
+
+        const connect = () => {
+            socket = new WebSocket(wsUrl);
+            socket.onopen = () => console.log("Live WS Connected");
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "laser" && mapInstance) {
+                        // Show laser pointer from teacher
+                        if (!incomingLaserMarkerRef.current) {
+                            incomingLaserMarkerRef.current = new google.maps.Marker({
+                                position: { lat: data.lat, lng: data.lng },
+                                map: mapInstance,
+                                icon: {
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    scale: 15,
+                                    fillColor: "#ef4444",
+                                    fillOpacity: 0.8,
+                                    strokeColor: "#ffffff",
+                                    strokeWeight: 3,
+                                },
+                                zIndex: 9999
+                            });
+                        } else {
+                            incomingLaserMarkerRef.current.setPosition({ lat: data.lat, lng: data.lng });
+                        }
+
+                        setTimeout(() => {
+                            if (incomingLaserMarkerRef.current) {
+                                incomingLaserMarkerRef.current.setMap(null);
+                                incomingLaserMarkerRef.current = null;
+                            }
+                        }, 3000); // laser ping lasts 3 sec
+                    } else if (data.type === "pause_toggle") {
+                        fetcher.load(`/api/room/${code}/status`);
+                    }
+                } catch (e) { }
+            };
+            socket.onclose = () => {
+                console.log("Live WS Closed, reconnecting...");
+                reconnectTimer = setTimeout(connect, 3000);
+            };
+            wsRef.current = socket;
+        };
+
+        if (room?.status === 'PLAYING' || room?.status === 'REVIEW') {
+            connect();
+        }
+
+        return () => {
+            clearTimeout(reconnectTimer);
+            if (socket) socket.close();
+        };
+    }, [code, mapInstance, room?.status]);
 
     useEffect(() => {
         if (room?.status === 'PLAYING' && !mapInstance && mapRef.current) {
@@ -256,6 +342,18 @@ export default function StudentLiveGame() {
                             map: map,
                         });
                         setMarker(cursorMarkerRef.current); // Keep state for UI triggers if needed, but rely on Ref for logic
+                    }
+                });
+
+                // Ticker: send mouse move to teacher
+                map.addListener("mousemove", (e: google.maps.MapMouseEvent) => {
+                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                            type: "cursor",
+                            id: userId,
+                            lat: e.latLng!.lat(),
+                            lng: e.latLng!.lng()
+                        }));
                     }
                 });
 
@@ -345,6 +443,27 @@ export default function StudentLiveGame() {
     };
 
     // --- HANDLERS ---
+    const handleAskAi = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!aiQuestion.trim() || hasAskedAi) return;
+        setIsAskingAi(true);
+        try {
+            const fd = new FormData();
+            fd.append("query", aiQuestion);
+            const res = await fetch(`/api/room/${code}/hint`, { method: "POST", body: fd });
+            const data = await res.json();
+            if (data.hint) {
+                setAiHintResponse(data.hint);
+                setHasAskedAi(true);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsAskingAi(false);
+            setAiQuestion("");
+        }
+    };
+
     const handleBoxDrawn = (box: BoxCoordinates | null) => {
         if (box) {
             setEvidenceList(prev => [...prev, { box, id: Math.random().toString(36).substr(2, 9) }]);
@@ -488,6 +607,18 @@ export default function StudentLiveGame() {
     return (
         <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row transition-all duration-700 ease-in-out">
 
+            {/* FREEZE RAY OVERLAY */}
+            {room.is_paused === 1 && (
+                <div className="absolute inset-0 z-[9999] bg-black/40 backdrop-blur-2xl flex flex-col items-center justify-center p-6 pointer-events-auto">
+                    <h1 className="text-6xl md:text-8xl font-black text-white uppercase tracking-tighter mb-4 animate-pulse">
+                        Eyes on Board
+                    </h1>
+                    <p className="text-blue-300 font-mono text-sm tracking-widest bg-blue-900/40 px-6 py-3 rounded-full border border-blue-500/30">
+                        INSTRUCTOR BRIEFING IN PROGRESS
+                    </p>
+                </div>
+            )}
+
             {/* COLUMN 1: EVIDENCE / IMAGE */}
             <div className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
                 ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full md:w-1/2"}`}
@@ -526,6 +657,36 @@ export default function StudentLiveGame() {
                     </div>
                 )}
 
+                {/* --- TUTORIAL OVERLAY --- */}
+                {room.has_guided_playthrough === 1 && currentRound.index === 0 && tutorialStep > 0 && tutorialStep < 5 && (
+                    <div className="absolute inset-0 z-[70] pointer-events-none flex flex-col items-center justify-end pb-12">
+                        <div className="bg-blue-600/90 backdrop-blur-xl border-2 border-blue-400 p-6 rounded-2xl max-w-md shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-10">
+                            <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2 flex items-center gap-2">
+                                <span>🎓</span> Simulation Guide
+                            </h3>
+                            <p className="text-blue-100 text-sm mb-6 leading-relaxed font-medium">
+                                {tutorialStep === 1 && "Welcome Agent. Before we begin, let's review the tools. Your objective is to lock onto the geographical coordinates that match this image."}
+                                {tutorialStep === 2 && "First, analyze the image. Click 'Enable Scanner' (top right) and draw a box over a distinct clue you see (e.g. an architectural feature or street sign)."}
+                                {tutorialStep === 3 && "Excellent. The AI will evaluate this evidence later. Now, click on the satellite map on the right to place your coordinate pin."}
+                                {tutorialStep === 4 && "Finally, click CONFIRM COORDINATES to lock in your submission. High scores are awarded for accuracy within a 100m radius."}
+                            </p>
+                            <div className="flex justify-between items-center">
+                                <div className="flex gap-1">
+                                    {[1, 2, 3, 4].map(s => (
+                                        <div key={s} className={`w-2 h-2 rounded-full ${s === tutorialStep ? 'bg-white' : 'bg-white/30'}`} />
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={() => setTutorialStep(prev => prev + 1)}
+                                    className="px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest hover:bg-blue-50 transition-colors"
+                                >
+                                    {tutorialStep === 4 ? "Begin Operaton" : "Next ➔"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Hints Overlay */}
                 {!submitted && visibleHints.length > 0 && (
                     <div className="absolute bottom-24 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
@@ -534,6 +695,40 @@ export default function StudentLiveGame() {
                                 {hint}
                             </div>
                         ))}
+                    </div>
+                )}
+
+                {/* AI Hint UI */}
+                {!submitted && !isEvidenceMode && introStage >= 3 && (tutorialStep === 0 || tutorialStep >= 5) && (
+                    <div className="absolute bottom-6 left-6 z-30 w-full max-w-[16rem] pointer-events-auto bg-black/60 backdrop-blur-xl border border-blue-500/30 rounded-xl p-4 shadow-2xl">
+                        <h3 className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-2 flex justify-between">
+                            <span>Socratic AI Link</span>
+                            <span className="text-slate-500">{hasAskedAi ? '0/1' : '1/1'}</span>
+                        </h3>
+                        {aiHintResponse ? (
+                            <div className="text-xs text-blue-100 italic leading-relaxed">"{aiHintResponse}"</div>
+                        ) : hasAskedAi ? (
+                            <div className="text-[10px] text-slate-400 uppercase tracking-widest">Connection to AI severed for this sector.</div>
+                        ) : (
+                            <form onSubmit={handleAskAi} className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={aiQuestion}
+                                    onChange={e => setAiQuestion(e.target.value)}
+                                    placeholder="Ask for a clue..."
+                                    className="flex-1 bg-black/50 border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 placeholder-slate-500"
+                                    disabled={isAskingAi}
+                                    maxLength={100}
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={isAskingAi || !aiQuestion.trim()}
+                                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-[10px] uppercase font-bold transition-colors"
+                                >
+                                    {isAskingAi ? "..." : "SEND"}
+                                </button>
+                            </form>
+                        )}
                     </div>
                 )}
 

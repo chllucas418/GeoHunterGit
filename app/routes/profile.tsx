@@ -148,6 +148,32 @@ export default function Profile() {
                     </div>
                 </div>
 
+                {/* --- TUEN MUN LOCAL TITLES --- */}
+                <section className="space-y-6">
+                    <h2 className="text-sm font-black text-white/40 uppercase tracking-[0.3em] ml-4">Authorized Titles</h2>
+                    <div className="flex flex-wrap gap-4">
+                        {user.titles ? JSON.parse(user.titles).map((t: string) => (
+                            <div key={t} className="px-5 py-3 rounded-full bg-blue-500/20 border border-blue-500/50 text-blue-200 text-sm font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(59,130,246,0.2)] hover:scale-105 transition-transform">
+                                🎖️ {t}
+                            </div>
+                        )) : (
+                            <div className="px-5 py-3 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-200 text-sm font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                                🆕 LRT Spotter Trainee
+                            </div>
+                        )}
+                        {Math.round(user.current_elo) > 1300 && (
+                            <div className="px-5 py-3 rounded-full bg-purple-500/20 border border-purple-500/50 text-purple-200 text-sm font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(168,85,247,0.2)]">
+                                🏢 Public Estate Expert
+                            </div>
+                        )}
+                        {Math.round(user.current_elo) > 1500 && (
+                            <div className="px-5 py-3 rounded-full bg-yellow-500/20 border border-yellow-500/50 text-yellow-200 text-sm font-bold uppercase tracking-widest shadow-[0_0_15px_rgba(234,179,8,0.2)]">
+                                ⛰️ Castle Peak Trail Blazer
+                            </div>
+                        )}
+                    </div>
+                </section>
+
                 {/* --- HISTORY LOGS --- */}
                 <section className="space-y-6">
                     <h2 className="text-sm font-black text-white/40 uppercase tracking-[0.3em] ml-4">Tactical History</h2>
