@@ -391,16 +391,16 @@ export async function generateSocraticHint(
     }
 
     const focusInstruction = curriculumFocus !== "None"
-        ?\`CRITICAL: Frame your clue around this Tuen Mun specific curriculum focus: "\${curriculumFocus}". Highlight elements like Light Rail stations, specific Public Estate designs, terrain, or cultural landmarks that match this focus.\`
-        : \`Frame your clue around Tuen Mun area specifics (estates, LRT, geography).\`;
+        ? `CRITICAL: Frame your clue around this Tuen Mun specific curriculum focus: "${curriculumFocus}". Highlight elements like Light Rail stations, specific Public Estate designs, terrain, or cultural landmarks that match this focus.`
+        : `Frame your clue around Tuen Mun area specifics (estates, LRT, geography).`;
 
-    const prompt = \`
+    const prompt = `
     You are an AI Socratic Tutor for a geography identification game set in Tuen Mun, Hong Kong.
-    The true location of this image is: "\${locationName}".
+    The true location of this image is: "${locationName}".
     
-    The student is asking: "\${studentQuery}"
+    The student is asking: "${studentQuery}"
     
-    \${focusInstruction}
+    ${focusInstruction}
 
     RULES for Socratic Hints:
     1. DO NOT give them the direct answer or the name of the location.
@@ -408,7 +408,7 @@ export async function generateSocraticHint(
     3. Encourage them to look at specific visual evidence (e.g. signage color, building age, background mountains).
     4. Keep it concise (1-2 sentences).
     5. Be encouraging and mysterious ("Agent, consider...")
-    \`;
+    `;
 
     try {
         const responseText = await callGeminiApi(
