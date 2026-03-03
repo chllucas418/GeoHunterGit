@@ -627,7 +627,7 @@ export default function StudentLiveGame() {
                 {room.status === 'PLAYING' && (
                     <div className="absolute top-0 inset-x-0 z-[60] p-4 flex justify-between items-start pointer-events-none">
                         <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex flex-col items-center mx-auto pointer-events-auto">
-                            <div className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${((currentRound.timeLimit || 120) - secondsElapsed) < 30 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                            <div suppressHydrationWarning className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${((currentRound.timeLimit || 120) - secondsElapsed) < 30 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                                 {Math.floor(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) / 60)}:{(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) % 60).toString().padStart(2, '0')}
                             </div>
                             {/* Hint Timer - Only show if hints remaining */}
@@ -678,7 +678,14 @@ export default function StudentLiveGame() {
                                 </div>
                                 <button
                                     onClick={() => setTutorialStep(prev => prev + 1)}
-                                    className="px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest hover:bg-blue-50 transition-colors"
+                                    disabled={
+                                        (tutorialStep === 2 && evidenceList.length === 0) ||
+                                        (tutorialStep === 3 && guess === null)
+                                    }
+                                    className={`px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest transition-colors ${((tutorialStep === 2 && evidenceList.length === 0) || (tutorialStep === 3 && guess === null))
+                                            ? 'opacity-50 cursor-not-allowed'
+                                            : 'hover:bg-blue-50'
+                                        }`}
                                 >
                                     {tutorialStep === 4 ? "Begin Operaton" : "Next ➔"}
                                 </button>

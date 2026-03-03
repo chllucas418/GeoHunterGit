@@ -8,17 +8,6 @@ import { EvidenceCanvas } from '~/components/EvidenceCanvas';
 import type { BoxCoordinates } from '~/types/shared';
 import { analyzeImageQuality } from '~/lib/gemini.server';
 
-// Helper for safe base64 conversion
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-}
-
 // Server-side Action
 export async function action({ request, context }: ActionFunctionArgs) {
     const formData = await request.formData();
@@ -27,12 +16,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // 1. AI Analysis
     if (intent === 'analyze') {
-        const imageFile = formData.get('image') as File;
-        if (!imageFile) return Response.json({ error: "No image provided" }, { status: 400 });
-
-        const arrayBuffer = await imageFile.arrayBuffer();
-        const base64String = arrayBufferToBase64(arrayBuffer); // Safe conversion
-        const dataUri = `data:${imageFile.type};base64,${base64String}`;
+        const dataUri = formData.get('image_data') as string;
+        if (!dataUri) return Response.json({ error: "No image data provided" }, { status: 400 });
 
         try {
             const aiData = await analyzeImageQuality(
@@ -153,11 +138,20 @@ export default function MassAdd() {
 
     const analyzeFile = async (fileId: number, fileObj: File) => {
         setAnalyzingIds(prev => new Set(prev).add(fileId));
-        const formData = new FormData();
-        formData.append('intent', 'analyze');
-        formData.append('image', fileObj);
+
+        const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = error => reject(error);
+        });
 
         try {
+            const dataUri = await toBase64(fileObj);
+            const formData = new FormData();
+            formData.append('intent', 'analyze');
+            formData.append('image_data', dataUri);
+
             const res = await fetch('/admin/mass-add', { method: 'POST', body: formData });
             const data = (await res.json()) as { success: boolean, aiData?: any };
 
