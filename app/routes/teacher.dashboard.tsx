@@ -55,7 +55,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         const timeLimit = parseInt(formData.get("timeLimit") as string) || 120;
         const hintInterval = parseInt(formData.get("hintInterval") as string) || 30;
-        const hasGuidedPlaythrough = formData.get("hasGuidedPlaythrough") === "on" ? 1 : 0;
+        const hasGuidedPlaythrough = formData.get("hasGuidedPlaythrough") ? 1 : 0;
         const curriculumFocus = formData.get("curriculumFocus") as string || "None";
 
         // Generate flexible 6-digit code

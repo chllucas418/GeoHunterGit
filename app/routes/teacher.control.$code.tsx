@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher, Link } from "react-router";
+import { useLoaderData } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { requireTeacher } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
@@ -9,12 +9,24 @@ export async function loader({ request, params, context }: any) {
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
     const room = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first<any>();
-    return { code, room, mapsApiKey: env.GOOGLE_MAPS_API_KEY };
+
+    let currentItem = null;
+    let location = null;
+    if (room && room.map_set_id) {
+        currentItem = await db.prepare(
+            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+        ).bind(room.map_set_id, room.current_index).first<any>();
+
+        if (currentItem) {
+            location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(currentItem.location_id).first<any>();
+        }
+    }
+
+    return { code, room, location, mapsApiKey: env.GOOGLE_MAPS_API_KEY };
 }
 
 export default function TeacherControlPanel() {
-    const { code, room, mapsApiKey } = useLoaderData() as any;
-    const fetcher = useFetcher();
+    const { code, location, mapsApiKey } = useLoaderData() as any;
 
     const [ws, setWs] = useState<WebSocket | null>(null);
     const mapRef = useRef<HTMLDivElement>(null);
@@ -24,9 +36,7 @@ export default function TeacherControlPanel() {
 
     // Setup WebSocket
     useEffect(() => {
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl = `${protocol}//${window.location.host}/api/room/${code}/ws`;
-
+        const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/api/room/${code}/ws`;
         const socket = new WebSocket(wsUrl);
         socket.onopen = () => console.log("Control WS Connected");
 
@@ -68,12 +78,32 @@ export default function TeacherControlPanel() {
             setOptions({ key: mapsApiKey });
             importLibrary("maps").then(async () => {
                 const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
+
+                // Set center to Current Location or default Tuen Mun
+                const centerNode = location ? { lat: location.lat, lng: location.lng } : { lat: 22.3964, lng: 113.9725 };
+
                 const map = new Map(mapRef.current!, {
-                    center: { lat: 22.3964, lng: 113.9725 },
-                    zoom: 12,
+                    center: centerNode,
+                    zoom: 14,
                     disableDefaultUI: true,
                     mapTypeId: "hybrid",
                 });
+
+                if (location) {
+                    new google.maps.Marker({
+                        position: centerNode,
+                        map: map,
+                        title: "Official Target",
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: "#ef4444", // Red for target
+                            fillOpacity: 1,
+                            strokeWeight: 2,
+                            strokeColor: "#ffffff",
+                        }
+                    });
+                }
 
                 map.addListener("click", (e: google.maps.MapMouseEvent) => {
                     const lat = e.latLng!.lat();
@@ -99,70 +129,55 @@ export default function TeacherControlPanel() {
                             }
                         });
                     }
+
+                    // Auto hide laser after 2s
+                    setTimeout(() => {
+                        if (laserMarkerRef.current) {
+                            laserMarkerRef.current.setMap(null);
+                            laserMarkerRef.current = null;
+                        }
+                    }, 2000);
                 });
 
                 setMapInstance(map);
             });
         }
-    }, [mapsApiKey, ws, mapInstance]);
+    }, [mapsApiKey, mapInstance, ws, location]);
 
     const togglePause = () => {
-        const formData = new FormData();
-        formData.append("intent", "TOGGLE_PAUSE");
-        fetcher.submit(formData, { method: "post", action: `/api/room/${code}/action` });
-
-        // Broadcast over WS for instant visual effect just in case polling is slow
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "pause_toggle" }));
         }
     };
 
     return (
-        <div className="h-[100dvh] w-screen bg-slate-950 text-white flex flex-col md:flex-row overflow-hidden">
-            {/* Sidebar */}
-            <div className="w-full md:w-80 shrink-0 border-r border-white/10 p-6 flex flex-col gap-6 overflow-y-auto">
+        <div className="h-[100dvh] w-screen bg-black flex flex-col font-sans">
+            <header className="bg-slate-900 border-b border-white/10 p-4 flex justify-between items-center z-10">
                 <div>
-                    <h1 className="text-2xl font-black uppercase tracking-widest text-blue-400">Control Pad</h1>
-                    <p className="text-xs text-slate-500 font-mono">Session: {code}</p>
+                    <h1 className="text-xl font-black text-white uppercase tracking-wider">Mission Control Pad</h1>
+                    <p className="text-xs font-mono text-slate-400 mt-1">Room {code} • Live Sat-Link</p>
                 </div>
-
                 <button
                     onClick={togglePause}
-                    className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold uppercase tracking-widest shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex justify-center items-center gap-2"
+                    className="px-6 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500 rounded text-red-400 font-bold uppercase tracking-widest transition-all"
                 >
-                    <span>❄️</span> Freeze Ray
+                    Toggle Freeze Ray
                 </button>
-                <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-widest">
-                    Disables student controls and blurs screens to enforce attention on the main board.
-                </p>
+            </header>
 
-                <hr className="border-white/10" />
-
-                <div>
-                    <h3 className="text-sm font-bold uppercase text-red-400 mb-2 flex items-center gap-2">
-                        <span className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
-                        Laser Pointer
-                    </h3>
-                    <p className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-widest">
-                        Tap anywhere on the map to send a synchronized red ping to all connected student displays. Use this to guide their analysis directly.
-                    </p>
-                </div>
-
-                <div className="mt-auto pt-8">
-                    <Link to={`/teacher/room/${code}`} className="block text-center py-3 border border-white/20 rounded-xl hover:bg-white/5 text-[10px] font-bold uppercase tracking-widest transition-all">
-                        Back to Projection Board
-                    </Link>
-                </div>
-            </div>
-
-            {/* Map Area */}
-            <div className="flex-1 relative">
+            <div className="flex-1 relative cursor-crosshair">
                 <div ref={mapRef} className="w-full h-full" />
-                <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-md px-4 py-2 border border-blue-500/30 rounded-lg pointer-events-none z-10">
-                    <span className="text-[10px] uppercase font-mono text-blue-300 font-bold tracking-[0.2em] flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
-                        Targeting Grid Active
-                    </span>
+
+                {/* HUD Overlay */}
+                <div className="absolute inset-0 pointer-events-none p-6">
+                    <div className="text-[10px] font-mono text-blue-400 bg-blue-900/40 inline-block px-3 py-1 rounded border border-blue-500/30 blur-sm">
+                        LASER LINK ONLINE
+                    </div>
+                </div>
+
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 pointer-events-none text-center">
+                    <p className="text-sm font-bold text-white tracking-widest uppercase">Tap map to fire laser</p>
+                    <p className="text-[10px] text-slate-400">Blue dots indicate live student cursors</p>
                 </div>
             </div>
         </div>

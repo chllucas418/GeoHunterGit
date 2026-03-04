@@ -235,9 +235,9 @@ export default function TeacherRoom() {
             </div>
 
             <div className="fixed top-6 right-6 z-50">
-                <a href={`/teacher/control/${code}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold text-[10px] uppercase tracking-widest border border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.5)] transition-all flex items-center gap-2 hover:scale-105">
+                <Link to={`/teacher/control/${code}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full font-bold text-[10px] uppercase tracking-widest border border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.5)] transition-all flex items-center gap-2 hover:scale-105">
                     <span>📱</span> Launch Control Pad
-                </a>
+                </Link>
             </div>
 
             <div className="w-full max-w-5xl">
@@ -361,9 +361,9 @@ export default function TeacherRoom() {
 
                 {/* Teacher Control */}
                 <div className="absolute bottom-12 right-12 z-50 flex flex-col items-end gap-4 pointer-events-auto">
-                    <a href={`/teacher/control/${code}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-blue-600/90 backdrop-blur hover:bg-blue-500 text-white rounded-full font-bold text-[10px] uppercase tracking-widest border border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.5)] transition-all flex items-center gap-2 hover:scale-105">
+                    <Link to={`/teacher/control/${code}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-blue-600/90 backdrop-blur hover:bg-blue-500 text-white rounded-full font-bold text-[10px] uppercase tracking-widest border border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.5)] transition-all flex items-center gap-2 hover:scale-105">
                         <span>📱</span> Control Pad
-                    </a>
+                    </Link>
 
                     <button
                         onClick={() => actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` })}

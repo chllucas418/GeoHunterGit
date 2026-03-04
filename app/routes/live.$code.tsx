@@ -148,12 +148,6 @@ export default function StudentLiveGame() {
             setEvidenceList([]);
             setHasZoomed(false);
 
-            // Intro Config
-            setIntroStage(0);
-            setTimeout(() => setIntroStage(1), 100);
-            setTimeout(() => setIntroStage(2), 4000);
-            setTimeout(() => setIntroStage(3), 5000);
-
             // Reset Tutorial for this round if applicable
             if (roomState?.room?.has_guided_playthrough && roomState?.room?.current_index === 0) {
                 setTutorialStep(1);
@@ -191,7 +185,7 @@ export default function StudentLiveGame() {
             const newIndex = newData.room?.current_index;
 
             // Detect Round Change for Animation
-            if (lastRoundIndex.current !== -1 && lastRoundIndex.current !== newIndex) {
+            if (lastRoundIndex.current !== newIndex) {
                 setIntroStage(0);
                 setTimeout(() => setIntroStage(1), 500);
                 setTimeout(() => setIntroStage(2), 3500);
