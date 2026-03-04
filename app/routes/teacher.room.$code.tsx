@@ -203,7 +203,7 @@ export default function TeacherRoom() {
             // ... rest of logic
 
             // Sync Timer if playing
-            if (data.room.status === 'PLAYING' && data.currentRound) {
+            if (data.room?.status === 'PLAYING' && data.currentRound) {
                 const elapsedSec = Math.floor((Date.now() - data.currentRound.startTime) / 1000);
                 const limit = data.currentRound.timeLimit || 120; // Default 120s
                 const remaining = Math.max(0, limit - elapsedSec);
@@ -220,6 +220,7 @@ export default function TeacherRoom() {
     if (!roomState) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Connecting to HQ...</div>;
 
     const { room, participants, currentRound } = roomState;
+    if (!room) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Connecting to HQ...</div>;
 
     // --- RENDERERS ---
 

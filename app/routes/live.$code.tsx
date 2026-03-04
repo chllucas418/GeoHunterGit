@@ -611,6 +611,7 @@ export default function StudentLiveGame() {
 
     // --- RENDERS ---
     if (!roomState) return <div className="p-8 text-white text-center">Locating Mission Signal...</div>;
+    if (!room) return <div className="p-8 text-white text-center">Locating Mission Signal...</div>;
 
     if (room.status === 'WAITING') {
         return (
