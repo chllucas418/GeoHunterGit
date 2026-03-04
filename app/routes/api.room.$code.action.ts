@@ -27,23 +27,29 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         try {
             const roomData = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first<any>();
             if (roomData && roomData.map_set_id) {
-                // Get current item
-                const item = await db.prepare(
-                    "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-                ).bind(roomData.map_set_id, roomData.current_index).first<any>();
+                const isGuidedRound = roomData.current_index === 0 && roomData.has_guided_playthrough;
+                let targetLocationId: string | null = null;
 
-                if (item) {
-                    const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
-                    let officialEvidence = evidenceResult.results || [];
+                if (isGuidedRound) {
+                    const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+                    if (defaultSim) targetLocationId = defaultSim.id;
+                } else {
+                    const datasetIndex = roomData.has_guided_playthrough ? roomData.current_index - 1 : roomData.current_index;
+                    const item = await db.prepare(
+                        "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+                    ).bind(roomData.map_set_id, datasetIndex).first<any>();
+                    if (item) targetLocationId = item.location_id;
+                }
 
-                    // Check for missing analysis
+                if (targetLocationId) {
+                    const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>();
+                    const officialEvidence = evidenceResult.results || [];
                     const missingAnalysis = officialEvidence.filter((e: any) => !e.ai_analysis || e.ai_analysis === "Analysis unavailable." || e.ai_analysis.startsWith("Analysis failed:"));
 
                     if (missingAnalysis.length > 0) {
                         console.log(`[Action:SKIP_TIMER] Found ${missingAnalysis.length} items missing analysis. Triggering AI...`);
                         const { batchAnalyzeOfficialEvidence } = await import("~/lib/gemini.server");
-
-                        const location = await db.prepare("SELECT image_url FROM locations WHERE id = ?").bind(item.location_id).first<any>();
+                        const location = await db.prepare("SELECT image_url FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
 
                         if (location && location.image_url && env.GEMINI_API_KEY) {
                             const itemsToAnalyze = missingAnalysis.map((e: any) => ({
@@ -51,15 +57,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                                 box: typeof e.bounding_box === 'string' ? JSON.parse(e.bounding_box) : e.bounding_box,
                                 description: e.description
                             }));
-
                             const analysisResults = await batchAnalyzeOfficialEvidence(
-                                env.GEMINI_API_KEY,
-                                location.image_url,
-                                itemsToAnalyze,
-                                env.GEMINI_BASE_URL,
-                                env.GEMINI_GATEWAY_TOKEN
+                                env.GEMINI_API_KEY, location.image_url, itemsToAnalyze,
+                                env.GEMINI_BASE_URL, env.GEMINI_GATEWAY_TOKEN
                             );
-
                             for (const res of analysisResults) {
                                 if (res.ai_analysis) {
                                     await db.prepare("UPDATE map_evidence SET ai_analysis = ? WHERE id = ?")
@@ -72,7 +73,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             }
         } catch (e) {
             console.error("[Action:SKIP_TIMER] AI Analysis Error:", e);
-            // Non-blocking, continue to review status
         }
 
         // 2. Move to review
@@ -89,7 +89,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
         const nextIndex = room.current_index + 1;
 
-        if (nextIndex >= items.length) {
+        // Account for guided playthrough: total rounds = dataset length + 1
+        const totalRounds = room.has_guided_playthrough ? items.length + 1 : items.length;
+
+        if (nextIndex >= totalRounds) {
             // End of game -> PODIUM
             await db.prepare(
                 "UPDATE rooms SET status = 'PODIUM' WHERE code = ?"

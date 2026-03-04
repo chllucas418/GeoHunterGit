@@ -26,7 +26,6 @@ export async function loader({ request, params, context }: any) {
             ).bind(code, item.location_id, userId).first<any>();
 
             if (guessRecord) {
-                // Parse JSON fields
                 let aiFeedback = null;
                 try {
                     aiFeedback = guessRecord.ai_feedback ? JSON.parse(guessRecord.ai_feedback) : null;
@@ -38,28 +37,101 @@ export async function loader({ request, params, context }: any) {
                     lat: guessRecord.lat,
                     lng: guessRecord.lng,
                     score: guessRecord.score,
-                    distance: guessRecord.distance, // stored in km? code says "distance * 1000" in submit return but DB might store raw?
-                    // Wait, submit.ts stores: "distance" (km) and "score".
-                    // But the return JSON had "distance: distance * 1000".
-                    // Let's standardise on meters for the UI.
+                    distance: guessRecord.distance,
                     distanceMeters: guessRecord.distance * 1000,
                     ai_feedback: aiFeedback,
-                    evidence_found: guessRecord.evidence_found // IDs string
+                    evidence_found: guessRecord.evidence_found
                 };
             }
         }
     }
 
-    return { code, userId, mapsApiKey: env.GOOGLE_MAPS_API_KEY, existingGuess };
+    // 2. Build initial room state (mirrors api.room.$code.status logic)
+    let initialRoomState = null;
+    if (room) {
+        const [participantsResult, mapSetInfo] = await Promise.all([
+            db.prepare(`
+                SELECT rp.*, u.display_name, u.profile_picture_url 
+                FROM room_participants rp
+                JOIN users u ON rp.user_id = u.id
+                WHERE rp.room_code = ? 
+                ORDER BY rp.score DESC
+            `).bind(code).all<any>(),
+            room.map_set_id ? Promise.all([
+                db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>(),
+                db.prepare(
+                    "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+                ).bind(room.map_set_id, room.current_index).first<any>()
+            ]) : Promise.resolve([null, null])
+        ]);
+        const participants = participantsResult.results || [];
+        const [total, item2] = mapSetInfo;
+        let currentRound = null;
+
+        const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
+
+        if (isGuidedRound) {
+            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            if (defaultSim) {
+                const totalResult = total || { count: 0 };
+                const [location, allEvidence] = await Promise.all([
+                    db.prepare("SELECT * FROM locations WHERE id = ?").bind(defaultSim.id).first<any>(),
+                    db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(defaultSim.id).all<any>()
+                ]);
+                let evidence: any[] = [];
+                if (room.status === 'REVIEW') evidence = allEvidence.results || [];
+                const evidenceCount = allEvidence.results?.length || 0;
+                currentRound = {
+                    index: room.current_index,
+                    total: (totalResult.count || 0) + 1,
+                    startTime: room.round_start_time,
+                    location, evidence, evidenceCount,
+                    focusedEvidenceId: room.focused_evidence_id,
+                    submissionCount: 0,
+                    timeLimit: room.time_limit || 120,
+                    isGuidedRound: true
+                };
+            }
+        } else if (item2) {
+            const datasetIndex = room.has_guided_playthrough ? room.current_index - 1 : room.current_index;
+            const realItem = room.has_guided_playthrough
+                ? await db.prepare("SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?").bind(room.map_set_id, datasetIndex).first<any>()
+                : item2;
+            if (realItem) {
+                const targetLocationId = realItem.location_id;
+                const [location, allEvidence, submissionCountResult] = await Promise.all([
+                    db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
+                    db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>(),
+                    db.prepare("SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?").bind(code, targetLocationId).first<any>()
+                ]);
+                let evidence: any[] = [];
+                if (room.status === 'REVIEW') evidence = allEvidence.results || [];
+                const evidenceCount = allEvidence.results?.length || 0;
+                const totalRounds = room.has_guided_playthrough ? (total?.count || 0) + 1 : (total?.count || 0);
+                currentRound = {
+                    index: room.current_index,
+                    total: totalRounds,
+                    startTime: room.round_start_time,
+                    location, evidence, evidenceCount,
+                    focusedEvidenceId: room.focused_evidence_id,
+                    submissionCount: submissionCountResult?.count || 0,
+                    timeLimit: room.time_limit || 120,
+                    isGuidedRound: false
+                };
+            }
+        }
+        initialRoomState = { room, participants, currentRound };
+    }
+
+    return { code, userId, mapsApiKey: env.GOOGLE_MAPS_API_KEY, existingGuess, initialRoomState };
 }
 
 export default function StudentLiveGame() {
-    const { code, userId, mapsApiKey, existingGuess } = useLoaderData() as any;
+    const { code, userId, mapsApiKey, existingGuess, initialRoomState } = useLoaderData() as any;
     const fetcher = useFetcher();
     const actionFetcher = useFetcher();
-    // const navigation = useNavigation(); // Not really navigating, just polling
 
-    const [roomState, setRoomState] = useState<any>(null);
+    const [roomState, setRoomState] = useState<any>(initialRoomState);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
     const [marker, setMarker] = useState<google.maps.Marker | null>(null);
     const [guess, setGuess] = useState<{ lat: number, lng: number } | null>(null);
@@ -74,6 +146,8 @@ export default function StudentLiveGame() {
     const [secondsElapsed, setSecondsElapsed] = useState(0);
     const [visibleHints, setVisibleHints] = useState<string[]>([]);
     const [hasZoomed, setHasZoomed] = useState(false);
+    const [splitRatio, setSplitRatio] = useState(50);
+    const [isResizing, setIsResizing] = useState(false);
 
     // Tutorial Flow State
     const [tutorialStep, setTutorialStep] = useState(0);
@@ -155,15 +229,107 @@ export default function StudentLiveGame() {
         }
     }, [location?.id]);
 
-    // 1. Polling & Sync (State + Timer)
+    // --- RESIZER LOGIC ---
     useEffect(() => {
-        fetcher.load(`/api/room/${code}/status`);
-        const interval = setInterval(() => {
-            if (fetcher.state === "idle") {
-                fetcher.load(`/api/room/${code}/status`);
+        const saved = localStorage.getItem("geohunter-split-ratio");
+        if (saved) setSplitRatio(parseFloat(saved));
+    }, []);
+
+    const handleResizeMove = (e: any) => {
+        if (!isResizing) return;
+        const newRatio = (e.clientX / window.innerWidth) * 100;
+        setSplitRatio(Math.min(Math.max(newRatio, 20), 80));
+    };
+
+    const handleResizeEnd = () => {
+        setIsResizing(false);
+        localStorage.setItem("geohunter-split-ratio", splitRatio.toString());
+    };
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleResizeMove);
+            window.addEventListener('mouseup', handleResizeEnd);
+            window.addEventListener('touchmove', (e) => {
+                const touch = e.touches[0];
+                const newRatio = (touch.clientX / window.innerWidth) * 100;
+                setSplitRatio(Math.min(Math.max(newRatio, 20), 80));
+            });
+            window.addEventListener('touchend', handleResizeEnd);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleResizeMove);
+            window.removeEventListener('mouseup', handleResizeEnd);
+        };
+    }, [isResizing]);
+
+    // 1. Polling & Sync — uses plain fetch() for reliable state updates
+    useEffect(() => {
+        let alive = true;
+
+        const poll = async () => {
+            try {
+                const res = await fetch(`/api/room/${code}/status`);
+                if (!res.ok || !alive) return;
+                const data: any = await res.json();
+                if (!alive) return;
+
+                const newIndex = data.room?.current_index;
+
+                // Detect Round Change for Animation
+                if (lastRoundIndex.current !== newIndex) {
+                    setIntroStage(0);
+                    setTimeout(() => setIntroStage(1), 500);
+                    setTimeout(() => setIntroStage(2), 3500);
+                    setTimeout(() => setIntroStage(3), 4500);
+                }
+
+                // Detect Round Change — reset game state
+                if (lastRoundIndex.current !== -1 && lastRoundIndex.current !== newIndex) {
+                    setGuess(null);
+                    setSubmitted(false);
+                    setResult(null);
+                    setEvidenceList([]);
+                    setVisibleHints([]);
+                    setHasZoomed(false);
+
+                    // Clear AI States
+                    setHasAskedAi(false);
+                    setAiHintResponse(null);
+                    setAiQuestion("");
+                    setIsAskingAi(false);
+
+                    // Cleanup Marker using Ref
+                    if (cursorMarkerRef.current) {
+                        cursorMarkerRef.current.setMap(null);
+                        cursorMarkerRef.current = null;
+                    }
+                    if (officialMarkerRef.current) {
+                        officialMarkerRef.current.setMap(null);
+                        officialMarkerRef.current = null;
+                    }
+                    if (polylineRef.current) {
+                        polylineRef.current.setMap(null);
+                        polylineRef.current = null;
+                    }
+                    setMarker(null);
+
+                    if (mapInstance) {
+                        mapInstance.setZoom(11);
+                        mapInstance.setCenter({ lat: 22.3193, lng: 114.1694 });
+                    }
+                }
+
+                lastRoundIndex.current = newIndex;
+                setRoomState(data);
+            } catch (e) {
+                console.error("Poll error:", e);
             }
-        }, 1000);
-        return () => clearInterval(interval);
+        };
+
+        poll();
+        const interval = setInterval(poll, 1000);
+        return () => { alive = false; clearInterval(interval); };
     }, [code]);
 
     // Timer Interval (Runs every 1s locally)
@@ -179,62 +345,6 @@ export default function StudentLiveGame() {
         return () => clearInterval(timer);
     }, [roomState?.currentRound?.startTime]);
 
-    useEffect(() => {
-        if (fetcher.data) {
-            const newData = fetcher.data as any;
-            const newIndex = newData.room?.current_index;
-
-            // Detect Round Change for Animation
-            if (lastRoundIndex.current !== newIndex) {
-                setIntroStage(0);
-                setTimeout(() => setIntroStage(1), 500);
-                setTimeout(() => setIntroStage(2), 3500);
-                setTimeout(() => setIntroStage(3), 4500);
-            }
-
-            // Detect Round Change using Ref to prevent stale closures
-            if (lastRoundIndex.current !== -1 && lastRoundIndex.current !== newIndex) {
-                setGuess(null);
-                setSubmitted(false);
-                setResult(null);
-                setEvidenceList([]); // Clear evidence
-                setVisibleHints([]); // Clear hints
-                setHasZoomed(false);
-
-                // Clear AI States
-                setHasAskedAi(false);
-                setAiHintResponse(null);
-                setAiQuestion("");
-                setIsAskingAi(false);
-
-                // Cleanup Marker using Ref
-                if (cursorMarkerRef.current) {
-                    cursorMarkerRef.current.setMap(null);
-                    cursorMarkerRef.current = null;
-                }
-                if (officialMarkerRef.current) {
-                    officialMarkerRef.current.setMap(null);
-                    officialMarkerRef.current = null;
-                }
-                if (polylineRef.current) {
-                    polylineRef.current.setMap(null);
-                    polylineRef.current = null;
-                }
-                setMarker(null);
-
-                if (mapInstance) {
-                    mapInstance.setZoom(11);
-                    mapInstance.setCenter({ lat: 22.3193, lng: 114.1694 });
-                }
-            }
-
-            lastRoundIndex.current = newIndex;
-            setRoomState(newData);
-
-            // Removed duplicate fetch logic in favor of robust useEffect below
-        }
-    }, [fetcher.data]);
-
     // 2. Map & WebSocket Init
     const mapRef = useRef<HTMLDivElement>(null);
     const cursorMarkerRef = useRef<google.maps.Marker | null>(null); // Ref for reliable cleanup
@@ -248,6 +358,23 @@ export default function StudentLiveGame() {
     // WS Refs
     const wsRef = useRef<WebSocket | null>(null);
     const incomingLaserMarkerRef = useRef<google.maps.Marker | null>(null);
+
+    const lastMouseSend = useRef<number>(0);
+    const handleMapMouseMove = (e: google.maps.MapMouseEvent) => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        if (!e.latLng) return;
+
+        const now = Date.now();
+        if (now - lastMouseSend.current < 100) return;
+        lastMouseSend.current = now;
+
+        wsRef.current.send(JSON.stringify({
+            type: "cursor",
+            lat: e.latLng.lat(),
+            lng: e.latLng.lng(),
+            userId: userId
+        }));
+    };
 
     // Setup WebSocket for Live Comms
     useEffect(() => {
@@ -333,9 +460,16 @@ export default function StudentLiveGame() {
         };
     }, [code, mapInstance, room?.status]);
 
+    // 2. Map Initialization & Pre-loading
+    useEffect(() => {
+        setOptions({ key: mapsApiKey });
+        // Pre-load libraries immediately on mount
+        importLibrary("maps");
+        importLibrary("marker");
+    }, [mapsApiKey]);
+
     useEffect(() => {
         if (room?.status === 'PLAYING' && !mapInstance && mapRef.current) {
-            setOptions({ key: mapsApiKey });
             importLibrary("maps").then(async () => {
                 const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
                 const map = new Map(mapRef.current!, {
@@ -366,16 +500,7 @@ export default function StudentLiveGame() {
                 });
 
                 // Ticker: send mouse move to teacher
-                map.addListener("mousemove", (e: google.maps.MapMouseEvent) => {
-                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({
-                            type: "cursor",
-                            id: userId,
-                            lat: e.latLng!.lat(),
-                            lng: e.latLng!.lng()
-                        }));
-                    }
-                });
+                map.addListener("mousemove", handleMapMouseMove);
 
                 setMapInstance(map);
             });
@@ -642,7 +767,7 @@ export default function StudentLiveGame() {
     const layoutMode = room.status === 'REVIEW' ? "result" : "game";
 
     return (
-        <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row transition-all duration-700 ease-in-out">
+        <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row shadow-2xl">
 
             {/* FREEZE RAY OVERLAY */}
             {room.is_paused === 1 && (
@@ -657,8 +782,10 @@ export default function StudentLiveGame() {
             )}
 
             {/* COLUMN 1: EVIDENCE / IMAGE */}
-            <div className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
-                ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full md:w-1/2"}`}
+            <div
+                className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
+                    ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full"}`}
+                style={layoutMode !== "result" ? { width: `calc(${splitRatio}%)` } : {}}
             >
                 {/* Header / Timer & Hints */}
                 {room.status === 'PLAYING' && (
@@ -889,9 +1016,23 @@ export default function StudentLiveGame() {
                 </div>
             </div>
 
+            {/* DRAGGABLE DIVIDER */}
+            {layoutMode !== "result" && (
+                <div
+                    onMouseDown={() => setIsResizing(true)}
+                    onTouchStart={() => setIsResizing(true)}
+                    className="hidden md:flex w-2 hover:w-4 group bg-black/40 hover:bg-blue-500/50 cursor-col-resize items-center justify-center transition-all z-[80] relative border-x border-white/10"
+                >
+                    <div className="w-0.5 h-12 bg-white/20 group-hover:bg-white/60 rounded-full" />
+                </div>
+            )}
+
             {/* COLUMN 2: MAP */}
-            <div className={`transition-all duration-700 ease-in-out bg-slate-900 overflow-hidden relative border-r border-white/10 ${layoutMode === "result" ? "relative w-full md:w-[40%] h-full" : "relative w-full md:w-1/2 h-full"}`}>
-                <div ref={mapRef} className="w-full h-full relative z-0" />
+            <div
+                className={`relative h-full bg-slate-900 border-r border-white/10
+                    ${layoutMode === "result" ? "hidden md:block md:w-[40%]" : "w-full"}`}
+                style={layoutMode !== "result" ? { width: `calc(${100 - splitRatio}%)` } : {}}
+            >    <div ref={mapRef} className="w-full h-full relative z-0" />
 
                 {/* SYNCHRONIZED DRAWING LAYER */}
                 <canvas

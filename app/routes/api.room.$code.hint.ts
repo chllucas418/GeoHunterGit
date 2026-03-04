@@ -20,11 +20,19 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     if (!item) return new Response("Round not active", { status: 400 });
 
     let targetLocationId = item.location_id;
-    // Guided Playthrough Round 1 Override
+    // Guided Playthrough: index 0 = tutorial (default sim), index 1+ = dataset[index-1]
     if (room.current_index === 0 && room.has_guided_playthrough) {
         const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
         if (defaultSim) {
             targetLocationId = defaultSim.id;
+        }
+    } else if (room.has_guided_playthrough) {
+        const datasetIndex = room.current_index - 1;
+        const realItem = await db.prepare(
+            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+        ).bind(room.map_set_id, datasetIndex).first<any>();
+        if (realItem) {
+            targetLocationId = realItem.location_id;
         }
     }
 

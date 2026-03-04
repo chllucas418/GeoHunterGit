@@ -11,7 +11,6 @@ export async function loader({ request, params, context }: any) {
     const code = params.code;
     const env = context.cloudflare.env as any;
 
-    // Initial fetch to ensure validity
     const db = env.DB as D1Database;
     const room = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first<any>();
 
@@ -19,21 +18,110 @@ export async function loader({ request, params, context }: any) {
         throw new Response("Room Not Found", { status: 404 });
     }
 
+    // Build full initial room state (mirrors api.room.$code.status logic)
+    const [participantsResult, mapSetInfo] = await Promise.all([
+        db.prepare(`
+            SELECT rp.*, u.display_name, u.profile_picture_url 
+            FROM room_participants rp
+            JOIN users u ON rp.user_id = u.id
+            WHERE rp.room_code = ? 
+            ORDER BY rp.score DESC
+        `).bind(code).all<any>(),
+        room.map_set_id ? Promise.all([
+            db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>(),
+            db.prepare(
+                "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+            ).bind(room.map_set_id, room.current_index).first<any>()
+        ]) : Promise.resolve([null, null])
+    ]);
+
+    const participants = participantsResult.results || [];
+    const [total, item] = mapSetInfo;
+    let currentRound = null;
+
+    const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
+
+    if (isGuidedRound) {
+        // Tutorial round — use default simulation location
+        const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        if (defaultSim) {
+            const totalResult = total || { count: 0 };
+            const [location, allEvidence] = await Promise.all([
+                db.prepare("SELECT * FROM locations WHERE id = ?").bind(defaultSim.id).first<any>(),
+                db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(defaultSim.id).all<any>()
+            ]);
+            let evidence: any[] = [];
+            if (room.status === 'REVIEW') evidence = allEvidence.results || [];
+            const evidenceCount = allEvidence.results?.length || 0;
+            currentRound = {
+                index: room.current_index,
+                total: (totalResult.count || 0) + 1,
+                startTime: room.round_start_time,
+                location, evidence, evidenceCount,
+                focusedEvidenceId: room.focused_evidence_id,
+                submissionCount: 0,
+                timeLimit: room.time_limit || 120,
+                isGuidedRound: true
+            };
+        }
+    } else if (item) {
+        const datasetIndex = room.has_guided_playthrough ? room.current_index - 1 : room.current_index;
+        const realItem = room.has_guided_playthrough
+            ? await db.prepare("SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?").bind(room.map_set_id, datasetIndex).first<any>()
+            : item;
+        if (realItem) {
+            const targetLocationId = realItem.location_id;
+            const [location, allEvidence, submissionCountResult] = await Promise.all([
+                db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
+                db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>(),
+                db.prepare("SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?").bind(code, targetLocationId).first<any>()
+            ]);
+            let evidence: any[] = [];
+            if (room.status === 'REVIEW') evidence = allEvidence.results || [];
+            const evidenceCount = allEvidence.results?.length || 0;
+            const totalRounds = room.has_guided_playthrough ? (total?.count || 0) + 1 : (total?.count || 0);
+            currentRound = {
+                index: room.current_index,
+                total: totalRounds,
+                startTime: room.round_start_time,
+                location, evidence, evidenceCount,
+                focusedEvidenceId: room.focused_evidence_id,
+                submissionCount: submissionCountResult?.count || 0,
+                timeLimit: room.time_limit || 120,
+                isGuidedRound: false
+            };
+        }
+    }
+
+    const initialRoomState = { room, participants, currentRound };
+
     return {
         code,
         mapsApiKey: env.GOOGLE_MAPS_API_KEY,
-        initialStatus: room.status
+        initialRoomState
     };
 }
 
 export default function TeacherRoom() {
-    const { code, mapsApiKey } = useLoaderData() as any;
+    const { code, mapsApiKey, initialRoomState } = useLoaderData() as any;
     const fetcher = useFetcher();
     const actionFetcher = useFetcher(); // For buttons (Start, Skip, Next)
 
-    // Local State derived from poller
-    const [roomState, setRoomState] = useState<any>(null);
-    const [timeLeft, setTimeLeft] = useState(300); // 5 mins default
+    // Local State derived from poller — seeded with server data so it renders instantly
+    const [roomState, setRoomState] = useState<any>(initialRoomState);
+    const [timeLeft, setTimeLeft] = useState(300);
+    const [reviewSplitRatio, setReviewSplitRatio] = useState(35);
+    const [isResizing, setIsResizing] = useState(false);
+
+    // --- MEMOIZED DATA ---
+    const officialEvidence = useMemo(() => {
+        return roomState?.currentRound?.evidence?.map((ev: any) => {
+            try {
+                const box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box;
+                return { ...ev, box };
+            } catch (e) { return null; }
+        }).filter(Boolean) || [];
+    }, [roomState?.currentRound?.evidence]);
 
     // --- ANIMATION STATE ---
     const [introStage, setIntroStage] = useState(0);
@@ -47,6 +135,34 @@ export default function TeacherRoom() {
         }
     }, [roomState?.currentRound?.location?.id]);
 
+    // --- RESIZER LOGIC ---
+    useEffect(() => {
+        const saved = localStorage.getItem("geohunter-teacher-split-ratio");
+        if (saved) setReviewSplitRatio(parseFloat(saved));
+    }, []);
+
+    const handleResizeMove = (e: any) => {
+        if (!isResizing) return;
+        const newRatio = (e.clientX / window.innerWidth) * 100;
+        setReviewSplitRatio(Math.min(Math.max(newRatio, 15), 60)); // Clamp between 15% and 60%
+    };
+
+    const handleResizeEnd = () => {
+        setIsResizing(false);
+        localStorage.setItem("geohunter-teacher-split-ratio", reviewSplitRatio.toString());
+    };
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleResizeMove);
+            window.addEventListener('mouseup', handleResizeEnd);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleResizeMove);
+            window.removeEventListener('mouseup', handleResizeEnd);
+        };
+    }, [isResizing]);
+
     // --- REVIEW MAP LOGIC ---
     const mapRef = useRef<HTMLDivElement>(null);
     const [reviewMap, setReviewMap] = useState<google.maps.Map | null>(null);
@@ -54,15 +170,19 @@ export default function TeacherRoom() {
     const hasAutoSkipped = useRef(false);
 
     useEffect(() => {
+        if (mapsApiKey) {
+            setOptions({ key: mapsApiKey });
+            importLibrary("maps");
+            importLibrary("marker");
+        }
+    }, [mapsApiKey]);
+
+    useEffect(() => {
         const room = roomState?.room;
         const currentRound = roomState?.currentRound;
         const status = room?.status;
 
         if (status === 'REVIEW' && !reviewMap && mapRef.current) {
-            setOptions({
-                key: mapsApiKey,
-
-            });
 
             importLibrary("maps").then(async () => {
                 const { Map } = await google.maps.importLibrary("maps") as google.maps.MapsLibrary;
@@ -172,50 +292,53 @@ export default function TeacherRoom() {
     // Let's verify initial state.
 
 
-    // Polling Logic
+    // Polling Logic — uses plain fetch() for reliable state updates
+    const lastRoundIndexRef = useRef<number>(roomState?.currentRound?.index ?? -1);
+
     useEffect(() => {
-        // Initial load
-        fetcher.load(`/api/room/${code}/status`);
+        let alive = true;
 
-        const interval = setInterval(() => {
-            if (fetcher.state === "idle") {
-                fetcher.load(`/api/room/${code}/status`);
-            }
-        }, 1000); // Poll faster (1s) to catch state changes, though timer handles local tick
-        return () => clearInterval(interval);
-    }, [code]);
+        const poll = async () => {
+            try {
+                const res = await fetch(`/api/room/${code}/status`);
+                if (!res.ok || !alive) return;
+                const data: any = await res.json();
+                if (!alive) return;
 
-    // Update local state when fetcher returns data
-    useEffect(() => {
-        if (fetcher.data) {
-            const data = fetcher.data as any;
-
-            // Detect Round Change for Animation
-            if (data.currentRound?.index !== roomState?.currentRound?.index) {
-                setIntroStage(0);
-                setTimeout(() => setIntroStage(1), 1000);
-                setTimeout(() => setIntroStage(2), 4000);
-                setTimeout(() => setIntroStage(3), 5000); // End intro
-                hasAutoSkipped.current = false; // Reset auto-skip
-            }
-
-            setRoomState(data);
-            // ... rest of logic
-
-            // Sync Timer if playing
-            if (data.room?.status === 'PLAYING' && data.currentRound) {
-                const elapsedSec = Math.floor((Date.now() - data.currentRound.startTime) / 1000);
-                const limit = data.currentRound.timeLimit || 120; // Default 120s
-                const remaining = Math.max(0, limit - elapsedSec);
-                setTimeLeft(remaining);
-
-                if (remaining === 0 && !hasAutoSkipped.current && actionFetcher.state === "idle") {
-                    hasAutoSkipped.current = true;
-                    actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` });
+                // Detect Round Change for Animation
+                if (data.currentRound?.index !== lastRoundIndexRef.current) {
+                    setIntroStage(0);
+                    setTimeout(() => setIntroStage(1), 1000);
+                    setTimeout(() => setIntroStage(2), 4000);
+                    setTimeout(() => setIntroStage(3), 5000);
+                    hasAutoSkipped.current = false;
+                    lastRoundIndexRef.current = data.currentRound?.index ?? -1;
                 }
+
+                setRoomState(data);
+
+                // Sync Timer if playing
+                if (data.room?.status === 'PLAYING' && data.currentRound) {
+                    const elapsedSec = Math.floor((Date.now() - data.currentRound.startTime) / 1000);
+                    const limit = data.currentRound.timeLimit || 120;
+                    const remaining = Math.max(0, limit - elapsedSec);
+                    setTimeLeft(remaining);
+
+                    if (remaining === 0 && !hasAutoSkipped.current) {
+                        hasAutoSkipped.current = true;
+                        actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` });
+                    }
+                }
+            } catch (e) {
+                console.error("Poll error:", e);
             }
-        }
-    }, [fetcher.data]);
+        };
+
+        // Initial poll
+        poll();
+        const interval = setInterval(poll, 1000);
+        return () => { alive = false; clearInterval(interval); };
+    }, [code]);
 
     if (!roomState) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Connecting to HQ...</div>;
 
@@ -383,18 +506,12 @@ export default function TeacherRoom() {
     // --- REVIEW MAP LOGIC MOVED TO TOP ---
 
     const renderReview = () => {
-        // Prepare Official Evidence for Canvas
-        const officialEvidence = currentRound?.evidence?.map((ev: any) => {
-            try {
-                const box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box;
-                return { ...ev, box };
-            } catch (e) { return null; }
-        }).filter(Boolean);
-
         return (
             <div className="h-full flex overflow-hidden">
-                {/* COLUMN 1: IMAGE & EVIDENCE (35%) */}
-                <div className="w-[35%] bg-black relative border-r border-white/10 flex flex-col">
+                {/* COLUMN 1: IMAGE & EVIDENCE (Adjustable %) */}
+                <div className="bg-black relative border-r border-white/10 flex flex-col"
+                    style={{ width: `${reviewSplitRatio}%` }}
+                >
                     <div className="absolute top-0 left-0 p-4 z-10 bg-gradient-to-b from-black/80 to-transparent w-full">
                         <h2 className="text-xl font-black text-white uppercase tracking-tighter">
                             Sector {currentRound?.location?.id?.slice(-4).toUpperCase()}
@@ -455,8 +572,18 @@ export default function TeacherRoom() {
                     </div>
                 </div>
 
+                {/* DRAGGABLE DIVIDER */}
+                <div
+                    onMouseDown={() => setIsResizing(true)}
+                    className="w-2 hover:w-4 group bg-black/40 hover:bg-emerald-500/50 cursor-col-resize items-center justify-center transition-all z-[80] relative border-x border-white/10 select-none"
+                >
+                    <div className="w-0.5 h-12 bg-white/20 group-hover:bg-white/60 rounded-full" />
+                </div>
+
                 {/* COLUMN 2: MAP (40%) */}
-                <div className="w-[40%] relative bg-slate-800 border-r border-white/10">
+                <div className="relative bg-slate-800 border-r border-white/10"
+                    style={{ width: `${75 - reviewSplitRatio}%` }}
+                >
                     <div ref={mapRef} className="absolute inset-0 w-full h-full" />
                     <div className="absolute bottom-4 left-4 z-10 bg-black/60 backdrop-blur-md px-3 py-1 rounded text-xs text-white border border-white/10">
                         Map Data: Hybrid/Labels
@@ -636,7 +763,7 @@ export default function TeacherRoom() {
     );
 
     return (
-        <div className="w-screen h-screen bg-slate-950 overflow-hidden font-sans select-none">
+        <div className="w-screen h-screen bg-slate-950 overflow-hidden font-sans">
             {room.status === 'WAITING' && renderLobby()}
             {room.status === 'PLAYING' && renderPlaying()}
             {room.status === 'REVIEW' && renderReview()}

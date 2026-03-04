@@ -37,6 +37,8 @@ export default [
     route("api/room/:code/round_result", "routes/api.room.$code.round_result.ts"),
     route("api/room/:code/status", "routes/api.room.$code.status.ts"),
     route("api/room/:code/submit", "routes/api.room.$code.submit.ts"),
+    route("api/room/:code/ws", "routes/api.room.$code.ws.ts"),
+    route("api/room/:code/hint", "routes/api.room.$code.hint.ts"),
 
     // Migration Route (Deleted)
 ] satisfies RouteConfig;

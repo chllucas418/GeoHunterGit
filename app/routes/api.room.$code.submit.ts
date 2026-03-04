@@ -48,11 +48,22 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
         let targetLocationId = item.location_id;
 
-        // Guided Playthrough Round 1 Override
-        if (room.current_index === 0 && room.has_guided_playthrough) {
+        // Guided Playthrough: index 0 = tutorial (default sim), index 1+ = dataset[index-1]
+        const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
+
+        if (isGuidedRound) {
             const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
             if (defaultSim) {
                 targetLocationId = defaultSim.id;
+            }
+        } else if (room.has_guided_playthrough) {
+            // Offset by 1 for non-tutorial rounds with guided playthrough
+            const datasetIndex = room.current_index - 1;
+            const realItem = await db.prepare(
+                "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+            ).bind(room.map_set_id, datasetIndex).first<any>();
+            if (realItem) {
+                targetLocationId = realItem.location_id;
             }
         }
 
@@ -239,34 +250,47 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         evidenceScore += aiBonus; // Combine bonus into evidence score for simplicity
 
         // Total Score
-        const finalScore = distanceScore + evidenceScore + timeScore;
+        let finalScore = distanceScore + evidenceScore + timeScore;
+
+        // Guided Playthrough: Don't count marks for the tutorial round
+        if (isGuidedRound) {
+            finalScore = 0;
+            distanceScore = 0;
+            evidenceScore = 0;
+            timeScore = 0;
+        }
 
         // Tuen Mun Elo Update Calculation
         let eloChange = 0;
-        if (distanceMeters <= 500) {
-            eloChange = Math.round(20 + (500 - distanceMeters) / 25);
-        } else if (distanceMeters <= 1500) {
-            eloChange = Math.round(5 - (distanceMeters - 500) / 100);
-        } else {
-            eloChange = Math.round(-15 - (distanceMeters - 1500) / 100);
+        if (!isGuidedRound) {
+            if (distanceMeters <= 500) {
+                eloChange = Math.round(20 + (500 - distanceMeters) / 25);
+            } else if (distanceMeters <= 1500) {
+                eloChange = Math.round(5 - (distanceMeters - 500) / 100);
+            } else {
+                eloChange = Math.round(-15 - (distanceMeters - 1500) / 100);
+            }
+            eloChange = Math.max(-40, Math.min(40, eloChange));
         }
-        eloChange = Math.max(-40, Math.min(40, eloChange));
 
         // Save Guess (Update: Added distance_score and evidence_score columns)
         await db.prepare(
             "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback, distance_score, evidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(aiFeedback), distanceScore, evidenceScore).run();
 
-        // Update Participant Totals
-        await db.prepare(
-            "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
-        ).bind(finalScore, code, userId).run();
+        // Update Participant Totals (skip for guided round)
+        if (!isGuidedRound) {
+            await db.prepare(
+                "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
+            ).bind(finalScore, code, userId).run();
+        }
 
-        // Update User Elo & Accuracies specifically (Teacher DB may not use total_score here)
-        // Wait, ensure current_elo doesn't go below 0
-        await db.prepare(
-            "UPDATE users SET current_elo = MAX(0, current_elo + ?) WHERE id = ?"
-        ).bind(eloChange, userId).run();
+        // Update User Elo & Accuracies (skip for guided round)
+        if (!isGuidedRound && eloChange !== 0) {
+            await db.prepare(
+                "UPDATE users SET current_elo = MAX(0, current_elo + ?) WHERE id = ?"
+            ).bind(eloChange, userId).run();
+        }
 
         // RETURN SUCCESS BUT NO DATA to prevent client from showing result immediately
         return Response.json({

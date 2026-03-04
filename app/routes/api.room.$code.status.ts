@@ -42,51 +42,77 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
     let currentRound = null;
 
-    if (item) {
-        // Parallelize fetching Location Details, Evidence, and Submission Count
-        // Check if this is Round 1 (index 0) AND guided playthrough is enabled
-        let targetLocationId = item.location_id;
+    // Guided playthrough: index 0 = tutorial (default sim), index 1+ = dataset[index-1]
+    const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
 
-        if (room.current_index === 0 && room.has_guided_playthrough) {
-            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
-            if (defaultSim) {
-                targetLocationId = defaultSim.id;
+    if (isGuidedRound) {
+        // Tutorial round — use default simulation location
+        const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        if (defaultSim) {
+            const totalResult = total || { count: 0 };
+            const [location, allEvidence, submissionCountResult] = await Promise.all([
+                db.prepare("SELECT * FROM locations WHERE id = ?").bind(defaultSim.id).first<any>(),
+                db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(defaultSim.id).all<any>(),
+                db.prepare(
+                    "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
+                ).bind(code, defaultSim.id).first<any>()
+            ]);
+            let evidence: any[] = [];
+            if (room.status === 'REVIEW') evidence = allEvidence.results || [];
+            const evidenceCount = allEvidence.results?.length || 0;
+            currentRound = {
+                index: room.current_index,
+                total: (totalResult.count || 0) + 1, // +1 for tutorial round
+                startTime: room.round_start_time,
+                location: location,
+                evidence,
+                evidenceCount,
+                focusedEvidenceId: room.focused_evidence_id,
+                submissionCount: submissionCountResult?.count || 0,
+                timeLimit: room.time_limit || 120,
+                isGuidedRound: true
+            };
+        }
+    } else if (item) {
+        // Real game round — offset by 1 if guided playthrough is enabled
+        const datasetIndex = room.has_guided_playthrough ? room.current_index - 1 : room.current_index;
+        const realItem = room.has_guided_playthrough
+            ? await db.prepare(
+                "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+            ).bind(room.map_set_id, datasetIndex).first<any>()
+            : item;
+
+        if (realItem) {
+            const targetLocationId = realItem.location_id;
+            const [location, allEvidence, submissionCountResult] = await Promise.all([
+                db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
+                db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>(),
+                db.prepare(
+                    "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
+                ).bind(code, targetLocationId).first<any>()
+            ]);
+
+            let evidence: any[] = [];
+            if (room.status === 'REVIEW') {
+                evidence = allEvidence.results || [];
             }
+
+            const evidenceCount = allEvidence.results?.length || 0;
+            const totalRounds = room.has_guided_playthrough ? (total?.count || 0) + 1 : (total?.count || 0);
+
+            currentRound = {
+                index: room.current_index,
+                total: totalRounds,
+                startTime: room.round_start_time,
+                location: location,
+                evidence: evidence,
+                evidenceCount: evidenceCount,
+                focusedEvidenceId: room.focused_evidence_id,
+                submissionCount: submissionCountResult?.count || 0,
+                timeLimit: room.time_limit || 120,
+                isGuidedRound: false
+            };
         }
-
-        const [location, allEvidence, submissionCountResult] = await Promise.all([
-            db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
-            db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>(),
-            db.prepare(
-                "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
-            ).bind(code, targetLocationId).first<any>()
-        ]);
-
-        // Masking Logic
-        let maskedLocation = { ...location };
-        // if (room.status === 'PLAYING') {
-        //     delete maskedLocation.lat;
-        //     delete maskedLocation.lng;
-        // }
-
-        let evidence: any[] = [];
-        if (room.status === 'REVIEW') {
-            evidence = allEvidence.results || [];
-        }
-
-        const evidenceCount = allEvidence.results?.length || 0;
-
-        currentRound = {
-            index: room.current_index,
-            total: total.count,
-            startTime: room.round_start_time,
-            location: maskedLocation,
-            evidence: evidence,
-            evidenceCount: evidenceCount,
-            focusedEvidenceId: room.focused_evidence_id,
-            submissionCount: submissionCountResult?.count || 0,
-            timeLimit: room.time_limit || 120
-        };
     }
 
     // Use safeJson to handle potential BigInts (e.g. from COUNT or Timestamps)

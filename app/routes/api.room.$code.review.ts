@@ -15,16 +15,26 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
     const roundIndex = roundIndexParam ? parseInt(roundIndexParam) : room.current_index;
 
-    // Get Location ID for that round (correctly using OFFSET)
-    const item = await db.prepare(
-        "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-    ).bind(room.map_set_id, roundIndex).first<any>();
+    // Guided playthrough: index 0 = tutorial (default sim), index 1+ = dataset[index-1]
+    const isGuidedRound = roundIndex === 0 && room.has_guided_playthrough;
+    let targetLocationId: string;
 
-    if (!item) return Response.json({ guesses: [] });
+    if (isGuidedRound) {
+        const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        if (!defaultSim) return Response.json({ guesses: [] });
+        targetLocationId = defaultSim.id;
+    } else {
+        const datasetIndex = room.has_guided_playthrough ? roundIndex - 1 : roundIndex;
+        const item = await db.prepare(
+            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+        ).bind(room.map_set_id, datasetIndex).first<any>();
+        if (!item) return Response.json({ guesses: [] });
+        targetLocationId = item.location_id;
+    }
 
     // Get Location Data
-    const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
-    const evidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+    const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
+    const evidence = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>();
 
     // Fetch Guesses with User Names
     const guesses = await db.prepare(`
@@ -32,7 +42,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         FROM room_guesses rg
         JOIN users u ON rg.user_id = u.id
         WHERE rg.room_code = ? AND rg.location_id = ?
-    `).bind(code, item.location_id).all<any>();
+    `).bind(code, targetLocationId).all<any>();
 
     return Response.json({
         guesses: guesses.results || [],

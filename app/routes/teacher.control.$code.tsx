@@ -13,12 +13,22 @@ export async function loader({ request, params, context }: any) {
     let currentItem = null;
     let location = null;
     if (room && room.map_set_id) {
-        currentItem = await db.prepare(
-            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-        ).bind(room.map_set_id, room.current_index).first<any>();
+        const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
 
-        if (currentItem) {
-            location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(currentItem.location_id).first<any>();
+        if (isGuidedRound) {
+            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            if (defaultSim) {
+                location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(defaultSim.id).first<any>();
+            }
+        } else {
+            const datasetIndex = room.has_guided_playthrough ? room.current_index - 1 : room.current_index;
+            currentItem = await db.prepare(
+                "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+            ).bind(room.map_set_id, datasetIndex).first<any>();
+
+            if (currentItem) {
+                location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(currentItem.location_id).first<any>();
+            }
         }
     }
 
@@ -30,10 +40,12 @@ export default function TeacherControlPanel() {
     const fetcher = useFetcher();
 
     const [ws, setWs] = useState<WebSocket | null>(null);
+    const wsRef = useRef<WebSocket | null>(null);
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
     const laserMarkerRef = useRef<google.maps.Marker | null>(null);
     const cursorsRef = useRef<Record<string, google.maps.Marker>>({});
+    const [drawMode, setDrawMode] = useState(false);
 
     // Setup WebSocket
     useEffect(() => {
@@ -79,6 +91,7 @@ export default function TeacherControlPanel() {
             };
 
             setWs(socket);
+            wsRef.current = socket;
         };
 
         connect();
@@ -162,17 +175,22 @@ export default function TeacherControlPanel() {
         }
     }, [mapsApiKey, mapInstance, ws, location]);
 
-    const togglePause = () => {
+    const togglePause = async () => {
         // Optimistic WS Broadcast
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "pause_toggle" }));
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: "pause_toggle" }));
         }
 
         // Mutate Database State so late-joiners get proper status
-        fetcher.submit(
-            { action: "TOGGLE_PAUSE" },
-            { method: "post", action: `/api/room/${code}/action` }
-        );
+        try {
+            await fetch(`/api/room/${code}/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=TOGGLE_PAUSE'
+            });
+        } catch (e) {
+            console.error('Freeze ray error:', e);
+        }
     };
 
     // --- DRAWING LOGIC ---
@@ -200,19 +218,29 @@ export default function TeacherControlPanel() {
         ctx.closePath();
     };
 
-    const handleTimestampedDraw = (e: React.MouseEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
+    const handleTimestampedDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
         if (!isDrawing) return;
         const canvas = canvasType === 'image' ? imageCanvasRef.current : mapCanvasRef.current;
         if (!canvas) return;
 
-        const pos = getCoordinates(e, canvas);
+        let clientX: number, clientY: number;
+        if ('touches' in e) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const pos = { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
+
         if (lastPosRef.current) {
             const ctx = canvas.getContext('2d');
             if (ctx) drawLine(ctx, lastPosRef.current.x, lastPosRef.current.y, pos.x, pos.y, canvas.width, canvas.height);
 
             // Send Stroke via Broadcast
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({
                     type: "draw",
                     canvasTarget: canvasType,
                     x0: lastPosRef.current.x,
@@ -225,10 +253,21 @@ export default function TeacherControlPanel() {
         lastPosRef.current = pos;
     };
 
-    const startDraw = (e: React.MouseEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
+    const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
         setIsDrawing(true);
         const canvas = canvasType === 'image' ? imageCanvasRef.current : mapCanvasRef.current;
-        if (canvas) lastPosRef.current = getCoordinates(e, canvas);
+        if (canvas) {
+            let clientX: number, clientY: number;
+            if ('touches' in e) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            const rect = canvas.getBoundingClientRect();
+            lastPosRef.current = { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
+        }
     };
 
     const stopDraw = () => {
@@ -243,8 +282,8 @@ export default function TeacherControlPanel() {
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         });
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "draw_clear" }));
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: "draw_clear" }));
         }
     };
 
@@ -273,6 +312,15 @@ export default function TeacherControlPanel() {
                     <p className="text-xs font-mono text-slate-400 mt-1">Room {code} • Laser & Broadcast Ink Live</p>
                 </div>
                 <div className="flex gap-4">
+                    <button
+                        onClick={() => setDrawMode(!drawMode)}
+                        className={`px-6 py-2 border rounded font-bold uppercase tracking-widest transition-all ${drawMode
+                            ? 'bg-green-500/40 border-green-400 text-green-300'
+                            : 'bg-slate-700/40 border-slate-500 text-slate-300'
+                            }`}
+                    >
+                        {drawMode ? '✏️ Drawing ON' : '✏️ Draw Mode'}
+                    </button>
                     <button
                         onClick={clearDrawingBox}
                         className="px-6 py-2 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500 rounded text-yellow-400 font-bold uppercase tracking-widest transition-all"
@@ -311,10 +359,14 @@ export default function TeacherControlPanel() {
                                 <canvas
                                     ref={imageCanvasRef}
                                     className="absolute inset-0 w-full h-full cursor-crosshair z-20 mix-blend-screen"
+                                    style={{ pointerEvents: drawMode ? 'auto' : 'none' }}
                                     onMouseDown={(e) => startDraw(e, 'image')}
                                     onMouseMove={(e) => handleTimestampedDraw(e, 'image')}
                                     onMouseUp={stopDraw}
                                     onMouseLeave={stopDraw}
+                                    onTouchStart={(e) => { e.preventDefault(); startDraw(e, 'image'); }}
+                                    onTouchMove={(e) => { e.preventDefault(); handleTimestampedDraw(e, 'image'); }}
+                                    onTouchEnd={stopDraw}
                                 />
                             </>
                         ) : (
@@ -335,22 +387,19 @@ export default function TeacherControlPanel() {
                         {/* DRAWING LAYER */}
                         <canvas
                             ref={mapCanvasRef}
-                            className="absolute inset-0 w-full h-full cursor-crosshair z-20 pointer-events-auto"
-                            onMouseDown={(e) => {
-                                if (e.shiftKey) return;
-                                startDraw(e, 'map');
-                            }}
-                            onMouseMove={(e) => {
-                                if (e.shiftKey) return;
-                                handleTimestampedDraw(e, 'map');
-                            }}
+                            className="absolute inset-0 w-full h-full cursor-crosshair z-20"
+                            style={{ pointerEvents: drawMode ? 'auto' : 'none' }}
+                            onMouseDown={(e) => startDraw(e, 'map')}
+                            onMouseMove={(e) => handleTimestampedDraw(e, 'map')}
                             onMouseUp={stopDraw}
                             onMouseLeave={stopDraw}
-                            style={{ pointerEvents: isDrawing ? 'auto' : 'none' }}
+                            onTouchStart={(e) => { e.preventDefault(); startDraw(e, 'map'); }}
+                            onTouchMove={(e) => { e.preventDefault(); handleTimestampedDraw(e, 'map'); }}
+                            onTouchEnd={stopDraw}
                         />
                     </div>
                     <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-md px-4 py-2 rounded shadow border border-white/10 text-[10px] font-mono pointer-events-none z-30">
-                        <span className="text-red-400 font-bold block mb-1">HOLD [SHIFT] + CLICK & DRAG</span> to draw on the map. Normal drag pans map. Normal click fires Laser.
+                        <span className="text-red-400 font-bold block mb-1">Toggle DRAW MODE</span> to draw on screen. Normal click fires Laser.
                     </div>
                 </div>
             </div>

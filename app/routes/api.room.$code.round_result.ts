@@ -20,29 +20,40 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
     // Get Guess
     try {
-        const item = await db.prepare(
-            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-        ).bind(room.map_set_id, room.current_index).first<any>();
+        // Guided playthrough: index 0 = tutorial (default sim), index 1+ = dataset[index-1]
+        const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
+        let targetLocationId: string;
 
-        if (!item) return Response.json({ error: "Round data missing" }, { status: 404 });
+        if (isGuidedRound) {
+            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            if (!defaultSim) return Response.json({ error: "Tutorial location not found" }, { status: 404 });
+            targetLocationId = defaultSim.id;
+        } else {
+            const datasetIndex = room.has_guided_playthrough ? room.current_index - 1 : room.current_index;
+            const item = await db.prepare(
+                "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
+            ).bind(room.map_set_id, datasetIndex).first<any>();
+            if (!item) return Response.json({ error: "Round data missing" }, { status: 404 });
+            targetLocationId = item.location_id;
+        }
 
         const guess = await db.prepare(
             "SELECT * FROM room_guesses WHERE room_code = ? AND location_id = ? AND user_id = ?"
-        ).bind(code, item.location_id, userId).first<any>();
+        ).bind(code, targetLocationId, userId).first<any>();
 
         if (!guess) {
             return Response.json({
                 notSubmitted: true,
                 message: "No submission for this round",
-                officialLocation: await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>(),
-                officialEvidence: (await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>()).results || []
+                officialLocation: await db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
+                officialEvidence: (await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>()).results || []
             });
         }
 
 
         // Get Official Data (Location + Evidence)
-        const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
-        const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>();
+        const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
+        const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>();
         let officialEvidence = evidenceResult.results || [];
 
         // Check if any official evidence is missing 'ai_analysis'
