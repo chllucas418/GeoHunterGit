@@ -46,7 +46,17 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             return Response.json({ error: "Location data missing for this round" }, { status: 400 });
         }
 
-        const trueLoc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
+        let targetLocationId = item.location_id;
+
+        // Guided Playthrough Round 1 Override
+        if (room.current_index === 0 && room.has_guided_playthrough) {
+            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            if (defaultSim) {
+                targetLocationId = defaultSim.id;
+            }
+        }
+
+        const trueLoc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
 
         if (!trueLoc) {
             return Response.json({ error: "Target location not found in database" }, { status: 500 });

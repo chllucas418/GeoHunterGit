@@ -241,6 +241,10 @@ export default function StudentLiveGame() {
     const officialMarkerRef = useRef<any>(null);
     const polylineRef = useRef<google.maps.Polyline | null>(null);
 
+    // --- DRAW OVERLAY REFS ---
+    const imageCanvasRef = useRef<HTMLCanvasElement>(null);
+    const mapCanvasRef = useRef<HTMLCanvasElement>(null);
+
     // WS Refs
     const wsRef = useRef<WebSocket | null>(null);
     const incomingLaserMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -285,6 +289,28 @@ export default function StudentLiveGame() {
                                 incomingLaserMarkerRef.current = null;
                             }
                         }, 3000); // laser ping lasts 3 sec
+                    } else if (data.type === "draw") {
+                        const targetCanvas = data.canvasTarget === 'image' ? imageCanvasRef.current : mapCanvasRef.current;
+                        if (targetCanvas) {
+                            const ctx = targetCanvas.getContext('2d');
+                            if (ctx) {
+                                ctx.beginPath();
+                                ctx.moveTo(data.x0 * targetCanvas.width, data.y0 * targetCanvas.height);
+                                ctx.lineTo(data.x1 * targetCanvas.width, data.y1 * targetCanvas.height);
+                                ctx.strokeStyle = '#ef4444';
+                                ctx.lineWidth = 4;
+                                ctx.lineCap = 'round';
+                                ctx.stroke();
+                                ctx.closePath();
+                            }
+                        }
+                    } else if (data.type === "draw_clear") {
+                        [imageCanvasRef.current, mapCanvasRef.current].forEach(canvas => {
+                            if (canvas) {
+                                const ctx = canvas.getContext('2d');
+                                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            }
+                        });
                     } else if (data.type === "pause_toggle") {
                         fetcher.load(`/api/room/${code}/status`);
                     }
@@ -566,6 +592,22 @@ export default function StudentLiveGame() {
         }
     }, [room?.status, result?.officialLocation, mapInstance, guess]);
 
+    // Resize Sync Canvases
+    useEffect(() => {
+        const resizeCanvas = () => {
+            if (imageCanvasRef.current) {
+                imageCanvasRef.current.width = imageCanvasRef.current.offsetWidth;
+                imageCanvasRef.current.height = imageCanvasRef.current.offsetHeight;
+            }
+            if (mapCanvasRef.current) {
+                mapCanvasRef.current.width = mapCanvasRef.current.offsetWidth;
+                mapCanvasRef.current.height = mapCanvasRef.current.offsetHeight;
+            }
+        };
+        window.addEventListener('resize', resizeCanvas);
+        setTimeout(resizeCanvas, 500); // Trigger after layout mounts
+        return () => window.removeEventListener('resize', resizeCanvas);
+    }, [location?.id]);
 
     // --- RENDERS ---
     if (!roomState) return <div className="p-8 text-white text-center">Locating Mission Signal...</div>;
@@ -690,9 +732,9 @@ export default function StudentLiveGame() {
 
                 {/* Hints Overlay */}
                 {!submitted && visibleHints.length > 0 && (
-                    <div className="absolute top-1/4 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
+                    <div className="absolute bottom-32 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
                         {visibleHints.map((hint, i) => (
-                            <div key={i} className="bg-black/40 backdrop-blur-xl border-l-4 border-yellow-400 p-3 rounded text-xs text-white animate-in slide-in-from-left-10">
+                            <div key={i} className="bg-black/40 backdrop-blur-xl border-l-4 border-yellow-400 p-3 rounded text-xs text-white animate-in slide-in-from-left-10 shadow-lg">
                                 {hint}
                             </div>
                         ))}
@@ -837,197 +879,213 @@ export default function StudentLiveGame() {
                             })}
                         </EvidenceCanvas>
                     ) : <div className="flex items-center justify-center h-full">No Signal</div>}
+
+                    {/* SYNCHRONIZED DRAWING LAYER */}
+                    <canvas
+                        ref={imageCanvasRef}
+                        className="absolute inset-0 w-full h-full pointer-events-none z-40 mix-blend-screen"
+                    />
                 </div>
             </div>
 
             {/* COLUMN 2: MAP */}
-            <div className={`transition-all duration-700 ease-in-out bg-slate-900 overflow-hidden relative border-r border-white/10
-                 ${layoutMode === "result" ? "relative w-full md:w-[40%] h-full" : "relative w-full md:w-1/2 h-full"}`}
-            >
-                <div ref={mapRef} className="w-full h-full" />
+            <div className={`transition-all duration-700 ease-in-out bg-slate-900 overflow-hidden relative border-r border-white/10 ${layoutMode === "result" ? "relative w-full md:w-[40%] h-full" : "relative w-full md:w-1/2 h-full"}`}>
+                <div ref={mapRef} className="w-full h-full relative z-0" />
 
-                {!submitted ? (
-                    <>
-                        {/* Vicinity Scan Button */}
-                        {!submitted && isVicinityScanAvailable && !hasZoomed && (
-                            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-20">
-                                {isTargetInRange ? (
-                                    <div className="w-full py-3 bg-red-500/20 text-red-300 border border-red-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 animate-in fade-in transition-all">
-                                        <span className="text-lg">📶</span>
-                                        Signal Strong • Scan Disabled
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={handleVicinityScan}
-                                        className="w-full py-3 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 animate-pulse"
-                                    >
-                                        <span className="text-lg">📡</span>
-                                        Initiate Vicinity Scan
-                                    </button>
-                                )}
-                            </div>
-                        )}
+                {/* SYNCHRONIZED DRAWING LAYER */}
+                <canvas
+                    ref={mapCanvasRef}
+                    className="absolute inset-0 w-full h-full pointer-events-none z-10 mix-blend-screen"
+                />
 
-                        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-                            <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'}`}>
-                                CONFIRM COORDINATES
-                            </button>
-                        </div>
-                    </>
-                ) : (
-                    room.status === 'PLAYING' && (
-                        <div className="absolute bottom-6 left-6 right-6 z-10">
-                            <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5">
-                                <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
-                                <div className="text-lg font-black">LOCKED IN</div>
-                                <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Awaiting Mission Control Reveal...</div>
+                {
+                    !submitted ? (
+                        <>
+                            {/* Vicinity Scan Button */}
+                            {!submitted && isVicinityScanAvailable && !hasZoomed && (
+                                <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-20">
+                                    {isTargetInRange ? (
+                                        <div className="w-full py-3 bg-red-500/20 text-red-300 border border-red-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 animate-in fade-in transition-all">
+                                            <span className="text-lg">📶</span>
+                                            Signal Strong • Scan Disabled
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={handleVicinityScan}
+                                            className="w-full py-3 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 animate-pulse"
+                                        >
+                                            <span className="text-lg">📡</span>
+                                            Initiate Vicinity Scan
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+                                <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'}`}>
+                                    CONFIRM COORDINATES
+                                </button>
                             </div>
-                        </div>
+                        </>
+                    ) : (
+                        room.status === 'PLAYING' && (
+                            <div className="absolute bottom-6 left-6 right-6 z-10">
+                                <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5">
+                                    <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
+                                    <div className="text-lg font-black">LOCKED IN</div>
+                                    <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Awaiting Mission Control Reveal...</div>
+                                </div>
+                            </div>
+                        )
                     )
-                )}
-            </div>
+                }
+            </div >
 
             {/* Logout Button */}
-            <div className="absolute top-4 left-4 z-50">
+            < div className="absolute top-4 left-4 z-50" >
                 <Link to="/join" className="px-4 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 backdrop-blur-md rounded-lg text-red-400 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
                     <span>⚠</span> ABORT MISSION
                 </Link>
-            </div>
+            </div >
 
             {/* Evidence Reveal Modal (Syncs with Teacher) */}
-            {currentRound?.focusedEvidenceId && (
-                (() => {
-                    const allEvidence = [...(result?.officialEvidence || []), ...(currentRound?.evidence || [])];
-                    const focusedItem = allEvidence.find((e: any) => e.id === currentRound.focusedEvidenceId);
+            {
+                currentRound?.focusedEvidenceId && (
+                    (() => {
+                        const allEvidence = [...(result?.officialEvidence || []), ...(currentRound?.evidence || [])];
+                        const focusedItem = allEvidence.find((e: any) => e.id === currentRound.focusedEvidenceId);
 
-                    // Fallback if we haven't fetched detailed evidence yet (unlikely in Review)
-                    // But finding it in `currentRound.evidence` should work if status API returns it.
-                    // Wait, status API returns `evidence` (official list) if status is REVIEW.
-                    // If status is PLAYING, `evidence` is empty.
-                    // But Teacher can only click evidence in Review mode (where canvas is interactive).
-                    // So `currentRound.evidence` should be present.
+                        // Fallback if we haven't fetched detailed evidence yet (unlikely in Review)
+                        // But finding it in `currentRound.evidence` should work if status API returns it.
+                        // Wait, status API returns `evidence` (official list) if status is REVIEW.
+                        // If status is PLAYING, `evidence` is empty.
+                        // But Teacher can only click evidence in Review mode (where canvas is interactive).
+                        // So `currentRound.evidence` should be present.
 
-                    if (!focusedItem) return null;
+                        if (!focusedItem) return null;
 
-                    return (
-                        <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
-                            <div className="bg-slate-900 border-2 border-yellow-500 rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col md:flex-row gap-8">
-                                {/* Scanline Effect */}
-                                <div className="absolute inset-0 pointer-events-none rounded-2xl overflow-hidden opacity-20">
-                                    <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_50%)] bg-[length:100%_4px]" />
-                                </div>
-
-                                {/* Content */}
-                                <div className="flex-1">
-                                    <div className="text-yellow-400 text-xs font-black uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
-                                        <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-                                        Intel Revealed
+                        return (
+                            <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
+                                <div className="bg-slate-900 border-2 border-yellow-500 rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col md:flex-row gap-8">
+                                    {/* Scanline Effect */}
+                                    <div className="absolute inset-0 pointer-events-none rounded-2xl overflow-hidden opacity-20">
+                                        <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_50%)] bg-[length:100%_4px]" />
                                     </div>
-                                    <h2 className="text-2xl md:text-4xl font-black text-white mb-6 uppercase tracking-tighter leading-none">
-                                        {focusedItem.description}
-                                    </h2>
 
-                                    <div className="bg-white/5 border border-white/10 rounded-xl p-6 relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
-                                        <h3 className="text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-3">AI Analysis</h3>
-                                        <p className="text-slate-300 text-sm md:text-base leading-relaxed font-medium">
-                                            {focusedItem.ai_analysis || "No analysis data available."}
-                                        </p>
+                                    {/* Content */}
+                                    <div className="flex-1">
+                                        <div className="text-yellow-400 text-xs font-black uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
+                                            <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                            Intel Revealed
+                                        </div>
+                                        <h2 className="text-2xl md:text-4xl font-black text-white mb-6 uppercase tracking-tighter leading-none">
+                                            {focusedItem.description}
+                                        </h2>
+
+                                        <div className="bg-white/5 border border-white/10 rounded-xl p-6 relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
+                                            <h3 className="text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-3">AI Analysis</h3>
+                                            <p className="text-slate-300 text-sm md:text-base leading-relaxed font-medium">
+                                                {focusedItem.ai_analysis || "No analysis data available."}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Minimap Loop? Or just decorative icon */}
-                                <div className="w-full md:w-1/3 flex items-center justify-center border border-white/10 rounded-xl bg-black/40 p-4">
-                                    <div className="text-center">
-                                        <div className="text-6xl mb-2">🔭</div>
-                                        <div className="text-[10px] text-slate-500 uppercase tracking-widest">Visual Verified</div>
+                                    {/* Minimap Loop? Or just decorative icon */}
+                                    <div className="w-full md:w-1/3 flex items-center justify-center border border-white/10 rounded-xl bg-black/40 p-4">
+                                        <div className="text-center">
+                                            <div className="text-6xl mb-2">🔭</div>
+                                            <div className="text-[10px] text-slate-500 uppercase tracking-widest">Visual Verified</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    );
-                })()
-            )}
+                        );
+                    })()
+                )
+            }
 
             {/* Hints Overlay */}
-            {(result && layoutMode === "result") && (
-                <div className="w-full md:w-[20%] bg-slate-900 border-l border-white/10 overflow-y-auto">
-                    {result.score !== undefined ? (
-                        <div className="p-6">
-                            <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
-                            <p className="text-xs text-green-400 uppercase">Score</p>
-                            <hr className="border-white/10 my-4" />
+            {
+                (result && layoutMode === "result") && (
+                    <div className="w-full md:w-[20%] bg-slate-900 border-l border-white/10 overflow-y-auto">
+                        {result.score !== undefined ? (
+                            <div className="p-6">
+                                <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
+                                <p className="text-xs text-green-400 uppercase">Score</p>
+                                <hr className="border-white/10 my-4" />
 
-                            <div className="text-xl font-bold">
-                                {result.distance !== undefined && !isNaN(result.distance)
-                                    ? `${Math.round(result.distance)}m`
-                                    : "-- m"}
-                            </div>
-                            <p className="text-xs text-slate-500 uppercase">Deviation</p>
+                                <div className="text-xl font-bold">
+                                    {result.distance !== undefined && !isNaN(result.distance)
+                                        ? `${Math.round(result.distance)}m`
+                                        : "-- m"}
+                                </div>
+                                <p className="text-xs text-slate-500 uppercase">Deviation</p>
 
-                            <div className="mt-8 space-y-4">
-                                <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
-                                {result.aiFeedback && result.aiFeedback.results && result.aiFeedback.results.length > 0 ? (
-                                    result.aiFeedback.results.map((item: any, i: number) => (
-                                        <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
-                                            <div className="flex justify-between">
-                                                <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
-                                            </div>
-                                            <p className="opacity-80 leading-snug">{item.explanation}</p>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-xs text-slate-500 italic mb-4">No anomalies detected by agent.</p>
-                                )}
-
-                                {/* Missed Evidence List */}
-                                {(result?.officialEvidence || currentRound?.evidence)?.filter((ev: any) => !result.evidenceFound?.includes(ev.id)).length > 0 && (
-                                    <div className="mt-4 space-y-2">
-                                        <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
-                                        {(result?.officialEvidence || currentRound?.evidence).filter((ev: any) => !result.evidenceFound?.includes(ev.id)).map((ev: any) => {
-                                            // Look for a personalized Gemini explanation
-                                            let personalizedExplanation = null;
-                                            if (result.aiFeedback?.missed_evidence_explanations && Array.isArray(result.aiFeedback.missed_evidence_explanations)) {
-                                                const AIExplanation = result.aiFeedback.missed_evidence_explanations.find((m: any) => m.admin_id === ev.id);
-                                                if (AIExplanation && AIExplanation.explanation) {
-                                                    personalizedExplanation = AIExplanation.explanation;
-                                                }
-                                            }
-
-                                            return (
-                                                <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
-                                                    <div className="flex justify-between">
-                                                        <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
-                                                    </div>
-                                                    {(personalizedExplanation || ev.ai_analysis) && (
-                                                        <p className="opacity-70 leading-snug">{personalizedExplanation || ev.ai_analysis}</p>
-                                                    )}
+                                <div className="mt-8 space-y-4">
+                                    <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
+                                    {result.aiFeedback && result.aiFeedback.results && result.aiFeedback.results.length > 0 ? (
+                                        result.aiFeedback.results.map((item: any, i: number) => (
+                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
+                                                <div className="flex justify-between">
+                                                    <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
+                                                <p className="opacity-80 leading-snug">{item.explanation}</p>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-xs text-slate-500 italic mb-4">No anomalies detected by agent.</p>
+                                    )}
 
-                                {/* Matched Evidence Summary */}
-                                {result.evidenceScore > 0 && (
-                                    <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
-                                        <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
-                                        <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
-                                    </div>
-                                )}
-                            </div>
+                                    {/* Missed Evidence List */}
+                                    {(result?.officialEvidence || currentRound?.evidence)?.filter((ev: any) => !result.evidenceFound?.includes(ev.id)).length > 0 && (
+                                        <div className="mt-4 space-y-2">
+                                            <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
+                                            {(result?.officialEvidence || currentRound?.evidence).filter((ev: any) => !result.evidenceFound?.includes(ev.id)).map((ev: any) => {
+                                                // Look for a personalized Gemini explanation
+                                                let personalizedExplanation = null;
+                                                if (result.aiFeedback?.missed_evidence_explanations && Array.isArray(result.aiFeedback.missed_evidence_explanations)) {
+                                                    const AIExplanation = result.aiFeedback.missed_evidence_explanations.find((m: any) => m.admin_id === ev.id);
+                                                    if (AIExplanation && AIExplanation.explanation) {
+                                                        personalizedExplanation = AIExplanation.explanation;
+                                                    }
+                                                }
 
-                            <div className="mt-8">
-                                <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
+                                                return (
+                                                    <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
+                                                        <div className="flex justify-between">
+                                                            <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                                        </div>
+                                                        {(personalizedExplanation || ev.ai_analysis) && (
+                                                            <p className="opacity-70 leading-snug">{personalizedExplanation || ev.ai_analysis}</p>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Matched Evidence Summary */}
+                                    {result.evidenceScore > 0 && (
+                                        <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
+                                            <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
+                                            <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-8">
+                                    <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
+                                </div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="p-6 text-center text-slate-500 italic">
-                            {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
+                        ) : (
+                            <div className="p-6 text-center text-slate-500 italic">
+                                {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
+                            </div>
+                        )}
+                    </div>
+                )
+            }
+        </div >
     );
 }

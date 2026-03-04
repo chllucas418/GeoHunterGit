@@ -12,7 +12,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const limit = 12;
     const offset = (page - 1) * limit;
 
-    const { results: locations } = await db.prepare("SELECT id, lat, lng, difficulty_rating, quality_score, created_at FROM locations ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
+    const { results: locations } = await db.prepare("SELECT id, lat, lng, difficulty_rating, quality_score, created_at, is_default_simulation FROM locations ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
 
     const countResult = await db.prepare("SELECT COUNT(*) as count FROM locations").first<any>();
     const totalLocations = countResult.count;
@@ -44,6 +44,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         await db.prepare("UPDATE locations SET lat = ?, lng = ?, difficulty_rating = ?, quality_score = ? WHERE id = ?")
             .bind(lat, lng, diff, quality, locId).run();
+        return { success: true };
+    }
+
+    if (intent === "setDefaultSim") {
+        await db.prepare("UPDATE locations SET is_default_simulation = 0").run();
+        await db.prepare("UPDATE locations SET is_default_simulation = 1 WHERE id = ?").bind(locId).run();
         return { success: true };
     }
 
@@ -132,6 +138,21 @@ export default function AdminLocations() {
                                         Purge
                                     </button>
                                 </div>
+
+                                <button
+                                    onClick={() => {
+                                        const fd = new FormData();
+                                        fd.append("intent", "setDefaultSim");
+                                        fd.append("locId", loc.id);
+                                        fetcher.submit(fd, { method: "post" });
+                                    }}
+                                    className={`w-full py-3 mt-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors border ${loc.is_default_simulation
+                                        ? 'bg-blue-600 border-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]'
+                                        : 'bg-white/5 border-white/10 hover:bg-white/10 text-white/70'
+                                        }`}
+                                >
+                                    {loc.is_default_simulation ? '★ Default Simulation' : 'Set as Default Sim'}
+                                </button>
                             </div>
                         </div>
                     ))}

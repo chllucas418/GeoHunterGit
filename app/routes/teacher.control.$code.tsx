@@ -1,4 +1,4 @@
-import { useLoaderData } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { requireTeacher } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
@@ -27,6 +27,7 @@ export async function loader({ request, params, context }: any) {
 
 export default function TeacherControlPanel() {
     const { code, location, mapsApiKey } = useLoaderData() as any;
+    const fetcher = useFetcher();
 
     const [ws, setWs] = useState<WebSocket | null>(null);
     const mapRef = useRef<HTMLDivElement>(null);
@@ -36,40 +37,56 @@ export default function TeacherControlPanel() {
 
     // Setup WebSocket
     useEffect(() => {
-        const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/api/room/${code}/ws`;
-        const socket = new WebSocket(wsUrl);
-        socket.onopen = () => console.log("Control WS Connected");
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/api/room/${code}/ws`;
 
-        socket.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === "cursor" && mapInstance) {
-                    let marker = cursorsRef.current[data.id];
-                    if (!marker) {
-                        marker = new google.maps.Marker({
-                            position: { lat: data.lat, lng: data.lng },
-                            map: mapInstance,
-                            icon: {
-                                path: google.maps.SymbolPath.CIRCLE,
-                                scale: 3,
-                                fillColor: "#3b82f6",
-                                fillOpacity: 0.6,
-                                strokeColor: "#ffffff",
-                                strokeWeight: 1,
-                            },
-                        });
-                        cursorsRef.current[data.id] = marker;
-                    } else {
-                        marker.setPosition({ lat: data.lat, lng: data.lng });
+        let socket: WebSocket;
+        let reconnectTimer: NodeJS.Timeout;
+
+        const connect = () => {
+            socket = new WebSocket(wsUrl);
+            socket.onopen = () => console.log("Control WS Connected");
+
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "cursor" && mapInstance) {
+                        let marker = cursorsRef.current[data.id];
+                        if (!marker) {
+                            marker = new google.maps.Marker({
+                                position: { lat: data.lat, lng: data.lng },
+                                map: mapInstance,
+                                icon: {
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    scale: 3,
+                                    fillColor: "#3b82f6",
+                                    fillOpacity: 0.6,
+                                    strokeColor: "#ffffff",
+                                    strokeWeight: 1,
+                                },
+                            });
+                            cursorsRef.current[data.id] = marker;
+                        } else {
+                            marker.setPosition({ lat: data.lat, lng: data.lng });
+                        }
                     }
-                }
-            } catch (e) { }
+                } catch (e) { }
+            };
+
+            socket.onclose = () => {
+                console.log("Control WS Closed, reconnecting...");
+                reconnectTimer = setTimeout(connect, 3000);
+            };
+
+            setWs(socket);
         };
 
-        socket.onclose = () => console.log("Control WS Closed");
+        connect();
 
-        setWs(socket);
-        return () => socket.close();
+        return () => {
+            clearTimeout(reconnectTimer);
+            if (socket) socket.close();
+        };
     }, [code, mapInstance]);
 
     // Setup Map
@@ -87,6 +104,7 @@ export default function TeacherControlPanel() {
                     zoom: 14,
                     disableDefaultUI: true,
                     mapTypeId: "hybrid",
+                    gestureHandling: "greedy",
                 });
 
                 if (location) {
@@ -145,39 +163,195 @@ export default function TeacherControlPanel() {
     }, [mapsApiKey, mapInstance, ws, location]);
 
     const togglePause = () => {
+        // Optimistic WS Broadcast
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "pause_toggle" }));
         }
+
+        // Mutate Database State so late-joiners get proper status
+        fetcher.submit(
+            { action: "TOGGLE_PAUSE" },
+            { method: "post", action: `/api/room/${code}/action` }
+        );
     };
 
+    // --- DRAWING LOGIC ---
+    const imageCanvasRef = useRef<HTMLCanvasElement>(null);
+    const mapCanvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const lastPosRef = useRef<{ x: number, y: number } | null>(null);
+
+    const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) => {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left) / rect.width,
+            y: (e.clientY - rect.top) / rect.height
+        };
+    };
+
+    const drawLine = (ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, width: number, height: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x0 * width, y0 * height);
+        ctx.lineTo(x1 * width, y1 * height);
+        ctx.strokeStyle = '#ef4444'; // Red pen
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.closePath();
+    };
+
+    const handleTimestampedDraw = (e: React.MouseEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
+        if (!isDrawing) return;
+        const canvas = canvasType === 'image' ? imageCanvasRef.current : mapCanvasRef.current;
+        if (!canvas) return;
+
+        const pos = getCoordinates(e, canvas);
+        if (lastPosRef.current) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) drawLine(ctx, lastPosRef.current.x, lastPosRef.current.y, pos.x, pos.y, canvas.width, canvas.height);
+
+            // Send Stroke via Broadcast
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "draw",
+                    canvasTarget: canvasType,
+                    x0: lastPosRef.current.x,
+                    y0: lastPosRef.current.y,
+                    x1: pos.x,
+                    y1: pos.y
+                }));
+            }
+        }
+        lastPosRef.current = pos;
+    };
+
+    const startDraw = (e: React.MouseEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
+        setIsDrawing(true);
+        const canvas = canvasType === 'image' ? imageCanvasRef.current : mapCanvasRef.current;
+        if (canvas) lastPosRef.current = getCoordinates(e, canvas);
+    };
+
+    const stopDraw = () => {
+        setIsDrawing(false);
+        lastPosRef.current = null;
+    };
+
+    const clearDrawingBox = () => {
+        [imageCanvasRef.current, mapCanvasRef.current].forEach(canvas => {
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        });
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "draw_clear" }));
+        }
+    };
+
+    // Resize Canvas logic
+    useEffect(() => {
+        const resizeCanvas = () => {
+            if (imageCanvasRef.current) {
+                imageCanvasRef.current.width = imageCanvasRef.current.offsetWidth;
+                imageCanvasRef.current.height = imageCanvasRef.current.offsetHeight;
+            }
+            if (mapCanvasRef.current) {
+                mapCanvasRef.current.width = mapCanvasRef.current.offsetWidth;
+                mapCanvasRef.current.height = mapCanvasRef.current.offsetHeight;
+            }
+        };
+        window.addEventListener('resize', resizeCanvas);
+        setTimeout(resizeCanvas, 500); // Trigger after layout mounts
+        return () => window.removeEventListener('resize', resizeCanvas);
+    }, []);
+
     return (
-        <div className="h-[100dvh] w-screen bg-black flex flex-col font-sans">
+        <div className="h-[100dvh] w-screen bg-black flex flex-col font-sans overflow-hidden">
             <header className="bg-slate-900 border-b border-white/10 p-4 flex justify-between items-center z-10">
                 <div>
                     <h1 className="text-xl font-black text-white uppercase tracking-wider">Mission Control Pad</h1>
-                    <p className="text-xs font-mono text-slate-400 mt-1">Room {code} • Live Sat-Link</p>
+                    <p className="text-xs font-mono text-slate-400 mt-1">Room {code} • Laser & Broadcast Ink Live</p>
                 </div>
-                <button
-                    onClick={togglePause}
-                    className="px-6 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500 rounded text-red-400 font-bold uppercase tracking-widest transition-all"
-                >
-                    Toggle Freeze Ray
-                </button>
+                <div className="flex gap-4">
+                    <button
+                        onClick={clearDrawingBox}
+                        className="px-6 py-2 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500 rounded text-yellow-400 font-bold uppercase tracking-widest transition-all"
+                    >
+                        Clear Ink
+                    </button>
+                    <button
+                        onClick={togglePause}
+                        className="px-6 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500 rounded text-red-400 font-bold uppercase tracking-widest transition-all"
+                    >
+                        Toggle Freeze Ray
+                    </button>
+                </div>
             </header>
 
-            <div className="flex-1 relative cursor-crosshair">
-                <div ref={mapRef} className="w-full h-full" />
+            {/* Split Screen Container */}
+            <div className="flex-1 flex w-full relative">
 
-                {/* HUD Overlay */}
-                <div className="absolute inset-0 pointer-events-none p-6">
-                    <div className="text-[10px] font-mono text-blue-400 bg-blue-900/40 inline-block px-3 py-1 rounded border border-blue-500/30 blur-sm">
-                        LASER LINK ONLINE
+                {/* Visual Intel Output (Image view) */}
+                <div className="w-1/2 relative border-r border-white/10 bg-slate-950 flex flex-col">
+                    <div className="p-3 bg-slate-900 border-b border-white/5 text-xs font-mono text-slate-400 uppercase tracking-widest z-10 flex justify-between items-center">
+                        <span>Primary Target Intel</span>
+                        <span className="text-red-400 font-bold mix-blend-screen bg-black/50 px-2 py-1 rounded">
+                            DRAW TO BROADCAST
+                        </span>
+                    </div>
+                    <div className="relative flex-1 group">
+                        {location?.id ? (
+                            <>
+                                <img
+                                    src={`/resources/image/${location.id}`}
+                                    className="w-full h-full object-contain pointer-events-none"
+                                    alt="Target Location"
+                                />
+                                {/* DRAWING LAYER */}
+                                <canvas
+                                    ref={imageCanvasRef}
+                                    className="absolute inset-0 w-full h-full cursor-crosshair z-20 mix-blend-screen"
+                                    onMouseDown={(e) => startDraw(e, 'image')}
+                                    onMouseMove={(e) => handleTimestampedDraw(e, 'image')}
+                                    onMouseUp={stopDraw}
+                                    onMouseLeave={stopDraw}
+                                />
+                            </>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-slate-600 font-mono">LOADING VISUAL DATA...</div>
+                        )}
                     </div>
                 </div>
 
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 pointer-events-none text-center">
-                    <p className="text-sm font-bold text-white tracking-widest uppercase">Tap map to fire laser</p>
-                    <p className="text-[10px] text-slate-400">Blue dots indicate live student cursors</p>
+                {/* Map Interface */}
+                <div className="w-1/2 relative bg-black flex flex-col">
+                    <div className="p-3 bg-slate-900 border-b border-white/5 text-xs font-mono text-slate-400 uppercase tracking-widest z-10 flex justify-between items-center">
+                        <span>Tactical Sat-Link</span>
+                        <span className="text-blue-400 animate-pulse">● LIVE</span>
+                    </div>
+                    <div className="relative flex-1">
+                        <div ref={mapRef} className="absolute inset-0 z-0" />
+
+                        {/* DRAWING LAYER */}
+                        <canvas
+                            ref={mapCanvasRef}
+                            className="absolute inset-0 w-full h-full cursor-crosshair z-20 pointer-events-auto"
+                            onMouseDown={(e) => {
+                                if (e.shiftKey) return;
+                                startDraw(e, 'map');
+                            }}
+                            onMouseMove={(e) => {
+                                if (e.shiftKey) return;
+                                handleTimestampedDraw(e, 'map');
+                            }}
+                            onMouseUp={stopDraw}
+                            onMouseLeave={stopDraw}
+                            style={{ pointerEvents: isDrawing ? 'auto' : 'none' }}
+                        />
+                    </div>
+                    <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-md px-4 py-2 rounded shadow border border-white/10 text-[10px] font-mono pointer-events-none z-30">
+                        <span className="text-red-400 font-bold block mb-1">HOLD [SHIFT] + CLICK & DRAG</span> to draw on the map. Normal drag pans map. Normal click fires Laser.
+                    </div>
                 </div>
             </div>
         </div>

@@ -19,7 +19,16 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
     if (!item) return new Response("Round not active", { status: 400 });
 
-    const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>();
+    let targetLocationId = item.location_id;
+    // Guided Playthrough Round 1 Override
+    if (room.current_index === 0 && room.has_guided_playthrough) {
+        const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        if (defaultSim) {
+            targetLocationId = defaultSim.id;
+        }
+    }
+
+    const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
 
     const formData = await request.formData();
     const query = formData.get("query") as string || "I need a hint for this location.";

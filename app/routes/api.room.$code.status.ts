@@ -40,18 +40,26 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     const participants = participantsResult.results || [];
     const [total, item] = mapSetInfo;
 
-    // Current Round Info
     let currentRound = null;
 
     if (item) {
         // Parallelize fetching Location Details, Evidence, and Submission Count
-        // Only fetch Location & Evidence if we have an item
+        // Check if this is Round 1 (index 0) AND guided playthrough is enabled
+        let targetLocationId = item.location_id;
+
+        if (room.current_index === 0 && room.has_guided_playthrough) {
+            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            if (defaultSim) {
+                targetLocationId = defaultSim.id;
+            }
+        }
+
         const [location, allEvidence, submissionCountResult] = await Promise.all([
-            db.prepare("SELECT * FROM locations WHERE id = ?").bind(item.location_id).first<any>(),
-            db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(item.location_id).all<any>(),
+            db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
+            db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>(),
             db.prepare(
                 "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
-            ).bind(code, item.location_id).first<any>()
+            ).bind(code, targetLocationId).first<any>()
         ]);
 
         // Masking Logic
