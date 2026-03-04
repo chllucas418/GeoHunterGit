@@ -427,7 +427,6 @@ export default function MassAdd() {
                                                     }
 
                                                     // Auto-set marker on search result
-                                                    /*
                                                     const newLat = place.geometry.location.lat();
                                                     const newLng = place.geometry.location.lng();
                                                     setFiles(prev => {
@@ -436,7 +435,6 @@ export default function MassAdd() {
                                                         cp[editingId].lng = newLng;
                                                         return cp;
                                                     });
-                                                    */
                                                 });
                                             }
                                         }}

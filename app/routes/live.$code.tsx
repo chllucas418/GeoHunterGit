@@ -690,7 +690,7 @@ export default function StudentLiveGame() {
 
                 {/* Hints Overlay */}
                 {!submitted && visibleHints.length > 0 && (
-                    <div className="absolute bottom-24 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
+                    <div className="absolute top-1/4 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
                         {visibleHints.map((hint, i) => (
                             <div key={i} className="bg-black/40 backdrop-blur-xl border-l-4 border-yellow-400 p-3 rounded text-xs text-white animate-in slide-in-from-left-10">
                                 {hint}
@@ -750,6 +750,7 @@ export default function StudentLiveGame() {
                             imageUrl={location.image_url}
                             onBoxChange={isEvidenceMode ? handleBoxDrawn : () => { }}
                             disabled={submitted || !isEvidenceMode}
+                            hasDrawnBoxes={evidenceList.length > 0}
                         >
                             {/* User Evidence */}
                             {evidenceList.map((ev, index) => {

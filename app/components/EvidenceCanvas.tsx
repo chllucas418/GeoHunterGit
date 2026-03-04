@@ -5,10 +5,11 @@ interface EvidenceCanvasProps {
     imageUrl: string;
     onBoxChange: (box: BoxCoordinates | null) => void;
     disabled?: boolean;
+    hasDrawnBoxes?: boolean;
     children?: ReactNode;
 }
 
-export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, children }: EvidenceCanvasProps) {
+export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDrawnBoxes = false, children }: EvidenceCanvasProps) {
     const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
     const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number } | null>(null);
 
@@ -190,7 +191,7 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, childr
                 {children}
 
                 {/* Instruction Overlay */}
-                {!drawRect && !isDrawing && !disabled && (
+                {!drawRect && !isDrawing && !disabled && !hasDrawnBoxes && (
                     <div className="absolute inset-x-0 bottom-4 flex justify-center pointer-events-none">
                         <p className="bg-black/60 text-white px-3 py-1 rounded text-xs font-mono uppercase tracking-widest backdrop-blur-md border border-white/10">
                             Draw Box to Scan

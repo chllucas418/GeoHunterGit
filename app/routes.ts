@@ -20,6 +20,7 @@ export default [
     route("live/:code", "routes/live.$code.tsx"),
     route("teacher/dashboard", "routes/teacher.dashboard.tsx"),
     route("teacher/room/:code", "routes/teacher.room.$code.tsx"),
+    route("teacher/control/:code", "routes/teacher.control.$code.tsx"),
 
     // Admin Routes
     route("admin", "routes/admin.index.tsx"),
