@@ -1,13 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 
-interface Env {
-    DB: D1Database;
-}
-
 export class GeoHunterRoomDO extends DurableObject {
     private sessions: Set<WebSocket>;
 
-    constructor(state: DurableObjectState, env: Env) {
+    constructor(state: DurableObjectState, env: any) {
         super(state, env);
         this.sessions = new Set();
     }

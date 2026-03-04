@@ -1,4 +1,4 @@
-import { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs } from "react-router";
 import { getUserId } from "~/lib/auth.server";
 import { generateSocraticHint } from "~/lib/gemini.server";
 

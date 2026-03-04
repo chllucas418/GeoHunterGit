@@ -54,7 +54,7 @@ export async function loader({ request, params, context }: any) {
 }
 
 export default function StudentLiveGame() {
-    const { code, mapsApiKey, existingGuess } = useLoaderData() as any;
+    const { code, userId, mapsApiKey, existingGuess } = useLoaderData() as any;
     const fetcher = useFetcher();
     const actionFetcher = useFetcher();
     // const navigation = useNavigation(); // Not really navigating, just polling
@@ -451,7 +451,7 @@ export default function StudentLiveGame() {
             const fd = new FormData();
             fd.append("query", aiQuestion);
             const res = await fetch(`/api/room/${code}/hint`, { method: "POST", body: fd });
-            const data = await res.json();
+            const data = await res.json() as any;
             if (data.hint) {
                 setAiHintResponse(data.hint);
                 setHasAskedAi(true);
@@ -683,8 +683,8 @@ export default function StudentLiveGame() {
                                         (tutorialStep === 3 && guess === null)
                                     }
                                     className={`px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest transition-colors ${((tutorialStep === 2 && evidenceList.length === 0) || (tutorialStep === 3 && guess === null))
-                                            ? 'opacity-50 cursor-not-allowed'
-                                            : 'hover:bg-blue-50'
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : 'hover:bg-blue-50'
                                         }`}
                                 >
                                     {tutorialStep === 4 ? "Begin Operaton" : "Next ➔"}
