@@ -32,7 +32,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
-    const GEMINI_API_KEY = env.GEMINI_API_KEY;
+    // const GEMINI_API_KEY = env.GEMINI_API_KEY; // Removed for AI Gateway enforcement
 
     // 1. Fetch Location
     const loc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(locationId).first<any>();
@@ -74,7 +74,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const GEMINI_GATEWAY_TOKEN = context.cloudflare.env.GEMINI_GATEWAY_TOKEN; // Optional Token
 
         const fullFeedback = await checkEvidenceListWithGemini(
-            GEMINI_API_KEY,
             loc.image_url,
             userEvidenceList, // User's boxes (can be empty)
             loc.name,

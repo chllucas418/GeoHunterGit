@@ -43,7 +43,6 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
     try {
         const hint = await generateSocraticHint(
-            env.GEMINI_API_KEY,
             location.image_url,
             location.name,
             query,

@@ -42,10 +42,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     logs.push(`Items to Analyze: ${items.length}`);
 
     try {
-        if (!env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
-
         result = await batchAnalyzeOfficialEvidence(
-            env.GEMINI_API_KEY,
             imageUrl,
             items,
             env.GEMINI_BASE_URL,

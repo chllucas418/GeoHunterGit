@@ -48,11 +48,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 evidenceList: evidenceListJson ? JSON.parse(evidenceListJson) : []
             };
             const analysis = await analyzeImageQuality(
-                env.GEMINI_API_KEY,
                 imageUrl,
-                contextData,
                 env.GEMINI_BASE_URL,
-                env.GEMINI_GATEWAY_TOKEN
+                env.GEMINI_GATEWAY_TOKEN,
+                contextData
             );
             return { analysis };
         } catch (e) {
@@ -134,7 +133,6 @@ export async function action({ request, context }: ActionFunctionArgs) {
                     const isBase64 = imageUrl.startsWith("data:");
 
                     analysis = await generateEvidenceDescription(
-                        env.GEMINI_API_KEY,
                         isBase64 ? "" : imageUrl, // URL ignored if base64 provided
                         ev.box,
                         env.GEMINI_BASE_URL,

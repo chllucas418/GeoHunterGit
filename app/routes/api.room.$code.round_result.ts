@@ -63,11 +63,10 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             console.log(`[RoundResult] Found ${missingAnalysis.length} items missing analysis. Triggering On-Demand AI...`);
 
             // Trigger AI (Ensure we have keys)
-            const GEMINI_API_KEY = env.GEMINI_API_KEY;
             const GEMINI_BASE_URL = env.GEMINI_BASE_URL;
             const GEMINI_GATEWAY_TOKEN = env.GEMINI_GATEWAY_TOKEN;
 
-            if (GEMINI_API_KEY) {
+            if (GEMINI_BASE_URL) {
                 try {
                     // Import dynamically or assuming it's available
                     const { batchAnalyzeOfficialEvidence } = await import("~/lib/gemini.server");
@@ -82,7 +81,6 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                     }));
 
                     const analysisResults = await batchAnalyzeOfficialEvidence(
-                        GEMINI_API_KEY,
                         location.image_url,
                         itemsToAnalyze,
                         GEMINI_BASE_URL,

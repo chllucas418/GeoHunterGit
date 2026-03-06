@@ -9,34 +9,27 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return btoa(binary);
 }
 
-// Helper for raw fetch to Gemini API
+// Helper for raw fetch to Gemini API via Cloudflare AI Gateway
 async function callGeminiApi(
-    apiKey: string,
     modelName: string,
     prompt: string,
     imageData: { mimeType: string; data: string },
-    baseUrl: string = "https://generativelanguage.googleapis.com",
-    gatewayToken?: string
+    baseUrl: string,
+    gatewayToken: string
 ) {
-    let url = "";
-
-    // If baseUrl is a Cloudflare AI Gateway URL, we assume the model path is already part of it, or we append it according to their format.
-    // Cloudflare AI Gateway format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/google-ai-studio/v1beta/models/{modelName}:generateContent
-    if (baseUrl.includes("gateway.ai.cloudflare.com")) {
-        // Ensure the base URL does not end with a slash
-        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-        url = `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-    } else {
-        url = `${baseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    if (!baseUrl || !gatewayToken) {
+        throw new Error("Cloudflare AI Gateway configuration missing. Ensure baseUrl and gatewayToken are provided.");
     }
+
+    // Ensure the base URL does not end with a slash
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    // URL format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/google-ai-studio/v1beta/models/{modelName}:generateContent
+    const url = `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent`;
 
     const headers: Record<string, string> = {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "cf-aig-authorization": `Bearer ${gatewayToken}`
     };
-
-    if (gatewayToken) {
-        headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
-    }
 
     const payload = {
         contents: [{
@@ -59,23 +52,21 @@ async function callGeminiApi(
     });
 
     if (!response.ok) {
-        throw new Error(`Gemini API Error: ${response.status} ${response.statusText} - ${await response.text()}`);
+        throw new Error(`Cloudflare AI Gateway Error: ${response.status} ${response.statusText} - ${await response.text()}`);
     }
 
     const data = await response.json() as any;
-    // Extract text from standard Gemini response structure
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
 export async function checkEvidenceListWithGemini(
-    apiKey: string,
     imageUrl: string,
     evidenceList: { box: { x: number; y: number; w: number; h: number }; description?: string }[],
     locationName: string,
     adminEvidence: any[] = [],
-    baseUrl?: string,
-    gatewayToken?: string,
-    directBase64?: string // Optional: Pass base64 directly if image is local
+    baseUrl: string,
+    gatewayToken: string,
+    directBase64?: string
 ) {
     let base64Data = "";
     let mimeType = "image/jpeg";
@@ -97,7 +88,6 @@ export async function checkEvidenceListWithGemini(
         mimeType = response.headers.get("content-type") || "image/jpeg";
     }
 
-    // Prepare Admin Context String for the AI
     const adminContextStr = adminEvidence.map((e, i) =>
         `Official Clue #${i + 1} (Database ID: '${e.id}'): "${e.description}"`
     ).join("\n");
@@ -147,25 +137,19 @@ export async function checkEvidenceListWithGemini(
 
     try {
         const responseText = await callGeminiApi(
-            apiKey,
-            "gemini-3-flash-preview", // User explicitly requested this model
+            "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
             gatewayToken
         );
 
-        console.log("Gemini Raw Response:", responseText);
-
-        // Clean up markdown code blocks if present
         let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
 
-        // Try to parse the whole object first
         try {
             const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
-                // Ensure results array exists
                 if (!parsed.results) parsed.results = [];
                 return parsed;
             }
@@ -173,25 +157,23 @@ export async function checkEvidenceListWithGemini(
             console.error("JSON Parse Error:", e);
         }
 
-        // Fallback: If strict parsing fails, try to salvage results array if possible, or return empty
         return { results: [], summary_explanation: "AI feedback unavailable." };
 
     } catch (e) {
-        console.error("Gemini API Call Error:", e);
+        console.error("Cloudflare AI Gateway / Gemini Error:", e);
         return { results: [], summary_explanation: "AI service error." };
     }
 }
 
 export async function analyzeImageQuality(
-    apiKey: string,
     imageUrl: string,
+    baseUrl: string,
+    gatewayToken: string,
     context?: {
         lat?: number;
         lng?: number;
-        evidenceList?: any[]; // optional pre-filled evidence
-    },
-    baseUrl?: string,
-    gatewayToken?: string
+        evidenceList?: any[];
+    }
 ) {
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
@@ -235,7 +217,6 @@ export async function analyzeImageQuality(
 
     try {
         const responseText = await callGeminiApi(
-            apiKey,
             "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
@@ -244,7 +225,6 @@ export async function analyzeImageQuality(
         );
 
         const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-
         const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             return JSON.parse(jsonMatch[0]);
@@ -252,18 +232,17 @@ export async function analyzeImageQuality(
         return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually", generated_hints: [] };
 
     } catch (e: any) {
-        console.error("Gemini API Call Error:", e);
+        console.error("AI Gateway Error:", e);
         return { quality_score: 0, precontext: `Analysis failed: ${e.message}`, recommendation: "Error", generated_hints: [] };
     }
 }
 
 export async function generateEvidenceDescription(
-    apiKey: string,
     imageUrl: string,
     evidenceBox: { x: number; y: number; w: number; h: number },
-    baseUrl?: string,
-    gatewayToken?: string,
-    directBase64?: string // Optional: Pass base64 directly if image is local
+    baseUrl: string,
+    gatewayToken: string,
+    directBase64?: string
 ) {
     let base64Data = "";
     let mimeType = "image/jpeg";
@@ -277,7 +256,6 @@ export async function generateEvidenceDescription(
             base64Data = directBase64;
         }
     } else {
-        // 1. Fetch image to base64
         const response = await fetch(imageUrl);
         if (!response.ok) throw new Error("Failed to fetch image");
         const arrayBuffer = await response.arrayBuffer();
@@ -296,7 +274,6 @@ export async function generateEvidenceDescription(
 
     try {
         const description = await callGeminiApi(
-            apiKey,
             "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
@@ -305,26 +282,23 @@ export async function generateEvidenceDescription(
         );
         return description.trim();
     } catch (e: any) {
-        console.error("Gemini Description gen failed", e);
+        console.error("AI Gateway Error:", e);
         return `Analysis failed: ${e.message}`;
     }
 }
 
 export async function batchAnalyzeOfficialEvidence(
-    apiKey: string,
     imageUrl: string,
     items: { id: string; box: any; description: string }[],
-    baseUrl?: string,
-    gatewayToken?: string
+    baseUrl: string,
+    gatewayToken: string
 ) {
-    // 1. Fetch image
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
     const arrayBuffer = await response.arrayBuffer();
     const base64Data = arrayBufferToBase64(arrayBuffer);
     const mimeType = response.headers.get("content-type") || "image/jpeg";
 
-    // 2. Build Context
     const itemsStr = items.map((item, i) =>
         `Item ${i}: ID="${item.id}", Description="${item.description}", Box=${JSON.stringify(item.box)}`
     ).join("\n");
@@ -350,7 +324,6 @@ export async function batchAnalyzeOfficialEvidence(
 
     try {
         const responseText = await callGeminiApi(
-            apiKey,
             "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
@@ -364,21 +337,20 @@ export async function batchAnalyzeOfficialEvidence(
             const parsed = JSON.parse(jsonMatch[0]);
             return parsed.results || [];
         }
-        return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: Invalid JSON response - ${responseText.substring(0, 100)}` }));
+        return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: Invalid JSON response` }));
     } catch (e: any) {
-        console.error("Batch Analysis Failed", e);
+        console.error("Batch Analysis Failed via Gateway", e);
         return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: ${e.message}` }));
     }
 }
 
 export async function generateSocraticHint(
-    apiKey: string,
     imageUrl: string,
     locationName: string,
     studentQuery: string,
     curriculumFocus: string,
-    baseUrl?: string,
-    gatewayToken?: string,
+    baseUrl: string,
+    gatewayToken: string,
     directBase64?: string
 ) {
     let base64Data = "";
@@ -422,7 +394,6 @@ export async function generateSocraticHint(
 
     try {
         const responseText = await callGeminiApi(
-            apiKey,
             "gemini-3-flash-preview",
             prompt,
             { mimeType, data: base64Data },
@@ -431,7 +402,7 @@ export async function generateSocraticHint(
         );
         return responseText.trim();
     } catch (e: any) {
-        console.error("Socratic Hint Generation Error:", e);
+        console.error("Socratic Hint Error via Gateway:", e);
         return "Warning: Info-Link degraded. Check the architectural style again.";
     }
 }

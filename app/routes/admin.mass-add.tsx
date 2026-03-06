@@ -21,10 +21,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         try {
             const aiData = await analyzeImageQuality(
-                env.GEMINI_API_KEY,
                 dataUri,
-                undefined,
-                env.GEMINI_BASE_URL
+                env.GEMINI_BASE_URL,
+                env.GEMINI_GATEWAY_TOKEN,
+                undefined
             );
             return Response.json({ success: true, aiData });
         } catch (e: any) {

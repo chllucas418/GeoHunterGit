@@ -51,14 +51,14 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                         const { batchAnalyzeOfficialEvidence } = await import("~/lib/gemini.server");
                         const location = await db.prepare("SELECT image_url FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
 
-                        if (location && location.image_url && env.GEMINI_API_KEY) {
+                        if (location && location.image_url && env.GEMINI_BASE_URL) {
                             const itemsToAnalyze = missingAnalysis.map((e: any) => ({
                                 id: e.id,
                                 box: typeof e.bounding_box === 'string' ? JSON.parse(e.bounding_box) : e.bounding_box,
                                 description: e.description
                             }));
                             const analysisResults = await batchAnalyzeOfficialEvidence(
-                                env.GEMINI_API_KEY, location.image_url, itemsToAnalyze,
+                                location.image_url, itemsToAnalyze,
                                 env.GEMINI_BASE_URL, env.GEMINI_GATEWAY_TOKEN
                             );
                             for (const res of analysisResults) {
