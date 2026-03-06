@@ -66,15 +66,36 @@ export default function AdminDashboard() {
                         </div>
                     </Link>
 
-                    {/* Add New Location */}
-                    <Link to="/admin/add-location" className="block p-6 bg-emerald-600 rounded-lg text-center hover:bg-emerald-500 transition">
-                        <h2 className="text-xl font-bold">Add Location (Single)</h2>
-                        <p className="text-sm opacity-80">Add one location manually</p>
+                    {/* Teacher Dashboard Access */}
+                    <Link to="/teacher/dashboard" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-blue-500/30">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
+                            S
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black text-white mb-2">Live Sessions</h3>
+                            <p className="text-sm text-white/50">Mission Control: Initiate rooms, control simulations, and monitor participants.</p>
+                        </div>
                     </Link>
 
-                    <Link to="/admin/mass-add" className="block p-6 bg-blue-600 rounded-lg text-center hover:bg-blue-500 transition">
-                        <h2 className="text-xl font-bold">Mass Upload</h2>
-                        <p className="text-sm opacity-80">Drag & Drop Multiple Photos</p>
+                    {/* Add New Location */}
+                    <Link to="/admin/add-location" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-emerald-500/30">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
+                            +
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black text-white mb-2">Add Location</h3>
+                            <p className="text-sm text-white/50">Add a single location manually to the database.</p>
+                        </div>
+                    </Link>
+
+                    <Link to="/admin/mass-add" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-blue-500/30">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
+                            U
+                        </div>
+                        <div>
+                            <h3 className="text-2xl font-black text-white mb-2">Mass Upload</h3>
+                            <p className="text-sm text-white/50">Batch import locations using drag-and-drop.</p>
+                        </div>
                     </Link>
                 </div>
             </div>
