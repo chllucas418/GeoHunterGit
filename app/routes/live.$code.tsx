@@ -793,11 +793,15 @@ export default function StudentLiveGame() {
                 {room.status === 'PLAYING' && (
                     <div className="absolute top-0 inset-x-0 z-[60] p-4 flex justify-between items-start pointer-events-none">
                         <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex flex-col items-center mx-auto pointer-events-auto">
-                            <div suppressHydrationWarning className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${((currentRound.timeLimit || 120) - secondsElapsed) < 30 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-                                {Math.floor(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) / 60)}:{(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) % 60).toString().padStart(2, '0')}
+                            <div suppressHydrationWarning className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${(currentRound && ((currentRound.timeLimit || 120) - secondsElapsed) < 30) ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                                {currentRound ? (
+                                    <>
+                                        {Math.floor(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) / 60)}:{(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) % 60).toString().padStart(2, '0')}
+                                    </>
+                                ) : "--:--"}
                             </div>
                             {/* Hint Timer - Only show if hints remaining */}
-                            {(Math.floor(secondsElapsed / (room.hint_interval || 30)) + 1) <= hintList.length && (
+                            {currentRound && (Math.floor(secondsElapsed / (room.hint_interval || 30)) + 1) <= hintList.length && (
                                 <div className="flex items-center gap-2 mt-1">
                                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
                                     <span className="text-[10px] text-yellow-100 font-mono uppercase">

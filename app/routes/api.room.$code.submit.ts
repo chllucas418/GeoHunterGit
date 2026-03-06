@@ -37,34 +37,24 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
 
         // Get Current Location
-        const item = await db.prepare(
-            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-        ).bind(room.map_set_id, room.current_index).first<any>();
-
-        if (!item) {
-            console.error(`Map Item not found for Set ${room.map_set_id} Offset ${room.current_index}`);
-            return Response.json({ error: "Location data missing for this round" }, { status: 400 });
-        }
-
-        let targetLocationId = item.location_id;
-
-        // Guided Playthrough: index 0 = tutorial (default sim), index 1+ = dataset[index-1]
         const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
+        let targetLocationId: string;
 
         if (isGuidedRound) {
             const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
-            if (defaultSim) {
-                targetLocationId = defaultSim.id;
-            }
-        } else if (room.has_guided_playthrough) {
-            // Offset by 1 for non-tutorial rounds with guided playthrough
-            const datasetIndex = room.current_index - 1;
-            const realItem = await db.prepare(
+            if (!defaultSim) return Response.json({ error: "Tutorial location not found" }, { status: 404 });
+            targetLocationId = defaultSim.id;
+        } else {
+            const datasetIndex = room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index;
+            const item = await db.prepare(
                 "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
             ).bind(room.map_set_id, datasetIndex).first<any>();
-            if (realItem) {
-                targetLocationId = realItem.location_id;
+
+            if (!item) {
+                console.error(`Map Item not found for Set ${room.map_set_id} Offset ${datasetIndex}`);
+                return Response.json({ error: "Location data missing for this round" }, { status: 400 });
             }
+            targetLocationId = item.location_id;
         }
 
         const trueLoc = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
