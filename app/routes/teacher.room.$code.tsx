@@ -1,5 +1,6 @@
 import { Form, useLoaderData, useFetcher, useNavigate, Link } from "react-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { requireTeacher } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
@@ -166,8 +167,10 @@ export default function TeacherRoom() {
     // --- REVIEW MAP LOGIC ---
     const mapRef = useRef<HTMLDivElement>(null);
     const [reviewMap, setReviewMap] = useState<google.maps.Map | null>(null);
-    const markersRef = useRef<google.maps.Marker[]>([]);
+    const markersRef = useRef<any[]>([]);
+    const clustererRef = useRef<MarkerClusterer | null>(null);
     const hasAutoSkipped = useRef(false);
+    const serverClockOffsetRef = useRef<number>(0);
 
     useEffect(() => {
         if (mapsApiKey) {
@@ -231,17 +234,27 @@ export default function TeacherRoom() {
                             // Student Profile Marker
                             const div = document.createElement("div");
                             div.className = "custom-marker-profile";
-                            div.style.cssText = "width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); overflow: hidden; background: #3b82f6; position: relative; transition: transform 0.2s;";
+                            div.style.cssText = "display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; transform: translateY(-50%);";
+
+                            const innerCircle = document.createElement("div");
+                            innerCircle.style.cssText = "width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); overflow: hidden; background: #3b82f6; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 16px; margin: 0 auto;";
 
                             // Avatar or Initials
                             if (g.profile_picture_url) {
                                 const img = document.createElement("img");
                                 img.src = g.profile_picture_url;
                                 img.style.cssText = "width: 100%; height: 100%; object-fit: cover;";
-                                div.appendChild(img);
+                                innerCircle.appendChild(img);
                             } else {
-                                div.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:16px;">${g.display_name ? g.display_name[0].toUpperCase() : "?"}</div>`;
+                                innerCircle.innerText = g.display_name ? g.display_name[0].toUpperCase() : "?";
                             }
+
+                            const nameLabel = document.createElement("div");
+                            nameLabel.innerText = g.display_name || "Unknown";
+                            nameLabel.style.cssText = "background: rgba(0,0,0,0.8); color: white; border-radius: 4px; padding: 2px 6px; font-size: 12px; font-weight: bold; white-space: nowrap; text-shadow: 0 1px 2px black;";
+
+                            div.appendChild(innerCircle);
+                            div.appendChild(nameLabel);
 
                             // Tooltip (Name + Distance) on hover? 
                             // Default 'title' works for simple tooltip. 
@@ -255,11 +268,12 @@ export default function TeacherRoom() {
                                 zIndex: 100
                             });
 
-                            // markersRef.current.push(m); // AdvancedMarkerElement is not same type as Marker. 
-                            // We can just keep it in loop or store if needed for cleanup.
+                            markersRef.current.push(m);
 
                             bounds.extend({ lat: g.lat, lng: g.lng });
                         });
+
+                        clustererRef.current = new MarkerClusterer({ map, markers: markersRef.current });
 
                         map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
                     }
@@ -269,6 +283,10 @@ export default function TeacherRoom() {
 
         if (status !== 'REVIEW' && reviewMap) {
             setReviewMap(null);
+            if (clustererRef.current) {
+                clustererRef.current.clearMarkers();
+            }
+            markersRef.current.forEach(m => m.map = null);
             markersRef.current = [];
         }
     }, [roomState, mapsApiKey]);
@@ -305,6 +323,10 @@ export default function TeacherRoom() {
                 const data: any = await res.json();
                 if (!alive) return;
 
+                if (data.serverTime) {
+                    serverClockOffsetRef.current = Date.now() - data.serverTime;
+                }
+
                 // Detect Round Change for Animation
                 if (data.currentRound?.index !== lastRoundIndexRef.current) {
                     setIntroStage(0);
@@ -319,7 +341,8 @@ export default function TeacherRoom() {
 
                 // Sync Timer if playing
                 if (data.room?.status === 'PLAYING' && data.currentRound) {
-                    const elapsedSec = Math.floor((Date.now() - data.currentRound.startTime) / 1000);
+                    const synchronizedNow = Date.now() - serverClockOffsetRef.current;
+                    const elapsedSec = Math.floor((synchronizedNow - data.currentRound.startTime) / 1000);
                     const limit = data.currentRound.timeLimit || 120;
                     const remaining = Math.max(0, limit - elapsedSec);
                     setTimeLeft(remaining);
@@ -707,7 +730,7 @@ export default function TeacherRoom() {
                 {participants[1] && (
                     <div className="flex flex-col items-center">
                         <div className="w-32 h-32 rounded-full bg-slate-300 border-4 border-white mb-4 flex items-center justify-center text-4xl font-black text-slate-800">
-                            {participants[1].display_name[0]}
+                            {participants[1].display_name?.[0] || "?"}
                         </div>
                         <div className="h-48 w-40 bg-slate-700 rounded-t-2xl flex items-end justify-center pb-4">
                             <span className="text-4xl font-black text-white">#2</span>
@@ -724,7 +747,7 @@ export default function TeacherRoom() {
                     <div className="flex flex-col items-center">
                         <div className="text-6xl mb-6">👑</div>
                         <div className="w-40 h-40 rounded-full bg-yellow-400 border-4 border-white mb-4 flex items-center justify-center text-5xl font-black text-yellow-900 shadow-[0_0_50px_rgba(250,204,21,0.5)]">
-                            {participants[0].display_name[0]}
+                            {participants[0].display_name?.[0] || "?"}
                         </div>
                         <div className="h-64 w-48 bg-yellow-600 rounded-t-2xl flex items-end justify-center pb-4 relative overflow-hidden">
                             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
@@ -741,7 +764,7 @@ export default function TeacherRoom() {
                 {participants[2] && (
                     <div className="flex flex-col items-center">
                         <div className="w-28 h-28 rounded-full bg-orange-400 border-4 border-white mb-4 flex items-center justify-center text-3xl font-black text-orange-900">
-                            {participants[2].display_name[0]}
+                            {participants[2].display_name?.[0] || "?"}
                         </div>
                         <div className="h-40 w-40 bg-orange-700 rounded-t-2xl flex items-end justify-center pb-4">
                             <span className="text-4xl font-black text-white">#3</span>

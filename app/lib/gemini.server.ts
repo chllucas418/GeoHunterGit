@@ -18,7 +18,17 @@ async function callGeminiApi(
     baseUrl: string = "https://generativelanguage.googleapis.com",
     gatewayToken?: string
 ) {
-    const url = `${baseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    let url = "";
+
+    // If baseUrl is a Cloudflare AI Gateway URL, we assume the model path is already part of it, or we append it according to their format.
+    // Cloudflare AI Gateway format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/google-ai-studio/v1beta/models/{modelName}:generateContent
+    if (baseUrl.includes("gateway.ai.cloudflare.com")) {
+        // Ensure the base URL does not end with a slash
+        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        url = `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    } else {
+        url = `${baseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    }
 
     const headers: Record<string, string> = {
         "Content-Type": "application/json"

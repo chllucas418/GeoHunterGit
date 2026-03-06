@@ -33,7 +33,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>(),
             db.prepare(
                 "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-            ).bind(room.map_set_id, room.current_index).first<any>()
+            ).bind(room.map_set_id, room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index).first<any>()
         ]) : Promise.resolve([null, null])
     ]);
 
@@ -74,13 +74,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             };
         }
     } else if (item) {
-        // Real game round — offset by 1 if guided playthrough is enabled
-        const datasetIndex = room.has_guided_playthrough ? room.current_index - 1 : room.current_index;
-        const realItem = room.has_guided_playthrough
-            ? await db.prepare(
-                "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-            ).bind(room.map_set_id, datasetIndex).first<any>()
-            : item;
+        // Real game round 
+        const realItem = item;
 
         if (realItem) {
             const targetLocationId = realItem.location_id;

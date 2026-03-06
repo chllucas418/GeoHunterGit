@@ -1,4 +1,4 @@
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useRevalidator } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { requireTeacher } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
@@ -38,12 +38,24 @@ export async function loader({ request, params, context }: any) {
 export default function TeacherControlPanel() {
     const { code, location, mapsApiKey } = useLoaderData() as any;
     const fetcher = useFetcher();
+    const revalidator = useRevalidator();
+
+    // Auto-Update Panel Polling
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (revalidator.state === "idle") {
+                revalidator.revalidate();
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [revalidator]);
 
     const [ws, setWs] = useState<WebSocket | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
     const laserMarkerRef = useRef<google.maps.Marker | null>(null);
+    const targetMarkerRef = useRef<google.maps.Marker | null>(null);
     const cursorsRef = useRef<Record<string, google.maps.Marker>>({});
     const [drawMode, setDrawMode] = useState(false);
 
@@ -121,7 +133,7 @@ export default function TeacherControlPanel() {
                 });
 
                 if (location) {
-                    new google.maps.Marker({
+                    targetMarkerRef.current = new google.maps.Marker({
                         position: centerNode,
                         map: map,
                         title: "Official Target",
@@ -173,7 +185,18 @@ export default function TeacherControlPanel() {
                 setMapInstance(map);
             });
         }
-    }, [mapsApiKey, mapInstance, ws, location]);
+    }, [mapsApiKey, mapInstance, ws]);
+
+    // Recenter map and update target marker when location changes via polling
+    useEffect(() => {
+        if (mapInstance && location) {
+            const newCenter = { lat: location.lat, lng: location.lng };
+            mapInstance.setCenter(newCenter);
+            if (targetMarkerRef.current) {
+                targetMarkerRef.current.setPosition(newCenter);
+            }
+        }
+    }, [location, mapInstance]);
 
     const togglePause = async () => {
         // Optimistic WS Broadcast
@@ -198,6 +221,7 @@ export default function TeacherControlPanel() {
     const mapCanvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPosRef = useRef<{ x: number, y: number } | null>(null);
+    const inkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement>, canvas: HTMLCanvasElement) => {
         const rect = canvas.getBoundingClientRect();
@@ -212,7 +236,7 @@ export default function TeacherControlPanel() {
         ctx.moveTo(x0 * width, y0 * height);
         ctx.lineTo(x1 * width, y1 * height);
         ctx.strokeStyle = '#ef4444'; // Red pen
-        ctx.lineWidth = 4;
+        ctx.lineWidth = Math.max(2, width * 0.005); // Relative thickness
         ctx.lineCap = 'round';
         ctx.stroke();
         ctx.closePath();
@@ -251,6 +275,12 @@ export default function TeacherControlPanel() {
             }
         }
         lastPosRef.current = pos;
+
+        // Auto-Clear Ink after 3s of inactivity
+        if (inkTimeoutRef.current) clearTimeout(inkTimeoutRef.current);
+        inkTimeoutRef.current = setTimeout(() => {
+            clearDrawingBox();
+        }, 3000);
     };
 
     const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {

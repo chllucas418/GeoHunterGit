@@ -16,6 +16,7 @@
       "DOM.Iterable",
       "ES2022"
     ],
+    "skipLibCheck": true,
     "types": [
       "vite/client",
       "google.maps"

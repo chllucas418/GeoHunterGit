@@ -18,7 +18,7 @@ export async function loader({ request, params, context }: any) {
     if (room && room.status !== 'WAITING') {
         const item = await db.prepare(
             "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-        ).bind(room.map_set_id, room.current_index).first<any>();
+        ).bind(room.map_set_id, room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index).first<any>();
 
         if (item) {
             const guessRecord = await db.prepare(
@@ -61,7 +61,7 @@ export async function loader({ request, params, context }: any) {
                 db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>(),
                 db.prepare(
                     "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-                ).bind(room.map_set_id, room.current_index).first<any>()
+                ).bind(room.map_set_id, room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index).first<any>()
             ]) : Promise.resolve([null, null])
         ]);
         const participants = participantsResult.results || [];
@@ -93,10 +93,7 @@ export async function loader({ request, params, context }: any) {
                 };
             }
         } else if (item2) {
-            const datasetIndex = room.has_guided_playthrough ? room.current_index - 1 : room.current_index;
-            const realItem = room.has_guided_playthrough
-                ? await db.prepare("SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?").bind(room.map_set_id, datasetIndex).first<any>()
-                : item2;
+            const realItem = item2;
             if (realItem) {
                 const targetLocationId = realItem.location_id;
                 const [location, allEvidence, submissionCountResult] = await Promise.all([
@@ -138,6 +135,7 @@ export default function StudentLiveGame() {
     const [submitted, setSubmitted] = useState(false);
     const [result, setResult] = useState<any>(null);
     const lastRoundIndex = useRef<number>(-1);
+    const serverClockOffsetRef = useRef<number>(0);
 
     // --- NEW UI STATES ---
     const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; id: string }[]>([]);
@@ -274,6 +272,10 @@ export default function StudentLiveGame() {
                 const data: any = await res.json();
                 if (!alive) return;
 
+                if (data.serverTime) {
+                    serverClockOffsetRef.current = Date.now() - data.serverTime;
+                }
+
                 const newIndex = data.room?.current_index;
 
                 // Detect Round Change for Animation
@@ -336,9 +338,9 @@ export default function StudentLiveGame() {
     useEffect(() => {
         const timer = setInterval(() => {
             if (roomState?.currentRound?.startTime) {
-                const now = Date.now();
+                const synchronizedNow = Date.now() - serverClockOffsetRef.current;
                 const start = roomState.currentRound.startTime;
-                const diff = Math.floor((now - start) / 1000);
+                const diff = Math.floor((synchronizedNow - start) / 1000);
                 setSecondsElapsed(diff >= 0 ? diff : 0);
             }
         }, 1000);
@@ -425,7 +427,7 @@ export default function StudentLiveGame() {
                                 ctx.moveTo(data.x0 * targetCanvas.width, data.y0 * targetCanvas.height);
                                 ctx.lineTo(data.x1 * targetCanvas.width, data.y1 * targetCanvas.height);
                                 ctx.strokeStyle = '#ef4444';
-                                ctx.lineWidth = 4;
+                                ctx.lineWidth = Math.max(2, targetCanvas.width * 0.005);
                                 ctx.lineCap = 'round';
                                 ctx.stroke();
                                 ctx.closePath();
@@ -783,9 +785,9 @@ export default function StudentLiveGame() {
 
             {/* COLUMN 1: EVIDENCE / IMAGE */}
             <div
-                className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
+                className={`relative h-full md:h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
                     ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full"}`}
-                style={layoutMode !== "result" ? { width: `calc(${splitRatio}%)` } : {}}
+                style={layoutMode !== "result" ? { flexBasis: `${splitRatio}%` } : {}}
             >
                 {/* Header / Timer & Hints */}
                 {room.status === 'PLAYING' && (
@@ -860,7 +862,7 @@ export default function StudentLiveGame() {
 
                 {/* Hints Overlay */}
                 {!submitted && visibleHints.length > 0 && (
-                    <div className="absolute bottom-32 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
+                    <div className="absolute bottom-28 left-4 md:bottom-32 md:left-6 z-30 w-[calc(100%-2rem)] max-w-sm space-y-2 pointer-events-none">
                         {visibleHints.map((hint, i) => (
                             <div key={i} className="bg-black/40 backdrop-blur-xl border-l-4 border-yellow-400 p-3 rounded text-xs text-white animate-in slide-in-from-left-10 shadow-lg">
                                 {hint}
@@ -871,7 +873,7 @@ export default function StudentLiveGame() {
 
                 {/* AI Hint UI */}
                 {!submitted && !isEvidenceMode && introStage >= 3 && (tutorialStep === 0 || tutorialStep >= 5) && (
-                    <div className="absolute bottom-6 left-6 z-30 w-full max-w-[16rem] pointer-events-auto bg-black/60 backdrop-blur-xl border border-blue-500/30 rounded-xl p-4 shadow-2xl">
+                    <div className="absolute bottom-4 left-4 md:bottom-6 md:left-6 z-30 w-[calc(100%-2rem)] max-w-[16rem] pointer-events-auto bg-black/60 backdrop-blur-xl border border-blue-500/30 rounded-xl p-4 shadow-2xl">
                         <h3 className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-2 flex justify-between">
                             <span>Socratic AI Link</span>
                             <span className="text-slate-500">{hasAskedAi ? '0/1' : '1/1'}</span>
@@ -905,8 +907,8 @@ export default function StudentLiveGame() {
 
                 {/* Mode Toggle */}
                 {!submitted && (
-                    <div className="absolute top-6 right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
-                        <button onClick={() => setIsEvidenceMode(!isEvidenceMode)} className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'}`}>
+                    <div className="absolute top-4 right-4 md:top-6 md:right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
+                        <button onClick={() => setIsEvidenceMode(!isEvidenceMode)} className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'}`}>
                             {isEvidenceMode ? "Scanner Active" : "Enable Scanner"}
                         </button>
                     </div>
@@ -1029,9 +1031,9 @@ export default function StudentLiveGame() {
 
             {/* COLUMN 2: MAP */}
             <div
-                className={`relative h-full bg-slate-900 border-r border-white/10
+                className={`relative h-full md:h-full bg-slate-900 border-r border-white/10
                     ${layoutMode === "result" ? "hidden md:block md:w-[40%]" : "w-full"}`}
-                style={layoutMode !== "result" ? { width: `calc(${100 - splitRatio}%)` } : {}}
+                style={layoutMode !== "result" ? { flexBasis: `${100 - splitRatio}%` } : {}}
             >    <div ref={mapRef} className="w-full h-full relative z-0" />
 
                 {/* SYNCHRONIZED DRAWING LAYER */}
