@@ -323,12 +323,12 @@ export async function analyzeImageQuality(
        - Hint 2: Contextual (Mid-level, e.g. "The vegetation suggests a tropical climate, look for specific trees").
        - Hint 3: Specific (Direct clue but still playful, e.g. "A unique feature on the left wall holds the key").
     
-    - Descriptive Strategy: Do NOT just list facts (e.g., "This is a red sign"). Instead, generate an informative yet atmospheric description that helps a player "feel" the location while looking for clues. Use architectural styles, lighting, or unique regional vibes.
-    - Hint Strategy: Generate three hints of increasing specificity.
-       - Hint 1: Vague/Atmospheric (e.g., "The architecture whispers of a colonial past").
-       - Hint 2: Regional/Environmental (e.g., "The flora suggests a high-altitude climate").
-       - Hint 3: Specific but subtle (e.g., "Look for the distinct font used on local signage").
-    - DO NOT make hints too obvious (like naming the city directly). Keep them helpful for someone looking at a map.
+    - Descriptive Strategy: Create an "Atmospheric Snapshot". Do NOT just list facts (e.g., "This is a red sign"). Instead, describe the lighting, the architectural era, the "vibe" of the street, or unique regional identifiers. The goal is to let the player "feel" the place so they can identify it on a map without being told the name.
+    - Hint Strategy: Generate three hints that follow a "Vague-to-Specific" gradient.
+       - Hint 1 (Vague): Atmospheric or environmental (e.g., "The salty air and weathered wood suggest a coastal village").
+       - Hint 2 (Medium): Regional or structural (e.g., "Note the distinct curve of the wrought iron railings common in this district").
+       - Hint 3 (Specific): Playful deduction (e.g., "The shadow cast by the spire points toward a historic park").
+    - RESTRICTION: NEVER name the city or specific landmark in a hint unless absolutely necessary for the game logic. Keep them helpful for map identification.
     
     Return a JSON object with this exact schema:
     {
