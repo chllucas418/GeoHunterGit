@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from 'react-router';
-import { analyzeImageQuality } from '~/lib/gemini.server';
+import { analyzeImageQuality, chatWithGemini } from '~/lib/gemini.server';
 
 // Server-side Action for Mass Add
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -10,6 +10,21 @@ export async function action({ request, context }: ActionFunctionArgs) {
     // 1. AI Analysis
     if (intent === 'analyze') {
         const dataUri = formData.get('image_data') as string;
+        const latStr = formData.get('lat') as string;
+        const lngStr = formData.get('lng') as string;
+        const evidenceStr = formData.get('evidence') as string;
+        
+        let contextParam: any = {};
+        if (latStr && lngStr) {
+            contextParam.lat = parseFloat(latStr);
+            contextParam.lng = parseFloat(lngStr);
+        }
+        if (evidenceStr) {
+            try {
+                contextParam.evidenceList = JSON.parse(evidenceStr);
+            } catch (e) {}
+        }
+        
         if (!dataUri) return Response.json({ error: "No image data provided" }, { status: 400 });
 
         try {
@@ -18,11 +33,50 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 env.GEMINI_BASE_URL,
                 env.GEMINI_GATEWAY_TOKEN,
                 env.GEMINI_API_KEY || "",
-                undefined
+                contextParam
             );
             return Response.json({ success: true, aiData });
         } catch (e: any) {
             console.error("AI Error:", e);
+            return Response.json({ error: e.message }, { status: 500 });
+        }
+    }
+
+    if (intent === 'chat') {
+        const message = formData.get('message') as string;
+        const historyStr = formData.get('history') as string;
+        const dataUri = formData.get('image_data') as string;
+        const latStr = formData.get('lat') as string;
+        const lngStr = formData.get('lng') as string;
+        const evidenceStr = formData.get('evidence') as string;
+
+        let history = [];
+        try { if (historyStr) history = JSON.parse(historyStr); } catch (e) {}
+        
+        let evidenceList = [];
+        try { if (evidenceStr) evidenceList = JSON.parse(evidenceStr); } catch (e) {}
+        
+        let locationData = null;
+        if (latStr && lngStr) {
+            locationData = { lat: parseFloat(latStr), lng: parseFloat(lngStr) };
+        }
+
+        try {
+            const aiResponse = await chatWithGemini(
+                "gemini-3-flash-preview", // modelName
+                message,
+                history,
+                "", // contextUrl Not needed for directBase64
+                locationData,
+                evidenceList,
+                env.GEMINI_BASE_URL,
+                env.GEMINI_GATEWAY_TOKEN,
+                env.GEMINI_API_KEY || "",
+                dataUri
+            );
+            return Response.json({ success: true, ai_response: aiResponse });
+        } catch (e: any) {
+            console.error("AI Chat Error:", e);
             return Response.json({ error: e.message }, { status: 500 });
         }
     }

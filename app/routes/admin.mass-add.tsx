@@ -69,6 +69,16 @@ export default function MassAdd() {
             const formData = new FormData();
             formData.append('intent', 'analyze');
             formData.append('image_data', dataUri);
+            
+            // Send location data and evidence if available
+            const fileItem = files.find(f => f.id === fileId);
+            if (fileItem && fileItem.lat && fileItem.lng) {
+                formData.append('lat', String(fileItem.lat));
+                formData.append('lng', String(fileItem.lng));
+            }
+            if (fileItem && fileItem.evidence && fileItem.evidence.length > 0) {
+                formData.append('evidence', JSON.stringify(fileItem.evidence));
+            }
 
             const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
             const contentType = res.headers.get("content-type");
@@ -154,10 +164,7 @@ export default function MassAdd() {
         // Add to state
         setFiles((prev: any[]) => [...prev, ...newFiles]);
 
-        // Auto-run AI check
-        newFiles.forEach(nf => {
-            analyzeFile(nf.id, nf.file);
-        });
+        // Note: AI analysis no longer auto-triggers here to ensure location is set first by user
     };
 
     const { getRootProps, getInputProps } = useDropzone({
@@ -294,6 +301,63 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
     const itemsMapRef = useRef<google.maps.Map | null>(null);
     const itemsMarkerRef = useRef<google.maps.Marker | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+
+    // AI Copilot State
+    const [chatHistory, setChatHistory] = useState<any[]>([]);
+    const [chatMessage, setChatMessage] = useState("");
+    const [isChatting, setIsChatting] = useState(false);
+    const chatEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatHistory]);
+
+    const handleChat = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!chatMessage.trim() || isChatting) return;
+
+        const userMsg = chatMessage;
+        setChatMessage("");
+        setChatHistory(prev => [...prev, { role: 'user', content: userMsg }]);
+        setIsChatting(true);
+
+        const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = error => reject(error);
+        });
+
+        try {
+            const dataUri = await toBase64(item.file);
+            const formData = new FormData();
+            formData.append('intent', 'chat');
+            formData.append('message', userMsg);
+            formData.append('history', JSON.stringify(chatHistory));
+            formData.append('image_data', dataUri);
+            if (item.lat && item.lng) {
+                formData.append('lat', String(item.lat));
+                formData.append('lng', String(item.lng));
+            }
+            if (item.evidence && item.evidence.length > 0) {
+                formData.append('evidence', JSON.stringify(item.evidence));
+            }
+
+            const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
+            const data = (await res.json()) as any;
+
+            if (data.success) {
+                setChatHistory(prev => [...prev, { role: 'model', content: data.ai_response }]);
+            } else {
+                setChatHistory(prev => [...prev, { role: 'model', content: "Error: " + data.error }]);
+            }
+        } catch (error) {
+            console.error("Chat error", error);
+            setChatHistory(prev => [...prev, { role: 'model', content: "Failed to communicate with AI." }]);
+        } finally {
+            setIsChatting(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -456,7 +520,8 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                     options={{
                                         streetViewControl: false,
                                         mapTypeControl: false,
-                                        fullscreenControl: false
+                                        fullscreenControl: false,
+                                        gestureHandling: 'greedy'
                                     }}
                                 >
                                     {item.lat && <Marker position={{ lat: item.lat, lng: item.lng }} />}
@@ -578,6 +643,58 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* BOTTOM ROW: AI COPILOT */}
+                <div className="mt-8 pt-8 border-t border-gray-800">
+                    <h3 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text mb-4 flex items-center gap-2">
+                        <span>✨</span> AI Copilot
+                    </h3>
+                    <div className="bg-gray-950 rounded-xl border border-gray-800 overflow-hidden flex flex-col h-[350px]">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {chatHistory.length === 0 ? (
+                                <div className="text-center text-gray-500 my-auto pt-20">
+                                    <p>Ask the AI copilot to generate descriptions, suggest hints, or identify landmarks!</p>
+                                    <p className="text-xs mt-2">Example: "Generate a creepy description based on the evidence boxes."</p>
+                                </div>
+                            ) : (
+                                chatHistory.map((msg, i) => (
+                                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200 border border-gray-700'}`}>
+                                            <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                            {isChatting && (
+                                <div className="flex justify-start">
+                                    <div className="bg-gray-800 text-gray-400 rounded-2xl px-4 py-2 text-sm border border-gray-700 flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+                                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-75"></div>
+                                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-150"></div>
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={chatEndRef} />
+                        </div>
+                        <form onSubmit={handleChat} className="p-3 bg-gray-900 border-t border-gray-800 flex gap-2">
+                            <input
+                                type="text"
+                                className="flex-1 bg-gray-800 border-none rounded-lg px-4 py-2 text-sm text-white focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-500"
+                                placeholder="Chat with AI..."
+                                value={chatMessage}
+                                onChange={(e) => setChatMessage(e.target.value)}
+                                disabled={isChatting}
+                            />
+                            <button
+                                type="submit"
+                                disabled={isChatting || !chatMessage.trim()}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:bg-gray-700 text-white font-bold rounded-lg transition-colors text-sm"
+                            >
+                                Send
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>
