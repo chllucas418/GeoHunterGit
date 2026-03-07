@@ -62,7 +62,8 @@ export async function loader({ request, params, context }: any) {
                 focusedEvidenceId: room.focused_evidence_id,
                 submissionCount: 0,
                 timeLimit: room.time_limit || 120,
-                isGuidedRound: true
+                isGuidedRound: true,
+                isRewardRound: (location?.difficulty_rating || 0) >= 8
             };
         }
     } else if (item) {
@@ -89,7 +90,8 @@ export async function loader({ request, params, context }: any) {
                 focusedEvidenceId: room.focused_evidence_id,
                 submissionCount: submissionCountResult?.count || 0,
                 timeLimit: room.time_limit || 120,
-                isGuidedRound: false
+                isGuidedRound: false,
+                isRewardRound: (location?.difficulty_rating || 0) >= 8
             };
         }
     }
@@ -476,6 +478,15 @@ export default function TeacherRoom() {
                             }
                             return null;
                         })()}
+
+                        {/* [UI] REWARD ROUND INDICATOR */}
+                        {currentRound?.isRewardRound && (
+                            <div className="mt-4 animate-bounce">
+                                <div className="bg-gradient-to-r from-yellow-500 to-amber-500 text-black px-6 py-2 rounded-full border-2 border-yellow-300 shadow-xl font-black uppercase tracking-widest text-sm flex items-center gap-2">
+                                    <span>💰</span> REWARD ROUND: 2X POINTS ACTIVE <span>💰</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-black/60 backdrop-blur-md px-6 py-2 rounded-xl border border-white/10 flex flex-col items-center">
@@ -484,6 +495,29 @@ export default function TeacherRoom() {
                     </div>
                 </div>
 
+                {/* [UI] Persistent Intel Signal Banner */}
+                {currentRound?.evidenceCount !== undefined && introStage >= 3 && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-max animate-in slide-in-from-top-10 duration-700">
+                        <div className="bg-black/60 backdrop-blur-xl border border-blue-500/40 px-6 py-2 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.3)] flex flex-col items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <span className="text-xl">📡</span>
+                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] leading-none mb-1">Sector Scan Results</span>
+                                    <span className="text-sm font-black text-white uppercase tracking-tighter tabular-nums">
+                                        {currentRound.evidenceCount} <span className="text-blue-300/80">Intel Signals Detected</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="mt-1.5 w-full h-0.5 bg-blue-900/40 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 animate-[shimmer_2s_infinite] w-1/3" />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Intro Splash */}
                 {introStage < 3 && currentRound?.location && (
                     <div className={`absolute inset-0 z-[60] flex items-center justify-center pointer-events-none transition-all duration-1000 ease-in-out bg-black/60 backdrop-blur-xl ${introStage === 2 ? 'opacity-0' : 'opacity-100'}`}>
@@ -491,6 +525,11 @@ export default function TeacherRoom() {
                             <div className="mb-2 text-[10px] font-mono text-blue-300 tracking-widest uppercase">Incoming Transmission</div>
                             <h1 className="text-6xl font-black text-white tracking-tighter mb-2">SECTOR {currentRound.location.id?.slice(-4).toUpperCase()}</h1>
                             <div className="text-4xl font-black text-yellow-400">{"★".repeat(Math.ceil((currentRound.location.difficulty_rating || 1) / 2))}</div>
+                            {currentRound?.isRewardRound && (
+                                <div className="mt-4 bg-yellow-500 text-black px-6 py-2 rounded-full text-xl font-black uppercase tracking-widest animate-pulse">
+                                    💰 Reward Round: 2X Points!
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

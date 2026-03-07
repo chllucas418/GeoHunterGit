@@ -70,7 +70,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                 focusedEvidenceId: room.focused_evidence_id,
                 submissionCount: submissionCountResult?.count || 0,
                 timeLimit: room.time_limit || 120,
-                isGuidedRound: true
+                isGuidedRound: true,
+                isRewardRound: (location?.difficulty_rating || 0) >= 8
             };
         }
     } else if (item) {
@@ -105,7 +106,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                 focusedEvidenceId: room.focused_evidence_id,
                 submissionCount: submissionCountResult?.count || 0,
                 timeLimit: room.time_limit || 120,
-                isGuidedRound: false
+                isGuidedRound: false,
+                isRewardRound: (location?.difficulty_rating || 0) >= 8
             };
         }
     }

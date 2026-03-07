@@ -821,6 +821,17 @@ export default function StudentLiveGame() {
                                 </div>
                             )}
                         </div>
+
+                        {/* [UI] REWARD ROUND BANNER */}
+                        {currentRound?.isRewardRound && (
+                            <div className="absolute top-20 inset-x-0 flex justify-center pointer-events-none">
+                                <div className="bg-gradient-to-r from-yellow-600 to-amber-600 px-6 py-1.5 rounded-full border-2 border-yellow-400 shadow-[0_0_20px_rgba(251,191,36,0.5)] animate-bounce pointer-events-auto">
+                                    <span className="text-[10px] font-black text-white uppercase tracking-[0.3em] flex items-center gap-2">
+                                        <span className="text-sm">🔥</span> REWARD ROUND: 2X POINTS <span className="text-sm">🔥</span>
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -834,6 +845,13 @@ export default function StudentLiveGame() {
                             <div className="mt-2 text-[10px] font-mono font-bold text-blue-300 uppercase tracking-widest border border-blue-500/30 px-2 py-1 rounded bg-blue-500/10 inline-block">
                                 {currentRound.evidenceCount || 0} Intel Items
                             </div>
+                            {currentRound?.isRewardRound && (
+                                <div className="mt-4 animate-bounce">
+                                    <div className="bg-yellow-500 text-black px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest">
+                                        💰 Reward Round: 2X Points!
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -920,26 +938,42 @@ export default function StudentLiveGame() {
                     </div>
                 )}
 
+                {/* [UI] Persistent Intel Signal Banner */}
+                {currentRound?.evidenceCount !== undefined && introStage >= 3 && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-max animate-in slide-in-from-top-10 duration-700">
+                        <div className="bg-black/60 backdrop-blur-xl border border-blue-500/40 px-6 py-2 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.3)] flex flex-col items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <span className="text-xl">📡</span>
+                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] leading-none mb-1">Scan Results</span>
+                                    <span className="text-sm font-black text-white uppercase tracking-tighter tabular-nums">
+                                        {currentRound.evidenceCount} <span className="text-blue-300/80">Intel Signals Detected</span>
+                                    </span>
+                                </div>
+                            </div>
+                            {/* Progress bar / pulse effect */}
+                            <div className="mt-1.5 w-full h-0.5 bg-blue-900/40 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 animate-[shimmer_2s_infinite] w-1/3" />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Mode Toggle */}
                 {!submitted && (
                     <div className="absolute top-4 right-4 md:top-6 md:right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
-                        <button onClick={() => setIsEvidenceMode(!isEvidenceMode)} className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'} ${currentRound?.isGuidedRound && tutorialStep === 2 && !isEvidenceMode ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}>
+                        <button 
+                            onClick={() => setIsEvidenceMode(!isEvidenceMode)} 
+                            className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'} ${currentRound?.isGuidedRound && tutorialStep === 2 && !isEvidenceMode ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}
+                        >
                             {isEvidenceMode ? "Scanner Active" : "Enable Scanner"}
                         </button>
-                        
-                        {/* [UI] Official Evidence Count & Motivation */}
-                        {currentRound?.evidenceCount !== undefined && (
-                            <div className="flex flex-col items-end gap-1 animate-in slide-in-from-right-10">
-                                <div className="px-3 py-1 bg-black/60 backdrop-blur-md border border-white/20 rounded-lg shadow-xl flex items-center gap-2">
-                                    <span className="text-[10px] font-black text-white/90 uppercase tracking-tighter">
-                                        TARGETS: <span className="text-yellow-400">{currentRound.evidenceCount}</span> OFFICIAL CLUES
-                                    </span>
-                                </div>
-                                <div className="text-[9px] font-bold text-blue-300 uppercase tracking-widest bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
-                                    Extra marks for novel discoveries! 🗃️
-                                </div>
-                            </div>
-                        )}
+                        <div className="text-[9px] font-bold text-blue-300 uppercase tracking-widest bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
+                            Extra marks for novel discoveries! 🗃️
+                        </div>
                     </div>
                 )}
 

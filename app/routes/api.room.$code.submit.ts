@@ -63,40 +63,47 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             return Response.json({ error: "Target location not found in database" }, { status: 500 });
         }
 
-        // Determine Score (Total 8000 Max = 5000 Dist + 2000 Evidence + 1000 Time)
+        // 1. Time & Multiplier Calculation
+        const TIME_LIMIT = room.time_limit || 120;
+        let elapsedSeconds = 0;
+        if (room.round_start_time) {
+            elapsedSeconds = Math.max(0, (Date.now() - room.round_start_time) / 1000);
+        }
+        
+        // Multiplier: 1.8x for the first 25 seconds, then decaying to 0.8x at end
+        // This gives players time to mark evidence before the speed penalty starts.
+        const DELAY = 25;
+        let timeMultiplier = 1.8;
+        if (elapsedSeconds > DELAY) {
+            const effectiveElapsed = elapsedSeconds - DELAY;
+            const effectiveLimit = Math.max(1, TIME_LIMIT - DELAY);
+            const fraction = Math.min(1, effectiveElapsed / effectiveLimit);
+            timeMultiplier = 0.8 + 1.0 * Math.cos((Math.PI / 2) * fraction);
+        }
 
-        // 1. Distance Score: Stricter Curved Scale for Tuen Mun area
+        // 2. Distance Score: Stricter Curved Scale for Tuen Mun area
         const MAX_DISTANCE_SCORE = 5000;
         const distance = getDistance(lat, lng, trueLoc.lat, trueLoc.lng);
         const distanceMeters = distance * 1000;
 
-        let distanceScore = 0;
+        let baseDistanceScore = 0;
         if (distanceMeters <= 100) {
-            // Highly rewarded proximity: max 5000 down to 4500 at 100m
-            distanceScore = Math.round(MAX_DISTANCE_SCORE - (distanceMeters * 5));
+            baseDistanceScore = Math.round(MAX_DISTANCE_SCORE - (distanceMeters * 5));
         } else if (distanceMeters <= 300) {
-            // Dropoff from 100m to 300m
-            distanceScore = Math.round(4500 - ((distanceMeters - 100) * 7.5));
+            baseDistanceScore = Math.round(4500 - ((distanceMeters - 100) * 7.5));
         } else if (distanceMeters < 3000) {
-            // Tail trailing down to 0 at 3km
             const fraction = (3000 - distanceMeters) / 2700;
-            distanceScore = Math.round(3000 * Math.pow(fraction, 2));
+            baseDistanceScore = Math.round(3000 * Math.pow(fraction, 2));
         } else {
-            // Out of bounds / Guessed Wrong
-            distanceScore = 0;
+            baseDistanceScore = 0;
         }
 
-        // 2. Time Score: Speed Bonus
-        // Max 1000 pts. Decays over 60 seconds (or Round Duration).
-        // If undefined duration, assume 120s max.
-        // Bonus = 1000 * (1 - elapsed/120)
+        let distanceScore = Math.round(baseDistanceScore * timeMultiplier);
+
+        // 3. Independent Time Score (Bonus for speed)
         let timeScore = 0;
-        if (room.round_start_time) {
-            const elapsedSeconds = (Date.now() - room.round_start_time) / 1000;
-            const TIME_LIMIT = 120; // Default 2 mins for bonus decay
-            if (elapsedSeconds < TIME_LIMIT) {
-                timeScore = Math.round(1000 * (1 - elapsedSeconds / TIME_LIMIT));
-            }
+        if (elapsedSeconds < TIME_LIMIT) {
+            timeScore = Math.round(1000 * (1 - elapsedSeconds / TIME_LIMIT));
         }
 
         // --- STEP 2: IMMEDIATE AI ANALYSIS & SCORING ---
@@ -205,8 +212,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                                 matchedEvidenceIds.push(matchedAdminId);
                             }
                         } else {
-                            // Novel Discovery
-                            aiBonus += 250;
+                            // Novel Discovery: Increased reward 1000 (Base) + 250 (Bonus)
+                            aiBonus += 1250;
 
                             // Peer-to-Permanent Evidence Flow: 
                             // If AI is highly confident (>= 0.9) and it's a novel discovery, promote it!
@@ -262,7 +269,14 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         evidenceScore += aiBonus; // Combine bonus into evidence score for simplicity
 
         // Total Score
-        let finalScore = distanceScore + evidenceScore + timeScore;
+        const isDifficultyHard = (trueLoc.difficulty_rating || 0) >= 8;
+        let finalScore = (distanceScore + evidenceScore + timeScore) * (isDifficultyHard ? 2 : 1);
+
+        if (isDifficultyHard) {
+            distanceScore *= 2;
+            evidenceScore *= 2;
+            timeScore *= 2;
+        }
 
         // Guided Playthrough: Don't count marks for the tutorial round
         if (isGuidedRound) {
