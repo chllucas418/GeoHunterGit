@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { Form, useActionData, useSubmit, useNavigation, useLoaderData, useNavigate } from 'react-router';
-import exifr from 'exifr';
 import { useDropzone } from 'react-dropzone';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { EvidenceCanvas } from '~/components/EvidenceCanvas';
@@ -121,8 +120,9 @@ export default function MassAdd() {
         const newFiles = await Promise.all(acceptedFiles.map(async (file, index) => {
             let lat = null, lng = null;
             try {
-                // Extract GPS
-                const gps = await exifr.gps(file);
+                // Extract GPS dynamically to avoid SSR crashes
+                const exifr = await import('exifr');
+                const gps = await exifr.default.gps(file);
                 if (gps) {
                     lat = gps.latitude;
                     lng = gps.longitude;
