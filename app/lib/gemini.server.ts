@@ -333,11 +333,12 @@ export async function analyzeImageQuality(
        - Hint 2: Contextual (Mid-level, e.g. "The vegetation suggests a tropical climate, look for specific trees").
        - Hint 3: Specific (Direct clue but still playful, e.g. "A unique feature on the left wall holds the key").
     
-    - Descriptive Strategy: Create an "Informative Snapshot". Focus on clear, factual identifiers that help a student ground the location on a map. Describe architectural eras, specific signage, types of flora, or unique terrain features. Avoid flowery or "fancy" adjectives. The goal is clarity and deductive utility.
+    - Descriptive Strategy: Create an "Informative Snapshot". Focus on clear, factual identifiers that help a student ground the location on a map. Describe architectural eras, specific signage, types of flora, or unique terrain features. Avoid flowery or "fancy" adjectives.
     - Hint Strategy: Generate three hints that follow a "Vague-to-Specific" gradient.
-       - Hint 1 (Vague): Environmental clues (e.g., "The presence of palm trees and red soil suggests a southern district").
-       - Hint 2 (Medium): Structural identifiers (e.g., "Note the specific 1970s public housing balcony style common in this area").
-       - Hint 3 (Specific): Playful deduction (e.g., "The shadow of the water tower points toward a major transit hub").
+       - **Hyper-Local Context**: ALL locations are in Tuen Mun. Never mention "Hong Kong", "New Territories", or general city-wide facts.
+       - Hint 1 (Vague): Environmental/Style clues (e.g., "The red-roofed housing style is typical of estates built in the late 80s in this sector").
+       - Hint 2 (Medium): Specific identifiable features (e.g., "Look for the distinct yellow LRT bridge supports that pass nearby").
+       - Hint 3 (Specific): Playful deduction (e.g., "The shadow of the ventilation shaft points directly toward the Butterfly Estate market").
     - RESTRICTION: NEVER name the city or specific landmark in a hint. Aim for "Map Grounding"—information that can be cross-referenced with a map.
     
     Return a JSON object with this exact schema:
@@ -618,9 +619,9 @@ ${stateStr}
 
 1. Act as a collaborative partner. Answer the admin's questions about the location, architecture, history, or specific objects in the image.
 2. When suggesting descriptions (via "precontext"), provide an "Informative Snapshot". Use clear, deductive language. Avoid flowery or "fancy" words. Focus on identifiers that help a student ground the location on a map.
-3. When suggesting hints, make them helpful but NOT obvious. They should relate to the provided coordinates and bounded evidence areas. They MUST be useful for map deduction.
-4. Iterative Editing: If the user provides feedback on a description or hint, generate an updated version using the JSON blocks below.
-6. Redundancy: When suggesting metadata (description/hints), FIRST provide a clear, human-readable summary in plain text, THEN provide the structured JSON block. This allows the user to see the content even if they don't click Apply.
+3. **Tuen Mun Context**: ALL locations in this game are within Tuen Mun, Hong Kong. Therefore, hints mentioning "Hong Kong", "New Territories", or "South China" are redundant and forbidden. 
+4. **Local Specifics**: Focus on hyper-local Tuen Mun identifiers: specific Public Housing Estates (e.g., Butterfly Estate, On Ting), Light Rail (LRT) station quirks, shopping centers (V City), or distinct geography (Castle Peak).
+5. **Double-Check Content**: FIRST provide a clear, human-readable summary in plain text, THEN provide the structured JSON block. Use the "suggestFullMetadata" action whenever possible.
 
 ACTIONABLE OUTPUT (JSON FORMAT):
 Use these JSON blocks ONLY. Conversational text should go outside the blocks.
