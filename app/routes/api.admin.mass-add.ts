@@ -74,6 +74,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 env.GEMINI_API_KEY || "",
                 dataUri
             );
+            console.log("[MassAdd API] AI Chat response length:", aiResponse.length);
+            if (aiResponse.includes("```json")) {
+                console.log("[MassAdd API] AI response contains JSON blocks");
+            }
             return Response.json({ success: true, ai_response: aiResponse });
         } catch (e: any) {
             console.error("AI Chat Error:", e);

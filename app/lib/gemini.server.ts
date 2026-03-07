@@ -74,7 +74,13 @@ async function callGeminiApi(
     }
 
     const data = await response.json() as any;
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const candidate = data?.candidates?.[0];
+    if (!candidate?.content?.parts) return "";
+    
+    // Concatenate all text parts (Gemini 2.5 Flash often returns multiple parts)
+    return candidate.content.parts
+        .map((p: any) => p.text || "")
+        .join("");
 }
 
 // Helper for raw fetch to Gemini API with chat history and tools
@@ -152,8 +158,12 @@ async function callGeminiChatApi(
     const data = await response.json() as any;
     // Return both the text and the full candidate (to capture groundingMetadata if needed)
     const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts
+        ? candidate.content.parts.map((p: any) => p.text || "").join("")
+        : "";
+
     return {
-        text: candidate?.content?.parts?.[0]?.text || "",
+        text,
         candidate: candidate
     };
 }
