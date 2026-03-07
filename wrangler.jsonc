@@ -12,7 +12,8 @@
 		"DEVELOPER_PASSWORD": "<REDACTED_PASSWORD>@4@18&3&16",
 		"GEMINI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/<REDACTED_GATEWAY_ID>/geohunter-proxy/google-ai-studio",
 		"GOOGLE_MAPS_API_KEY": "<REDACTED_MAPS_KEY>",
-		"DEVELOPER_REGISTRATION_KEY": "<REDACTED_DEV_KEY>"
+		"DEVELOPER_REGISTRATION_KEY": "<REDACTED_DEV_KEY>",
+		"GEMINI_GATEWAY_TOKEN": ""
 	},
 	"d1_databases": [
 		{
