@@ -672,7 +672,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                         </div>
                                         {/* Parse actions from message */}
                                         {msg.role === 'model' && msg.content.includes("```json") && (
-                                            <div className="mt-2 space-y-4 w-full max-w-[90%] animate-in fade-in slide-in-from-top-2">
+                                            <div className="mt-3 space-y-4 w-full max-w-[95%] animate-in fade-in slide-in-from-top-3">
                                                 {Array.from(msg.content.matchAll(/```json([\s\S]*?)```/g)).map((match: any, mIdx: number) => {
                                                     try {
                                                         const jsonStr = match[1].trim();
@@ -686,29 +686,32 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                                     {data.map((item, i) => <li key={i}>{String(item)}</li>)}
                                                                 </ul>
                                                             );
-                                                            return <pre className="text-[10px] overflow-x-auto bg-black/30 p-2 rounded">{JSON.stringify(data, null, 2)}</pre>;
+                                                            return <pre className="text-[10px] overflow-x-auto bg-black/40 p-2 rounded border border-white/5">{JSON.stringify(data, null, 2)}</pre>;
                                                         };
 
-                                                        // Handle consolidated update
+                                                        // Consolidated Metadata (The "Full Bracket")
                                                         if (action.action === "suggestFullMetadata" || (action.description && action.hints)) {
                                                             const desc = action.data?.description || action.description;
                                                             const hnts = action.data?.hints || action.hints;
                                                             return (
-                                                                <div key={mIdx} className="bg-gray-950 border-2 border-indigo-500 rounded-xl p-4 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
-                                                                    <p className="text-[10px] font-black text-indigo-400 mb-3 uppercase tracking-widest border-b border-indigo-500/20 pb-1 flex justify-between">
-                                                                        <span>Consolidated Suggestion Preview:</span>
-                                                                        <span className="opacity-50">v2.1</span>
-                                                                    </p>
-                                                                    <div className="space-y-3 mb-4">
-                                                                        <div>
-                                                                            <p className="text-[9px] font-bold text-gray-500 uppercase">Description:</p>
-                                                                            <p className="text-sm text-gray-200 line-clamp-3 italic">"{desc}"</p>
+                                                                <div key={mIdx} className="bg-slate-900 border-2 border-indigo-500/50 rounded-2xl p-4 shadow-2xl relative overflow-hidden group">
+                                                                    <div className="absolute top-0 right-0 p-2 opacity-20 text-[10px] font-mono">v2.2</div>
+                                                                    <div className="flex items-center gap-2 mb-4">
+                                                                        <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400">✨</div>
+                                                                        <h4 className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em]">Full Metadata Suggestion</h4>
+                                                                    </div>
+                                                                    
+                                                                    <div className="space-y-4 mb-5">
+                                                                        <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                                                                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Refined Description:</p>
+                                                                            <p className="text-sm text-slate-200 leading-relaxed italic border-l-2 border-indigo-500/30 pl-3">"{desc}"</p>
                                                                         </div>
-                                                                        <div>
-                                                                            <p className="text-[9px] font-bold text-gray-500 uppercase">Hints:</p>
-                                                                            <div className="text-xs text-gray-300">{renderPreview(hnts)}</div>
+                                                                        <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                                                                            <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Subtle Hints:</p>
+                                                                            <div className="text-xs text-slate-300 space-y-1">{renderPreview(hnts)}</div>
                                                                         </div>
                                                                     </div>
+                                                                    
                                                                     <button
                                                                         onClick={() => setFiles((prev: any[]) => {
                                                                             const cp = [...prev];
@@ -716,9 +719,9 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                                             if (hnts) cp[editingId].hints = Array.isArray(hnts) ? hnts : [hnts];
                                                                             return cp;
                                                                         })}
-                                                                        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold px-4 py-3 rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
+                                                                        className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-black px-4 py-3.5 rounded-xl shadow-[0_5px_15px_rgba(99,102,241,0.4)] transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
                                                                     >
-                                                                        <span>🚀</span> APPLY FULL REFINEMENT (v2)
+                                                                        🚀 APPLY FULL REFINEMENT
                                                                     </button>
                                                                 </div>
                                                             );
@@ -726,9 +729,12 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
 
                                                         if (action.action === "setHints") {
                                                             return (
-                                                                <div key={mIdx} className="bg-gray-950 border-2 border-purple-500 rounded-xl p-4 shadow-xl">
-                                                                    <p className="text-[10px] font-black text-purple-400 mb-3 uppercase tracking-widest border-b border-purple-500/20 pb-1">Suggested Hints Preview (v2):</p>
-                                                                    <div className="text-sm text-gray-200 mb-4 leading-relaxed">
+                                                                <div key={mIdx} className="bg-slate-900 border-2 border-purple-500/50 rounded-2xl p-4 shadow-xl">
+                                                                    <div className="flex items-center gap-2 mb-4">
+                                                                        <div className="p-1.5 bg-purple-500/20 rounded-lg text-purple-400">📝</div>
+                                                                        <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest">Hints Suggestion (v2.2)</h4>
+                                                                    </div>
+                                                                    <div className="text-sm text-slate-200 mb-5 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
                                                                         {renderPreview(action.data)}
                                                                     </div>
                                                                     <button
@@ -737,29 +743,22 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                                             cp[editingId].hints = Array.isArray(action.data) ? action.data : [action.data];
                                                                             return cp;
                                                                         })}
-                                                                        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
+                                                                        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-lg active:scale-95"
                                                                     >
-                                                                        <span>✨</span> APPLY ALL HINTS
+                                                                        Apply Hints
                                                                     </button>
                                                                 </div>
                                                             );
                                                         }
-                                                        if (action.action === "addHint") {
-                                                            // ... exists for localized additions
+                                                        if (action.action === "setDescription") {
                                                             return (
-                                                                <div key={mIdx} className="bg-gray-950 border border-emerald-500/50 rounded-xl p-4 shadow-md">
-                                                                    <p className="text-[10px] font-black text-emerald-400 mb-3 uppercase tracking-widest border-b border-emerald-500/20 pb-1">Single Hint Suggestion:</p>
-                                                                    <div className="text-sm text-gray-200 mb-4 italic italic">"{renderPreview(action.data)}"</div>
-                                                                    <button onClick={() => {/* Existing logic */}} className="w-full bg-emerald-600 text-xs px-4 py-2 rounded-lg">APPLY HINT</button>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        if (action.action === "addEvidenceDescription" || action.action === "setDescription") {
-                                                            return (
-                                                                <div key={mIdx} className="bg-gray-950 border-2 border-blue-500 rounded-xl p-4 shadow-xl">
-                                                                    <p className="text-[10px] font-black text-blue-400 mb-3 uppercase tracking-widest border-b border-blue-500/20 pb-1">Suggested Description Preview (v2):</p>
-                                                                    <div className="text-sm text-gray-200 mb-4 leading-relaxed line-clamp-6">
-                                                                        {renderPreview(action.data)}
+                                                                <div key={mIdx} className="bg-slate-900 border-2 border-blue-500/50 rounded-2xl p-4 shadow-xl">
+                                                                    <div className="flex items-center gap-2 mb-4">
+                                                                        <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400">📖</div>
+                                                                        <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Description Suggestion (v2.2)</h4>
+                                                                    </div>
+                                                                    <div className="text-sm text-slate-200 mb-5 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5 italic">
+                                                                        "{renderPreview(action.data)}"
                                                                     </div>
                                                                     <button
                                                                         onClick={() => setFiles((prev: any[]) => {
@@ -767,17 +766,17 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                                             cp[editingId].description = action.data;
                                                                             return cp;
                                                                         })}
-                                                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
+                                                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-lg active:scale-95"
                                                                     >
-                                                                        <span>✓</span> APPLY DESCRIPTION
+                                                                        Apply Description
                                                                     </button>
                                                                 </div>
                                                             );
                                                         }
                                                     } catch (e) { 
                                                         return (
-                                                            <div key={mIdx} className="text-[10px] text-red-400 bg-red-900/20 p-3 rounded border border-red-900/50">
-                                                                Action Parsing Error: Invalid JSON block. check console.
+                                                            <div key={mIdx} className="text-[10px] text-red-400 bg-red-900/10 p-4 rounded-xl border border-red-500/30">
+                                                                ⚠️ Parsing Failure in JSON block.
                                                             </div>
                                                         ); 
                                                     }

@@ -620,36 +620,28 @@ ${stateStr}
 2. When suggesting descriptions (via "precontext"), provide an "Informative Snapshot". Use clear, deductive language. Avoid flowery or "fancy" words. Focus on identifiers that help a student ground the location on a map.
 3. When suggesting hints, make them helpful but NOT obvious. They should relate to the provided coordinates and bounded evidence areas. They MUST be useful for map deduction.
 4. Iterative Editing: If the user provides feedback on a description or hint, generate an updated version using the JSON blocks below.
-5. MANDATORY JSON: You MUST provide all actionable suggestions within JSON blocks. NEVER just list hints in plain text.
+6. Redundancy: When suggesting metadata (description/hints), FIRST provide a clear, human-readable summary in plain text, THEN provide the structured JSON block. This allows the user to see the content even if they don't click Apply.
 
 ACTIONABLE OUTPUT (JSON FORMAT):
 Use these JSON blocks ONLY. Conversational text should go outside the blocks.
 
-TO SUGGEST MULTIPLE HINTS (The "Brackets"):
+TO SUGGEST BOTH DESCRIPTION AND HINTS (Consolidated Metadata):
 \`\`\`json
 {
-  "action": "setHints",
-  "data": ["Subtle Hint 1", "Subtle Hint 2", "Subtle Hint 3"]
+  "action": "suggestFullMetadata",
+  "data": {
+    "description": "Clear informative description text...",
+    "hints": ["Hint 1", "Hint 2", "Hint 3"]
+  }
 }
 \`\`\`
 
-TO SUGGEST A SINGLE HINT:
-\`\`\`json
-{
-  "action": "addHint",
-  "data": "The subtle hint text here"
-}
-\`\`\`
+TO SUGGEST INDIVIDUAL UPDATES:
+- Hints only: {"action": "setHints", "data": ["...", "..."]}
+- Description only: {"action": "setDescription", "data": "..."}
+- Single hint add: {"action": "addHint", "data": "..."}
 
-TO SUGGEST OR UPDATE THE DESCRIPTION:
-\`\`\`json
-{
-  "action": "setDescription",
-  "data": "The clear, informative description here"
-}
-\`\`\`
-
-You can output conversational text alongside these JSON blocks. The UI will parse the JSON blocks and turn them into interactive "APPLY" buttons.
+You can output conversational text alongside these JSON blocks. The UI will parse the JSON blocks into interactive preview cards.
     `.trim();
 
     try {
