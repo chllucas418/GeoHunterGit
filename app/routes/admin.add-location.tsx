@@ -386,7 +386,12 @@ export default function AddLocation() {
 
             if (mapRef.current) {
                 const center = marker || { lat: 22.3193, lng: 114.1694 };
-                const map = new Map(mapRef.current, { center, zoom: marker ? 15 : 11 });
+                const map = new Map(mapRef.current, { 
+                    center, 
+                    zoom: marker ? 15 : 11,
+                    fullscreenControl: true,
+                    gestureHandling: 'greedy'
+                });
 
                 if (marker) {
                     markerRef.current = new Marker({

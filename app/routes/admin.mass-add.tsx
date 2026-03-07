@@ -520,7 +520,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                     options={{
                                         streetViewControl: false,
                                         mapTypeControl: false,
-                                        fullscreenControl: false,
+                                        fullscreenControl: true,
                                         gestureHandling: 'greedy'
                                     }}
                                 >
