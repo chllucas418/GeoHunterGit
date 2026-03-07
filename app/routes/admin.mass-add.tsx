@@ -181,7 +181,7 @@ export default function MassAdd() {
         setFiles(files.filter((_, i) => i !== index));
     };
 
-    const saveLocation = async (index: number) => {
+    const saveLocation = async (index: number, autoAdvance: boolean = false) => {
         const item = files[index];
         if (!item.lat || !item.lng) {
             alert("Missing GPS!");
@@ -210,7 +210,16 @@ export default function MassAdd() {
 
         const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
         if (res.ok) {
+            const nextIdx = index < files.length - 1 ? index : (index > 0 ? index - 1 : null);
             removeFile(index); // Remove from list on success
+            if (autoAdvance && nextIdx !== null) {
+                // If we were editing, potentially stay in modal for next item
+                if (editingId !== null) {
+                    setEditingId(nextIdx);
+                }
+            } else if (editingId === index) {
+                setEditingId(null);
+            }
         } else {
             alert("Failed to save");
         }
@@ -235,11 +244,16 @@ export default function MassAdd() {
                     <div key={file.id} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex flex-col">
                         <div className="relative h-48 bg-gray-800">
                             <img src={file.preview} className="w-full h-full object-cover opacity-80" />
-                            <div className="absolute top-2 right-2 flex gap-1">
+                            <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
                                 {file.lat ? (
-                                    <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded">GPS Found</span>
+                                    <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded whitespace-nowrap">GPS Found</span>
                                 ) : (
-                                    <span className="bg-red-500/20 text-red-400 text-xs px-2 py-1 rounded">No GPS</span>
+                                    <span className="bg-red-500/20 text-red-400 text-xs px-2 py-1 rounded whitespace-nowrap">No GPS</span>
+                                )}
+                                {file.evidence.length > 0 && (
+                                    <span className="bg-amber-500/90 text-black font-black text-[10px] px-2 py-1 rounded shadow-lg animate-pulse uppercase tracking-tighter whitespace-nowrap border border-black/10">
+                                        ⚡ {file.evidence.length} Evidence!
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -289,13 +303,13 @@ export default function MassAdd() {
                 ))}
             </div>
 
-            <EditModal editingId={editingId} files={files} setFiles={setFiles} setEditingId={setEditingId} isLoaded={isLoaded} mapSets={mapSets} />
+            <EditModal editingId={editingId} files={files} setFiles={setFiles} setEditingId={setEditingId} isLoaded={isLoaded} mapSets={mapSets} onSave={saveLocation} />
         </div>
     );
 }
 
 
-export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets }: any) {
+export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets, onSave }: any) {
     if (editingId === null) return null;
     const item = files[editingId];
 
@@ -311,6 +325,39 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
     const [chatMessage, setChatMessage] = useState("");
     const [isChatting, setIsChatting] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
+
+    // Resizer logic
+    const [splitRatio, setSplitRatio] = useState(35);
+    const [isResizing, setIsResizing] = useState(false);
+
+    useEffect(() => {
+        const saved = localStorage.getItem("geohunter-mass-add-split");
+        if (saved) setSplitRatio(parseFloat(saved));
+    }, []);
+
+    const handleMouseMove = (e: MouseEvent) => {
+        if (!isResizing) return;
+        const newRatio = (1 - (e.clientX / window.innerWidth)) * 100;
+        setSplitRatio(Math.min(Math.max(newRatio, 20), 60));
+    };
+
+    const handleMouseUp = () => {
+        setIsResizing(false);
+        localStorage.setItem("geohunter-mass-add-split", splitRatio.toString());
+    };
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizing]);
+
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -366,18 +413,61 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-gray-900 p-6 rounded-xl w-full max-w-5xl max-h-[95vh] overflow-y-scroll border border-gray-800 shadow-2xl">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-white">Edit Location: <span className="text-blue-400">{item.file.name}</span></h2>
-                    <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white font-bold border border-gray-700">
-                        Close & Save
-                    </button>
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center overflow-hidden">
+            <div className="bg-gray-900 rounded-2xl w-full h-[95vh] mx-4 max-w-[98vw] flex flex-col border border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                {/* Header */}
+                <div className="flex justify-between items-center p-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
+                    <div className="flex items-center gap-6">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <span className="p-1.5 bg-blue-600/20 rounded-lg text-blue-400">📍</span>
+                            Edit Location: <span className="text-blue-400 font-mono ml-2">{item.file.name}</span>
+                        </h2>
+                        {/* Navigation */}
+                        <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                            <button 
+                                onClick={() => setEditingId(Math.max(0, editingId - 1))}
+                                disabled={editingId === 0}
+                                className="px-3 py-1.5 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold border-r border-gray-700 transition-colors"
+                            >
+                                ← PREV
+                            </button>
+                            <span className="px-3 py-1.5 text-[10px] font-mono text-gray-400">
+                                {editingId + 1} / {files.length}
+                            </span>
+                            <button 
+                                onClick={() => setEditingId(Math.min(files.length - 1, editingId + 1))}
+                                disabled={editingId === files.length - 1}
+                                className="px-3 py-1.5 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold transition-colors"
+                            >
+                                NEXT →
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                        <button 
+                            disabled={isSaving}
+                            onClick={async () => {
+                                setIsSaving(true);
+                                await onSave(editingId, true);
+                                setIsSaving(false);
+                            }}
+                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2"
+                        >
+                            {isSaving ? "SAVING..." : "💾 Save to Database"}
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white font-bold border border-gray-700 text-xs uppercase tracking-widest">
+                            Exit
+                        </button>
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* LEFT COLUMN: VISUALS */}
-                    <div className="space-y-6">
+                <div className="flex flex-1 overflow-hidden">
+                    {/* LEFT PANEL: CONTENT EDITOR */}
+                    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-gray-900/30" style={{ width: `${100 - splitRatio}%` }}>
+                        <div className="max-w-4xl mx-auto space-y-10 pb-20">
+                            {/* Visuals Section */}
+                            <div className="grid grid-cols-1 gap-6">
                         <div className="bg-black rounded-2xl overflow-hidden border border-gray-700 relative h-[400px]">
                             <EvidenceCanvas
                                 imageUrl={item.preview}
@@ -388,6 +478,20 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                     }
                                 }}
                             >
+                                {/* Evidence Banner */}
+                                {item.evidence.length > 0 && (
+                                    <div className="absolute top-4 left-4 z-40">
+                                        <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-black px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center gap-2 border border-amber-400/50">
+                                            <span className="text-lg animate-bounce">🔥</span>
+                                            <span className="font-black text-xs uppercase tracking-widest italic">
+                                                {item.evidence.length >= 2 
+                                                    ? `INTEL OVERLOAD: ${item.evidence.length} EVIDENCE MARKERS DETECTED!` 
+                                                    : `CRITICAL INTEL: ${item.evidence.length} EVIDENCE MARKER FOUND!`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Render existing evidence */}
                                 {item.evidence.map((ev: any, i: number) => (
                                     <div
@@ -651,14 +755,26 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* BOTTOM ROW: AI COPILOT */}
-                <div className="mt-8 pt-8 border-t border-gray-800">
-                    <h3 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text mb-4 flex items-center gap-2">
-                        <span>✨</span> AI Copilot
-                    </h3>
-                    <div className="bg-gray-950 rounded-xl border border-gray-800 overflow-hidden flex flex-col h-[350px]">
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* RESIZER DRAG HANDLE */}
+                    <div 
+                        onMouseDown={() => setIsResizing(true)}
+                        className={`w-1 hover:w-2 bg-blue-500/10 hover:bg-blue-500/40 cursor-col-resize transition-all relative group z-20 ${isResizing ? 'bg-blue-500/60 w-1.5' : ''}`}
+                    >
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-0.5 bg-gray-700 rounded-full group-hover:bg-blue-400/50" />
+                    </div>
+
+                    {/* RIGHT PANEL: AI COPILOT */}
+                    <div className="bg-gray-950 flex flex-col h-full border-l border-gray-800" style={{ width: `${splitRatio}%` }}>
+                        <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-black/40">
+                            <h3 className="text-sm font-black bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text uppercase tracking-widest flex items-center gap-2">
+                                <span>✨</span> AI Copilot (v2.2)
+                            </h3>
+                            <div className="text-[10px] text-gray-500 font-mono">Resizable Panel</div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar scroll-smooth">
                             {chatHistory.length === 0 ? (
                                 <div className="text-center text-gray-500 my-auto pt-20">
                                     <p>Ask the AI copilot to generate descriptions, suggest hints, or identify landmarks!</p>
