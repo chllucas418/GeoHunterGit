@@ -670,61 +670,75 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                         </div>
                                         {/* Parse actions from message */}
                                         {msg.role === 'model' && msg.content.includes("```json") && (
-                                            <div className="mt-2 flex flex-wrap gap-2">
+                                            <div className="mt-2 space-y-3 w-full max-w-[80%]">
                                                 {Array.from(msg.content.matchAll(/```json\s*([\s\S]*?)\s*```/g)).map((match: any, mIdx: number) => {
                                                     try {
                                                         const action = JSON.parse(match[1]);
                                                         if (action.action === "setHints") {
                                                             return (
-                                                                <button
-                                                                    key={mIdx}
-                                                                    onClick={() => setFiles((prev: any[]) => {
-                                                                        const cp = [...prev];
-                                                                        cp[editingId].hints = Array.isArray(action.data) ? action.data : [action.data];
-                                                                        return cp;
-                                                                    })}
-                                                                    className="bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
-                                                                >
-                                                                    <span>✨</span> APPLY ALL HINTS
-                                                                </button>
+                                                                <div key={mIdx} className="bg-gray-900 border border-purple-500/30 rounded-lg p-3 overflow-hidden">
+                                                                    <p className="text-[10px] font-bold text-purple-400 mb-2 uppercase tracking-wider">Suggested Hints Preview:</p>
+                                                                    <ul className="text-xs space-y-1 mb-3 list-disc list-inside text-gray-300">
+                                                                        {Array.isArray(action.data) ? action.data.map((h: string, i: number) => (
+                                                                            <li key={i}>{h}</li>
+                                                                        )) : <li>{action.data}</li>}
+                                                                    </ul>
+                                                                    <button
+                                                                        onClick={() => setFiles((prev: any[]) => {
+                                                                            const cp = [...prev];
+                                                                            cp[editingId].hints = Array.isArray(action.data) ? action.data : [action.data];
+                                                                            return cp;
+                                                                        })}
+                                                                        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-md flex items-center justify-center gap-1 shadow-lg transition-colors"
+                                                                    >
+                                                                        <span>✨</span> APPLY ALL HINTS
+                                                                    </button>
+                                                                </div>
                                                             );
                                                         }
                                                         if (action.action === "addHint") {
                                                             return (
-                                                                <button
-                                                                    key={mIdx}
-                                                                    onClick={() => setFiles((prev: any[]) => {
-                                                                        const cp = [...prev];
-                                                                        // Add to existing, but filter out empty strings first if we have space
-                                                                        const currentHints = [...cp[editingId].hints];
-                                                                        const emptyIdx = currentHints.findIndex(h => !h);
-                                                                        if (emptyIdx !== -1) {
-                                                                            currentHints[emptyIdx] = action.data;
-                                                                        } else {
-                                                                            currentHints.push(action.data);
-                                                                        }
-                                                                        cp[editingId].hints = currentHints;
-                                                                        return cp;
-                                                                    })}
-                                                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
-                                                                >
-                                                                    <span>+</span> APPLY HINT
-                                                                </button>
+                                                                <div key={mIdx} className="bg-gray-900 border border-emerald-500/30 rounded-lg p-3">
+                                                                    <p className="text-[10px] font-bold text-emerald-400 mb-2 uppercase tracking-wider">Suggested Hint Preview:</p>
+                                                                    <p className="text-xs text-gray-300 mb-3 italic">"{action.data}"</p>
+                                                                    <button
+                                                                        onClick={() => setFiles((prev: any[]) => {
+                                                                            const cp = [...prev];
+                                                                            const currentHints = [...cp[editingId].hints];
+                                                                            const emptyIdx = currentHints.findIndex(h => !h);
+                                                                            if (emptyIdx !== -1) {
+                                                                                currentHints[emptyIdx] = action.data;
+                                                                            } else {
+                                                                                currentHints.push(action.data);
+                                                                            }
+                                                                            cp[editingId].hints = currentHints;
+                                                                            return cp;
+                                                                        })}
+                                                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-md flex items-center justify-center gap-1 shadow-lg transition-colors"
+                                                                    >
+                                                                        <span>+</span> APPLY HINT
+                                                                    </button>
+                                                                </div>
                                                             );
                                                         }
                                                         if (action.action === "addEvidenceDescription" || action.action === "setDescription") {
                                                             return (
-                                                                <button
-                                                                    key={mIdx}
-                                                                    onClick={() => setFiles((prev: any[]) => {
-                                                                        const cp = [...prev];
-                                                                        cp[editingId].description = action.data;
-                                                                        return cp;
-                                                                    })}
-                                                                    className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
-                                                                >
-                                                                    <span>✓</span> APPLY DESCRIPTION
-                                                                </button>
+                                                                <div key={mIdx} className="bg-gray-900 border border-blue-500/30 rounded-lg p-3">
+                                                                    <p className="text-[10px] font-bold text-blue-400 mb-2 uppercase tracking-wider">Suggested Description Preview:</p>
+                                                                    <p className="text-xs text-gray-300 mb-3 line-clamp-4 leading-relaxed">
+                                                                        {action.data}
+                                                                    </p>
+                                                                    <button
+                                                                        onClick={() => setFiles((prev: any[]) => {
+                                                                            const cp = [...prev];
+                                                                            cp[editingId].description = action.data;
+                                                                            return cp;
+                                                                        })}
+                                                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-md flex items-center justify-center gap-1 shadow-lg transition-colors"
+                                                                    >
+                                                                        <span>✓</span> APPLY DESCRIPTION
+                                                                    </button>
+                                                                </div>
                                                             );
                                                         }
                                                     } catch (e) { return null; }

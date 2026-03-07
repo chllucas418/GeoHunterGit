@@ -333,18 +333,18 @@ export async function analyzeImageQuality(
        - Hint 2: Contextual (Mid-level, e.g. "The vegetation suggests a tropical climate, look for specific trees").
        - Hint 3: Specific (Direct clue but still playful, e.g. "A unique feature on the left wall holds the key").
     
-    - Descriptive Strategy: Create an "Atmospheric Snapshot". Do NOT just list facts (e.g., "This is a red sign"). Instead, describe the lighting, the architectural era, the "vibe" of the street, or unique regional identifiers. The goal is to let the player "feel" the place so they can identify it on a map without being told the name.
+    - Descriptive Strategy: Create an "Informative Snapshot". Focus on clear, factual identifiers that help a student ground the location on a map. Describe architectural eras, specific signage, types of flora, or unique terrain features. Avoid flowery or "fancy" adjectives. The goal is clarity and deductive utility.
     - Hint Strategy: Generate three hints that follow a "Vague-to-Specific" gradient.
-       - Hint 1 (Vague): Atmospheric or environmental (e.g., "The salty air and weathered wood suggest a coastal village").
-       - Hint 2 (Medium): Regional or structural (e.g., "Note the distinct curve of the wrought iron railings common in this district").
-       - Hint 3 (Specific): Playful deduction (e.g., "The shadow cast by the spire points toward a historic park").
-    - RESTRICTION: NEVER name the city or specific landmark in a hint unless absolutely necessary for the game logic. Keep them helpful for map identification.
+       - Hint 1 (Vague): Environmental clues (e.g., "The presence of palm trees and red soil suggests a southern district").
+       - Hint 2 (Medium): Structural identifiers (e.g., "Note the specific 1970s public housing balcony style common in this area").
+       - Hint 3 (Specific): Playful deduction (e.g., "The shadow of the water tower points toward a major transit hub").
+    - RESTRICTION: NEVER name the city or specific landmark in a hint. Aim for "Map Grounding"—information that can be cross-referenced with a map.
     
     Return a JSON object with this exact schema:
     {
       "quality_score": number,
       "difficulty_rating": number,
-      "precontext": "string (Atmospheric Snapshot description)",
+      "precontext": "string (Informative Snapshot description)",
       "recommendation": "string",
       "generated_hints": ["Subtle Hint 1", "Subtle Hint 2", "Subtle Hint 3"]
     }
@@ -611,9 +611,10 @@ ${contextStr}
 ${evidenceStr}
 
 1. Act as a collaborative partner. Answer the admin's questions about the location, architecture, history, or specific objects in the image.
-2. When suggesting descriptions (via "precontext"), provide an "Atmospheric Snapshot". Avoid dry facts; focus on the vibe, lighting, and unique identifying features.
-3. When suggesting hints, make them helpful but NOT obvious. They should guide the player's deduction (e.g., "The architecture suggests a European influence") rather than giving the answer away.
-4. MANDATORY JSON: You MUST provide all actionable suggestions within JSON blocks. NEVER just list hints in plan text.
+2. When suggesting descriptions (via "precontext"), provide an "Informative Snapshot". Use clear, deductive language. Avoid flowery or "fancy" words. Focus on identifiers that help a student ground the location on a map.
+3. When suggesting hints, make them helpful but NOT obvious. They should relate to the provided coordinates and bounded evidence areas. They MUST be useful for map deduction.
+4. Iterative Editing: If the user provides feedback on a description or hint, generate an updated version using the JSON blocks below.
+5. MANDATORY JSON: You MUST provide all actionable suggestions within JSON blocks. NEVER just list hints in plain text.
 
 ACTIONABLE OUTPUT (JSON FORMAT):
 Use these JSON blocks ONLY. Conversational text should go outside the blocks.
@@ -634,11 +635,11 @@ TO SUGGEST A SINGLE HINT:
 }
 \`\`\`
 
-TO SUGGEST AN ATMOSPHERIC DESCRIPTION:
+TO SUGGEST OR UPDATE THE DESCRIPTION:
 \`\`\`json
 {
-  "action": "addEvidenceDescription",
-  "data": "The informative yet atmospheric description here"
+  "action": "setDescription",
+  "data": "The clear, informative description here"
 }
 \`\`\`
 
