@@ -6,8 +6,8 @@ import { useDropzone } from 'react-dropzone';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { EvidenceCanvas } from '~/components/EvidenceCanvas';
 import type { BoxCoordinates } from '~/types/shared';
-import { analyzeImageQuality } from '~/lib/gemini.server';
 
+<<<<<<< Updated upstream
 // Server-side Action
 export async function action({ request, context }: ActionFunctionArgs) {
     const formData = await request.formData();
@@ -105,6 +105,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     return null;
 }
+=======
+// Action moved to api.admin.mass-add.ts
+>>>>>>> Stashed changes
 
 export async function loader({ context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as any;
@@ -142,8 +145,6 @@ export default function MassAdd() {
         }
     }, [files, analyzingIds, editingId]);
 
-    const submit = useSubmit();
-    const actionData = useActionData<typeof action>();
     const navigation = useNavigation();
 
     // Map Setup
@@ -169,23 +170,31 @@ export default function MassAdd() {
             formData.append('intent', 'analyze');
             formData.append('image_data', dataUri);
 
-            const res = await fetch('/admin/mass-add', { method: 'POST', body: formData });
-            const data = (await res.json()) as { success: boolean, aiData?: any };
-
-            if (data.success && data.aiData) {
-                setFiles(prev => prev.map(f => {
-                    if (f.id === fileId) {
-                        return {
-                            ...f,
-                            description: data.aiData.precontext,
-                            difficulty: data.aiData.difficulty_rating,
-                            hints: data.aiData.generated_hints || ["", "", ""],
-                            status: f.lat ? 'reviewed' : 'needs_gps'
-                        };
-                    }
-                    return f;
-                }));
+            const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                const data = (await res.json()) as { success: boolean, aiData?: any, error?: string };
+                if (data.success && data.aiData) {
+                    setFiles(prev => prev.map(f => {
+                        if (f.id === fileId) {
+                            return {
+                                ...f,
+                                description: data.aiData.precontext,
+                                difficulty: data.aiData.difficulty_rating,
+                                hints: data.aiData.generated_hints || ["", "", ""],
+                                status: f.lat ? 'reviewed' : 'needs_gps'
+                            };
+                        }
+                        return f;
+                    }));
+                } else if (data.error) {
+                    throw new Error(data.error);
+                }
+            } else {
+                const text = await res.text();
+                throw new Error(`Server returned non-JSON response: ${res.status} ${res.statusText}. Response text partial: ${text.substring(0, 100)}`);
             }
+
         } catch (e) {
             console.error("AI Failed for", fileObj.name, e);
         } finally {
@@ -288,7 +297,7 @@ export default function MassAdd() {
             locationName: item.photographer // Use filename as default name
         }));
 
-        const res = await fetch('/admin/mass-add', { method: 'POST', body: formData });
+        const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
         if (res.ok) {
             removeFile(index); // Remove from list on success
         } else {
@@ -298,10 +307,86 @@ export default function MassAdd() {
 
 
 
-    // Edit Modal rendering
-    const renderEditModal = () => {
-        if (editingId === null) return null;
-        const item = files[editingId];
+;
+
+    return (
+        <div className="min-h-screen bg-gray-950 text-white p-8">
+            <h1 className="text-2xl font-bold mb-6">Mass Add Locations</h1>
+
+            <div {...getRootProps()} className="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center hover:border-emerald-500 transition-colors cursor-pointer bg-gray-900/50">
+                <input {...getInputProps()} />
+                <p className="text-gray-400">Drag & drop files here, or click to select files</p>
+                <p className="text-sm text-gray-500 mt-2">Supports JPG, PNG with EXIF awareness</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+                {files.map((file, idx) => (
+                    <div key={file.id} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex flex-col">
+                        <div className="relative h-48 bg-gray-800">
+                            <img src={file.preview} className="w-full h-full object-cover opacity-80" />
+                            <div className="absolute top-2 right-2 flex gap-1">
+                                {file.lat ? (
+                                    <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded">GPS Found</span>
+                                ) : (
+                                    <span className="bg-red-500/20 text-red-400 text-xs px-2 py-1 rounded">No GPS</span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="p-4 flex-1 space-y-3">
+                            <h3 className="font-semibold truncate">{file.file.name}</h3>
+                            <p className="text-xs text-gray-400 line-clamp-2">{file.description || "No description generated"}</p>
+
+                            <div className="flex gap-2 text-xs">
+                                <span className="bg-gray-800 px-2 py-1 rounded">Diff: {file.difficulty}</span>
+                                <span className="bg-gray-800 px-2 py-1 rounded">Ev: {file.evidence.length}</span>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-gray-950/50 flex gap-2 border-t border-gray-800">
+                            <button
+                                onClick={() => analyzeFile(file.id, file.file)}
+                                disabled={analyzingIds.has(file.id)}
+                                className="flex-1 px-3 py-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded text-sm disabled:opacity-50"
+                            >
+                                {analyzingIds.has(file.id) ? 'Thinking...' : 'AI Generate'}
+                            </button>
+                            <button
+                                onClick={() => setEditingId(idx)}
+                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                            >
+                                Edit
+                            </button>
+                            {file.evidence.length === 0 ? (
+                                <button
+                                    onClick={() => setEditingId(idx)}
+                                    className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded text-sm text-white font-bold animate-pulse"
+                                >
+                                    Add Evidence
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => saveLocation(idx)}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-sm text-white"
+                                >
+                                    Save
+                                </button>
+                            )}
+                            <button onClick={() => removeFile(idx)} className="px-2 text-gray-500 hover:text-red-400">×</button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <EditModal editingId={editingId} files={files} setFiles={setFiles} setEditingId={setEditingId} isLoaded={isLoaded} mapSets={mapSets} />
+        </div>
+    );
+}
+
+
+export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets }: any) {
+    if (editingId === null) return null;
+    const item = files[editingId];
 
         // Local state for evidence description editing inside modal
         const [tempEvidenceBox, setTempEvidenceBox] = useState<BoxCoordinates | null>(null);
@@ -598,6 +683,7 @@ export default function MassAdd() {
                 </div>
             </div>
         );
+<<<<<<< Updated upstream
     };
 
     return (
@@ -672,4 +758,7 @@ export default function MassAdd() {
             {renderEditModal()}
         </div>
     );
+=======
+    
+>>>>>>> Stashed changes
 }

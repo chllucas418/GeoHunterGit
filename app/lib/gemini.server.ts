@@ -19,7 +19,11 @@ async function callGeminiApi(
     apiKey?: string
 ) {
     if (!baseUrl) {
+<<<<<<< Updated upstream
         throw new Error("GEMINI_BASE_URL is not set. Cannot call Gemini API.");
+=======
+        throw new Error("Cloudflare AI Gateway configuration missing. Ensure baseUrl is provided.");
+>>>>>>> Stashed changes
     }
 
     // Ensure the base URL does not end with a slash
@@ -32,9 +36,14 @@ async function callGeminiApi(
     console.log(`[Gemini] Calling: ${cleanBaseUrl}/v1beta/models/${modelName}:generateContent (BYOK: ${!apiKey})`);
 
     const headers: Record<string, string> = {
+<<<<<<< Updated upstream
         "Content-Type": "application/json",
     };
     // Add gateway auth if token is provided (authenticates to Cloudflare AI Gateway)
+=======
+        "Content-Type": "application/json"
+    };
+>>>>>>> Stashed changes
     if (gatewayToken) {
         headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
     }
