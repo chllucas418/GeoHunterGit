@@ -19,11 +19,7 @@ async function callGeminiApi(
     apiKey?: string
 ) {
     if (!baseUrl) {
-<<<<<<< Updated upstream
         throw new Error("GEMINI_BASE_URL is not set. Cannot call Gemini API.");
-=======
-        throw new Error("Cloudflare AI Gateway configuration missing. Ensure baseUrl is provided.");
->>>>>>> Stashed changes
     }
 
     // Ensure the base URL does not end with a slash
@@ -36,14 +32,9 @@ async function callGeminiApi(
     console.log(`[Gemini] Calling: ${cleanBaseUrl}/v1beta/models/${modelName}:generateContent (BYOK: ${!apiKey})`);
 
     const headers: Record<string, string> = {
-<<<<<<< Updated upstream
         "Content-Type": "application/json",
     };
     // Add gateway auth if token is provided (authenticates to Cloudflare AI Gateway)
-=======
-        "Content-Type": "application/json"
-    };
->>>>>>> Stashed changes
     if (gatewayToken) {
         headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
     }
@@ -105,7 +96,7 @@ async function callGeminiChatApi(
 
     // Construct the new message part
     const latestUserParts: any[] = [{ text: newMessage }];
-    
+
     // Inject image into the latest message if provided
     if (imageData) {
         latestUserParts.push({
@@ -533,10 +524,10 @@ export async function chatWithGemini(
         imageData = { mimeType, data: base64Data };
     }
 
-    const contextStr = locationData 
-        ? `Location Coordinates: ${locationData.lat}, ${locationData.lng}\n` 
+    const contextStr = locationData
+        ? `Location Coordinates: ${locationData.lat}, ${locationData.lng}\n`
         : "";
-        
+
     const evidenceStr = evidenceList && evidenceList.length > 0
         ? `Currently Marked Evidence:\n${JSON.stringify(evidenceList, null, 2)}\n`
         : "No evidence marked yet.\n";

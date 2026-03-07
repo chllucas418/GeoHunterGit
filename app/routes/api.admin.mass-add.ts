@@ -17,6 +17,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 dataUri,
                 env.GEMINI_BASE_URL,
                 env.GEMINI_GATEWAY_TOKEN,
+                env.GEMINI_API_KEY || "",
                 undefined
             );
             return Response.json({ success: true, aiData });
@@ -64,6 +65,21 @@ export async function action({ request, context }: ActionFunctionArgs) {
             metadata.quality_score || 80,
             JSON.stringify(metadata.evidence || [])
         ).run();
+
+        // [FIX] Also insert into the map_evidence table so the game logic can find it!
+        if (metadata.evidence && metadata.evidence.length > 0) {
+            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
+            const batch = metadata.evidence.map((ev: any) =>
+                stmt.bind(
+                    `ev_${Math.random().toString(36).substring(2, 9)}`,
+                    locationId,
+                    JSON.stringify(ev.box),
+                    ev.description,
+                    "Real-time analysis active."
+                )
+            );
+            await db.batch(batch);
+        }
 
         // Add to Dataset if selected
         if (metadata.addToSet) {
