@@ -577,7 +577,8 @@ export async function chatWithGemini(
     baseUrl: string,
     gatewayToken: string,
     apiKey: string,
-    directBase64?: string
+    directBase64?: string,
+    currentState?: { description?: string; hints?: string[] }
 ) {
     let base64Data = "";
     let mimeType = "image/jpeg";
@@ -602,6 +603,10 @@ export async function chatWithGemini(
         ? `Currently Marked Evidence:\n${JSON.stringify(evidenceList, null, 2)}\n`
         : "No evidence marked yet.\n";
 
+    const stateStr = currentState 
+        ? `\nCURRENT STATE (Metadata already recorded):\nDescription: "${currentState.description || 'None'}"\nHints: ${JSON.stringify(currentState.hints || [])}\n`
+        : "";
+
     const systemInstruction = `
 You are a highly capable AI assistant specifically designed to help the Admin/Teacher create official "Map Evidence" and "Hints" for a geography identification game called GeoHunter.
 You have access to Google Search to look up real-world locations based on the provided coordinates or image.
@@ -609,6 +614,7 @@ You have access to Google Search to look up real-world locations based on the pr
 Context:
 ${contextStr}
 ${evidenceStr}
+${stateStr}
 
 1. Act as a collaborative partner. Answer the admin's questions about the location, architecture, history, or specific objects in the image.
 2. When suggesting descriptions (via "precontext"), provide an "Informative Snapshot". Use clear, deductive language. Avoid flowery or "fancy" words. Focus on identifiers that help a student ground the location on a map.

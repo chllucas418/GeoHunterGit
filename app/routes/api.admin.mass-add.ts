@@ -49,6 +49,17 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const latStr = formData.get('lat') as string;
         const lngStr = formData.get('lng') as string;
         const evidenceStr = formData.get('evidence') as string;
+        const currentDescription = formData.get('current_description') as string;
+        const currentHintsStr = formData.get('current_hints') as string;
+        let currentState = undefined;
+        if (currentDescription || currentHintsStr) {
+            try {
+                currentState = {
+                    description: currentDescription,
+                    hints: currentHintsStr ? JSON.parse(currentHintsStr) : []
+                };
+            } catch (e) {}
+        }
 
         let history = [];
         try { if (historyStr) history = JSON.parse(historyStr); } catch (e) {}
@@ -72,7 +83,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 env.GEMINI_BASE_URL,
                 env.GEMINI_GATEWAY_TOKEN,
                 env.GEMINI_API_KEY || "",
-                dataUri
+                dataUri,
+                currentState
             );
             console.log("[MassAdd API] AI Chat response length:", aiResponse.length);
             if (aiResponse.includes("```json")) {

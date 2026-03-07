@@ -346,6 +346,8 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
             if (item.evidence && item.evidence.length > 0) {
                 formData.append('evidence', JSON.stringify(item.evidence));
             }
+            formData.append('current_description', item.description || "");
+            formData.append('current_hints', JSON.stringify(item.hints || []));
 
             const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
             const data = (await res.json()) as any;
@@ -671,25 +673,36 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                         {/* Parse actions from message */}
                                         {msg.role === 'model' && msg.content.includes("```json") && (
                                             <div className="mt-2 space-y-3 w-full max-w-[80%]">
-                                                {Array.from(msg.content.matchAll(/```json\s*([\s\S]*?)\s*```/g)).map((match: any, mIdx: number) => {
+                                                {Array.from(msg.content.matchAll(/```json([\s\S]*?)```/g)).map((match: any, mIdx: number) => {
                                                     try {
-                                                        const action = JSON.parse(match[1]);
+                                                        const jsonStr = match[1].trim();
+                                                        const action = JSON.parse(jsonStr);
+                                                        
+                                                        // Helper to render preview data safely
+                                                        const renderPreview = (data: any) => {
+                                                            if (typeof data === 'string') return data;
+                                                            if (Array.isArray(data)) return (
+                                                                <ul className="list-disc list-inside space-y-1">
+                                                                    {data.map((item, i) => <li key={i}>{String(item)}</li>)}
+                                                                </ul>
+                                                            );
+                                                            return <pre className="text-[10px] overflow-x-auto">{JSON.stringify(data, null, 2)}</pre>;
+                                                        };
+
                                                         if (action.action === "setHints") {
                                                             return (
-                                                                <div key={mIdx} className="bg-gray-900 border border-purple-500/30 rounded-lg p-3 overflow-hidden">
-                                                                    <p className="text-[10px] font-bold text-purple-400 mb-2 uppercase tracking-wider">Suggested Hints Preview:</p>
-                                                                    <ul className="text-xs space-y-1 mb-3 list-disc list-inside text-gray-300">
-                                                                        {Array.isArray(action.data) ? action.data.map((h: string, i: number) => (
-                                                                            <li key={i}>{h}</li>
-                                                                        )) : <li>{action.data}</li>}
-                                                                    </ul>
+                                                                <div key={mIdx} className="bg-gray-950 border border-purple-500/50 rounded-xl p-4 shadow-xl">
+                                                                    <p className="text-[10px] font-black text-purple-400 mb-3 uppercase tracking-widest border-b border-purple-500/20 pb-1">Suggested Hints Preview:</p>
+                                                                    <div className="text-sm text-gray-200 mb-4 leading-relaxed">
+                                                                        {renderPreview(action.data)}
+                                                                    </div>
                                                                     <button
                                                                         onClick={() => setFiles((prev: any[]) => {
                                                                             const cp = [...prev];
                                                                             cp[editingId].hints = Array.isArray(action.data) ? action.data : [action.data];
                                                                             return cp;
                                                                         })}
-                                                                        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-md flex items-center justify-center gap-1 shadow-lg transition-colors"
+                                                                        className="w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
                                                                     >
                                                                         <span>✨</span> APPLY ALL HINTS
                                                                     </button>
@@ -698,9 +711,11 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                         }
                                                         if (action.action === "addHint") {
                                                             return (
-                                                                <div key={mIdx} className="bg-gray-900 border border-emerald-500/30 rounded-lg p-3">
-                                                                    <p className="text-[10px] font-bold text-emerald-400 mb-2 uppercase tracking-wider">Suggested Hint Preview:</p>
-                                                                    <p className="text-xs text-gray-300 mb-3 italic">"{action.data}"</p>
+                                                                <div key={mIdx} className="bg-gray-950 border border-emerald-500/50 rounded-xl p-4 shadow-xl">
+                                                                    <p className="text-[10px] font-black text-emerald-400 mb-3 uppercase tracking-widest border-b border-emerald-500/20 pb-1">Suggested Hint Preview:</p>
+                                                                    <div className="text-sm text-gray-200 mb-4 italic">
+                                                                        "{renderPreview(action.data)}"
+                                                                    </div>
                                                                     <button
                                                                         onClick={() => setFiles((prev: any[]) => {
                                                                             const cp = [...prev];
@@ -714,7 +729,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                                             cp[editingId].hints = currentHints;
                                                                             return cp;
                                                                         })}
-                                                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-md flex items-center justify-center gap-1 shadow-lg transition-colors"
+                                                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
                                                                     >
                                                                         <span>+</span> APPLY HINT
                                                                     </button>
@@ -723,25 +738,31 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                         }
                                                         if (action.action === "addEvidenceDescription" || action.action === "setDescription") {
                                                             return (
-                                                                <div key={mIdx} className="bg-gray-900 border border-blue-500/30 rounded-lg p-3">
-                                                                    <p className="text-[10px] font-bold text-blue-400 mb-2 uppercase tracking-wider">Suggested Description Preview:</p>
-                                                                    <p className="text-xs text-gray-300 mb-3 line-clamp-4 leading-relaxed">
-                                                                        {action.data}
-                                                                    </p>
+                                                                <div key={mIdx} className="bg-gray-950 border border-blue-500/50 rounded-xl p-4 shadow-xl">
+                                                                    <p className="text-[10px] font-black text-blue-400 mb-3 uppercase tracking-widest border-b border-blue-500/20 pb-1">Suggested Description Preview:</p>
+                                                                    <div className="text-sm text-gray-200 mb-4 leading-relaxed line-clamp-6">
+                                                                        {renderPreview(action.data)}
+                                                                    </div>
                                                                     <button
                                                                         onClick={() => setFiles((prev: any[]) => {
                                                                             const cp = [...prev];
                                                                             cp[editingId].description = action.data;
                                                                             return cp;
                                                                         })}
-                                                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-md flex items-center justify-center gap-1 shadow-lg transition-colors"
+                                                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
                                                                     >
                                                                         <span>✓</span> APPLY DESCRIPTION
                                                                     </button>
                                                                 </div>
                                                             );
                                                         }
-                                                    } catch (e) { return null; }
+                                                    } catch (e) { 
+                                                        return (
+                                                            <div key={mIdx} className="text-[10px] text-red-400 bg-red-900/20 p-2 rounded border border-red-900/50">
+                                                                Action Parsing Error: Invalid JSON block.
+                                                            </div>
+                                                        ); 
+                                                    }
                                                     return null;
                                                 })}
                                             </div>
