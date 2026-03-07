@@ -258,12 +258,21 @@ export async function analyzeImageQuality(
         evidenceList?: any[];
     }
 ) {
-    const response = await fetch(imageUrl);
-    if (!response.ok) throw new Error("Failed to fetch image");
+    let base64Data = "";
+    let mimeType = "image/jpeg";
 
-    const arrayBuffer = await response.arrayBuffer();
-    const base64Data = arrayBufferToBase64(arrayBuffer);
-    const mimeType = response.headers.get("content-type") || "image/jpeg";
+    if (imageUrl.startsWith("data:")) {
+        const parts = imageUrl.split(",");
+        mimeType = parts[0].split(":")[1].split(";")[0];
+        base64Data = parts[1];
+    } else {
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error("Failed to fetch image");
+
+        const arrayBuffer = await response.arrayBuffer();
+        base64Data = arrayBufferToBase64(arrayBuffer);
+        mimeType = response.headers.get("content-type") || "image/jpeg";
+    }
 
     let contextStr = "";
     if (context?.lat && context?.lng) {
