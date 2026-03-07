@@ -83,70 +83,87 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     // 2. Final Save
     if (intent === 'save') {
+        console.log("[MassAdd API] Save initiated");
         const db = env.DB as D1Database;
         const bucket = env.ASSETS_BUCKET as R2Bucket;
 
-        const file = formData.get('image') as File;
-        const metadataStr = formData.get('metadata') as string;
-        const metadata = JSON.parse(metadataStr);
+        try {
+            const file = formData.get('image') as File;
+            const metadataStr = formData.get('metadata') as string;
+            
+            if (!file) throw new Error("No image file found in request");
+            if (!metadataStr) throw new Error("No metadata found in request");
+            
+            const metadata = JSON.parse(metadataStr);
+            console.log("[MassAdd API] Metadata parsed:", { ...metadata, hints: metadata.hints?.length });
 
-        // Upload to R2
-        const key = `locations/${crypto.randomUUID()}.jpg`;
-        await bucket.put(key, await file.arrayBuffer(), {
-            httpMetadata: { contentType: file.type }
-        });
-        const publicUrl = `https://assets.hkgeohunter.com/${key}`;
+            // Upload to R2
+            const key = `locations/${crypto.randomUUID()}.jpg`;
+            console.log("[MassAdd API] Uploading to R2:", key);
+            await bucket.put(key, await file.arrayBuffer(), {
+                httpMetadata: { contentType: file.type }
+            });
+            const publicUrl = `https://assets.hkgeohunter.com/${key}`;
 
-        // Save to D1
-        const locationId = `loc_${Math.random().toString(36).substring(2, 9)}`;
+            // Save to D1
+            const locationId = `loc_${Math.random().toString(36).substring(2, 9)}`;
+            console.log("[MassAdd API] Inserting into D1 locations:", locationId);
 
-        await db.prepare(`
-            INSERT INTO locations (
-                id, name, description, difficulty_rating, hints, 
-                lat, lng, image_url, 
-                photographer, quality_score, map_evidence, verified_by_gemini
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-        `).bind(
-            locationId,
-            metadata.locationName || "New Location",
-            metadata.description,
-            metadata.difficulty,
-            JSON.stringify(metadata.hints),
-            metadata.lat,
-            metadata.lng,
-            publicUrl,
-            metadata.photographer,
-            metadata.quality_score || 80,
-            JSON.stringify(metadata.evidence || [])
-        ).run();
+            await db.prepare(`
+                INSERT INTO locations (
+                    id, name, description, difficulty_rating, hints, 
+                    lat, lng, image_url, 
+                    photographer, quality_score, map_evidence, verified_by_gemini
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            `).bind(
+                locationId,
+                metadata.locationName || "New Location",
+                metadata.description,
+                metadata.difficulty,
+                JSON.stringify(metadata.hints),
+                metadata.lat,
+                metadata.lng,
+                publicUrl,
+                metadata.photographer,
+                metadata.quality_score || 80,
+                JSON.stringify(metadata.evidence || []),
+                1 // verified_by_gemini
+            ).run();
 
-        // [FIX] Also insert into the map_evidence table so the game logic can find it!
-        if (metadata.evidence && metadata.evidence.length > 0) {
-            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
-            const batch = metadata.evidence.map((ev: any) =>
-                stmt.bind(
-                    `ev_${Math.random().toString(36).substring(2, 9)}`,
-                    locationId,
-                    JSON.stringify(ev.box),
-                    ev.description,
-                    "Real-time analysis active."
-                )
-            );
-            await db.batch(batch);
-        }
-
-        // Add to Dataset if selected
-        if (metadata.addToSet) {
-            // Check if already in set (unlikely for new loc but good practice)
-            const exists = await db.prepare("SELECT 1 FROM map_set_items WHERE set_id = ? AND location_id = ?").bind(metadata.addToSet, locationId).first();
-            if (!exists) {
-                const max = await db.prepare("SELECT MAX(order_index) as m FROM map_set_items WHERE set_id = ?").bind(metadata.addToSet).first<any>();
-                const nextOrder = (max?.m || 0) + 1;
-                await db.prepare("INSERT INTO map_set_items (set_id, location_id, order_index) VALUES (?, ?, ?)").bind(metadata.addToSet, locationId, nextOrder).run();
+            // [FIX] Also insert into the map_evidence table so the game logic can find it!
+            if (metadata.evidence && metadata.evidence.length > 0) {
+                console.log("[MassAdd API] Inserting evidence items:", metadata.evidence.length);
+                const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
+                const batch = metadata.evidence.map((ev: any) =>
+                    stmt.bind(
+                        `ev_${Math.random().toString(36).substring(2, 9)}`,
+                        locationId,
+                        JSON.stringify(ev.box),
+                        ev.description,
+                        "Real-time analysis active."
+                    )
+                );
+                await db.batch(batch);
             }
-        }
 
-        return Response.json({ success: true, savedId: key });
+            // Add to Dataset if selected
+            if (metadata.addToSet) {
+                console.log("[MassAdd API] Adding to set:", metadata.addToSet);
+                const exists = await db.prepare("SELECT 1 FROM map_set_items WHERE set_id = ? AND location_id = ?").bind(metadata.addToSet, locationId).first();
+                if (!exists) {
+                    const max = await db.prepare("SELECT MAX(order_index) as m FROM map_set_items WHERE set_id = ?").bind(metadata.addToSet).first<any>();
+                    const nextOrder = (max?.m || 0) + 1;
+                    await db.prepare("INSERT INTO map_set_items (set_id, location_id, order_index) VALUES (?, ?, ?)").bind(metadata.addToSet, locationId, nextOrder).run();
+                }
+            }
+
+            console.log("[MassAdd API] Save successful");
+            return Response.json({ success: true, savedId: key });
+        } catch (e: any) {
+            console.error("[MassAdd API] Save Critical Error:", e);
+            // Return error details to client for debugging
+            return Response.json({ success: false, error: e.message, stack: e.stack }, { status: 500 });
+        }
     }
 
     return null;

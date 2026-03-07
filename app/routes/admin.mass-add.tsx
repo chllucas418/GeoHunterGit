@@ -674,13 +674,36 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                 {Array.from(msg.content.matchAll(/```json\s*([\s\S]*?)\s*```/g)).map((match: any, mIdx: number) => {
                                                     try {
                                                         const action = JSON.parse(match[1]);
+                                                        if (action.action === "setHints") {
+                                                            return (
+                                                                <button
+                                                                    key={mIdx}
+                                                                    onClick={() => setFiles((prev: any[]) => {
+                                                                        const cp = [...prev];
+                                                                        cp[editingId].hints = Array.isArray(action.data) ? action.data : [action.data];
+                                                                        return cp;
+                                                                    })}
+                                                                    className="bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
+                                                                >
+                                                                    <span>✨</span> APPLY ALL HINTS
+                                                                </button>
+                                                            );
+                                                        }
                                                         if (action.action === "addHint") {
                                                             return (
                                                                 <button
                                                                     key={mIdx}
                                                                     onClick={() => setFiles((prev: any[]) => {
                                                                         const cp = [...prev];
-                                                                        cp[editingId].hints = [...cp[editingId].hints, action.data];
+                                                                        // Add to existing, but filter out empty strings first if we have space
+                                                                        const currentHints = [...cp[editingId].hints];
+                                                                        const emptyIdx = currentHints.findIndex(h => !h);
+                                                                        if (emptyIdx !== -1) {
+                                                                            currentHints[emptyIdx] = action.data;
+                                                                        } else {
+                                                                            currentHints.push(action.data);
+                                                                        }
+                                                                        cp[editingId].hints = currentHints;
                                                                         return cp;
                                                                     })}
                                                                     className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
@@ -689,7 +712,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                                 </button>
                                                             );
                                                         }
-                                                        if (action.action === "addEvidenceDescription") {
+                                                        if (action.action === "addEvidenceDescription" || action.action === "setDescription") {
                                                             return (
                                                                 <button
                                                                     key={mIdx}
@@ -700,7 +723,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                                     })}
                                                                     className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
                                                                 >
-                                                                    <span>✓</span> APPLY TO DESCRIPTION
+                                                                    <span>✓</span> APPLY DESCRIPTION
                                                                 </button>
                                                             );
                                                         }

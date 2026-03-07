@@ -334,7 +334,7 @@ export async function analyzeImageQuality(
     {
       "quality_score": number,
       "difficulty_rating": number,
-      "precontext": "string (Informative yet atmospheric description)",
+      "precontext": "string (Atmospheric Snapshot description)",
       "recommendation": "string",
       "generated_hints": ["Subtle Hint 1", "Subtle Hint 2", "Subtle Hint 3"]
     }
@@ -600,32 +600,39 @@ Context:
 ${contextStr}
 ${evidenceStr}
 
-Core Responsibilities:
 1. Act as a collaborative partner. Answer the admin's questions about the location, architecture, history, or specific objects in the image.
-2. When suggesting descriptions (via "precontext"), make them informative but atmospheric. Describe the "vibe" and identifying features without being a dry list of facts.
-3. When suggesting hints, make them helpful but NOT obvious. They should guide the player's eyes or logical deduction rather than giving the answer away.
+2. When suggesting descriptions (via "precontext"), provide an "Atmospheric Snapshot". Avoid dry facts; focus on the vibe, lighting, and unique identifying features.
+3. When suggesting hints, make them helpful but NOT obvious. They should guide the player's deduction (e.g., "The architecture suggests a European influence") rather than giving the answer away.
+4. MANDATORY JSON: You MUST provide all actionable suggestions within JSON blocks. NEVER just list hints in plan text.
 
 ACTIONABLE OUTPUT (JSON FORMAT):
-When you want to explicitly suggest a hint or an evidence description that the admin can add with one click, include it in your response as a JSON block using this exact format:
+Use these JSON blocks ONLY. Conversational text should go outside the blocks.
 
-TO SUGGEST A HINT:
+TO SUGGEST MULTIPLE HINTS (The "Brackets"):
+\`\`\`json
+{
+  "action": "setHints",
+  "data": ["Subtle Hint 1", "Subtle Hint 2", "Subtle Hint 3"]
+}
+\`\`\`
+
+TO SUGGEST A SINGLE HINT:
 \`\`\`json
 {
   "action": "addHint",
-  "data": "The suggested hint text here"
+  "data": "The subtle hint text here"
 }
 \`\`\`
 
-TO SUGGEST AN EVIDENCE DESCRIPTION (if they have drawn a box):
+TO SUGGEST AN ATMOSPHERIC DESCRIPTION:
 \`\`\`json
 {
   "action": "addEvidenceDescription",
-  "data": "The suggested succinct description here"
+  "data": "The informative yet atmospheric description here"
 }
 \`\`\`
 
-You can output conversational text alongside these JSON blocks. The UI will parse the JSON blocks and turn them into interactive buttons for the admin.
-Keep your conversational responses helpful, insightful, and concise. Use Google Search to verify real-world facts if you are unsure.
+You can output conversational text alongside these JSON blocks. The UI will parse the JSON blocks and turn them into interactive "APPLY" buttons.
     `.trim();
 
     try {
