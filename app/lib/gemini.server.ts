@@ -117,7 +117,17 @@ async function callGeminiChatApi(
         });
     }
 
-    const contents = [...history, { role: "user", parts: latestUserParts }];
+    // Normalize history: frontend might send {role, content} or {role, text}
+    const normalizedHistory = history.map(h => {
+        if (h.parts) return h;
+        const text = h.content || h.text || "";
+        return {
+            role: h.role === "model" ? "model" : "user",
+            parts: [{ text }]
+        };
+    });
+
+    const contents = [...normalizedHistory, { role: "user", parts: latestUserParts }];
 
     const payload: any = {
         systemInstruction: {
@@ -313,12 +323,14 @@ export async function analyzeImageQuality(
        - Hint 2: Contextual (Mid-level, e.g. "The vegetation suggests a tropical climate, look for specific trees").
        - Hint 3: Specific (Direct clue but still playful, e.g. "A unique feature on the left wall holds the key").
     
-    Return a JSON object with:
-    - "quality_score": number
-    - "difficulty_rating": number
-    - "precontext": string
-    - "recommendation": string (e.g., "Ready for deployment" or "Too blurry")
-    - "generated_hints": string[] (Array of 3 suggestion strings)
+    Return a JSON object with this exact schema:
+    {
+      "quality_score": number,
+      "difficulty_rating": number,
+      "precontext": "string (The atmospheric description)",
+      "recommendation": "string (Ready for deployment or Too blurry)",
+      "generated_hints": ["hint 1", "hint 2", "hint 3"]
+    }
   `;
 
     try {

@@ -80,17 +80,19 @@ export default function MassAdd() {
             }
 
             const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
+            console.log("[MassAdd] AI Analysis response received", res.status);
             const contentType = res.headers.get("content-type");
             if (contentType && contentType.includes("application/json")) {
                 const data = (await res.json()) as { success: boolean, aiData?: any, error?: string };
+                console.log("[MassAdd] AI Data:", data);
                 if (data.success && data.aiData) {
                     setFiles((prev: any[]) => prev.map(f => {
                         if (f.id === fileId) {
                             return {
                                 ...f,
-                                description: data.aiData.precontext,
-                                difficulty: data.aiData.difficulty_rating,
-                                hints: data.aiData.generated_hints || ["", "", ""],
+                                description: data.aiData.precontext || data.aiData.description || "",
+                                difficulty: data.aiData.difficulty_rating || 5,
+                                hints: data.aiData.generated_hints || data.aiData.hints || ["", "", ""],
                                 status: f.lat ? 'reviewed' : 'needs_gps'
                             };
                         }
@@ -660,10 +662,51 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                 </div>
                             ) : (
                                 chatHistory.map((msg, i) => (
-                                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                         <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200 border border-gray-700'}`}>
-                                            <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                                            <p className="whitespace-pre-wrap text-sm">{msg.content.replace(/```json[\s\S]*?```/g, "").trim()}</p>
                                         </div>
+                                        {/* Parse actions from message */}
+                                        {msg.role === 'model' && msg.content.includes("```json") && (
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                {Array.from(msg.content.matchAll(/```json\s*([\s\S]*?)\s*```/g)).map((match: any, mIdx: number) => {
+                                                    try {
+                                                        const action = JSON.parse(match[1]);
+                                                        if (action.action === "addHint") {
+                                                            return (
+                                                                <button
+                                                                    key={mIdx}
+                                                                    onClick={() => setFiles((prev: any[]) => {
+                                                                        const cp = [...prev];
+                                                                        cp[editingId].hints = [...cp[editingId].hints, action.data];
+                                                                        return cp;
+                                                                    })}
+                                                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
+                                                                >
+                                                                    <span>+</span> APPLY HINT
+                                                                </button>
+                                                            );
+                                                        }
+                                                        if (action.action === "addEvidenceDescription") {
+                                                            return (
+                                                                <button
+                                                                    key={mIdx}
+                                                                    onClick={() => setFiles((prev: any[]) => {
+                                                                        const cp = [...prev];
+                                                                        cp[editingId].description = action.data;
+                                                                        return cp;
+                                                                    })}
+                                                                    className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-lg"
+                                                                >
+                                                                    <span>✓</span> APPLY TO DESCRIPTION
+                                                                </button>
+                                                            );
+                                                        }
+                                                    } catch (e) { return null; }
+                                                    return null;
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 ))
                             )}
