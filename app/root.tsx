@@ -72,6 +72,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Content Layer */}
         <div className="relative z-10 flex-grow flex flex-col">
           {children}
+          <footer className="relative z-20 py-8 mt-auto text-center border-t border-white/5 bg-black/40 backdrop-blur-md transition-colors duration-500 footer-glass">
+            <div className="flex justify-center gap-6 text-[10px] uppercase font-bold tracking-[0.2em] text-white/40 mb-2">
+              <a href="/privacy" className="hover:text-white transition-colors duration-300">Privacy Protocol</a>
+              <span className="text-white/20">/</span>
+              <a href="mailto:contact@geohunter.com" className="hover:text-white transition-colors duration-300">Support</a>
+            </div>
+            <div className="text-[9px] uppercase tracking-[0.3em] font-black text-white/20">
+              Engineered by <span className="text-white/40">Lucas Cheung</span>
+            </div>
+          </footer>
         </div>
 
         {/* Global Navigation Overlay (Fade to Black) */}
@@ -80,16 +90,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Theme Toggle (Fixed) */}
 
 
-        <footer className="relative z-20 py-8 mt-auto text-center border-t border-white/5 bg-black/40 backdrop-blur-md transition-colors duration-500 footer-glass">
-          <div className="flex justify-center gap-6 text-[10px] uppercase font-bold tracking-[0.2em] text-white/40 mb-2">
-            <a href="/privacy" className="hover:text-white transition-colors duration-300">Privacy Protocol</a>
-            <span className="text-white/20">/</span>
-            <a href="mailto:contact@geohunter.com" className="hover:text-white transition-colors duration-300">Support</a>
-          </div>
-          <div className="text-[9px] uppercase tracking-[0.3em] font-black text-white/20">
-            Engineered by <span className="text-white/40">Lucas Cheung</span>
-          </div>
-        </footer>
         <ScrollRestoration />
         <Scripts />
       </body>
