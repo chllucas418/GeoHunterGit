@@ -92,7 +92,9 @@ export default function MassAdd() {
                                 ...f,
                                 description: data.aiData.precontext || data.aiData.description || "",
                                 difficulty: data.aiData.difficulty_rating || 5,
-                                hints: data.aiData.generated_hints || data.aiData.hints || ["", "", ""],
+                                hints: Array.isArray(data.aiData.generated_hints) ? data.aiData.generated_hints :
+                                       Array.isArray(data.aiData.hints) ? data.aiData.hints : 
+                                       ["", "", ""],
                                 status: f.lat ? 'reviewed' : 'needs_gps'
                             };
                         }

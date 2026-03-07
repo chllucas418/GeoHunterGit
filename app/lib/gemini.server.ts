@@ -323,13 +323,20 @@ export async function analyzeImageQuality(
        - Hint 2: Contextual (Mid-level, e.g. "The vegetation suggests a tropical climate, look for specific trees").
        - Hint 3: Specific (Direct clue but still playful, e.g. "A unique feature on the left wall holds the key").
     
+    - Descriptive Strategy: Do NOT just list facts (e.g., "This is a red sign"). Instead, generate an informative yet atmospheric description that helps a player "feel" the location while looking for clues. Use architectural styles, lighting, or unique regional vibes.
+    - Hint Strategy: Generate three hints of increasing specificity.
+       - Hint 1: Vague/Atmospheric (e.g., "The architecture whispers of a colonial past").
+       - Hint 2: Regional/Environmental (e.g., "The flora suggests a high-altitude climate").
+       - Hint 3: Specific but subtle (e.g., "Look for the distinct font used on local signage").
+    - DO NOT make hints too obvious (like naming the city directly). Keep them helpful for someone looking at a map.
+    
     Return a JSON object with this exact schema:
     {
       "quality_score": number,
       "difficulty_rating": number,
-      "precontext": "string (The atmospheric description)",
-      "recommendation": "string (Ready for deployment or Too blurry)",
-      "generated_hints": ["hint 1", "hint 2", "hint 3"]
+      "precontext": "string (Informative yet atmospheric description)",
+      "recommendation": "string",
+      "generated_hints": ["Subtle Hint 1", "Subtle Hint 2", "Subtle Hint 3"]
     }
   `;
 
@@ -595,8 +602,8 @@ ${evidenceStr}
 
 Core Responsibilities:
 1. Act as a collaborative partner. Answer the admin's questions about the location, architecture, history, or specific objects in the image.
-2. If the admin asks for hints, you can suggest them.
-3. If the admin asks you to identify good evidence points, suggest them.
+2. When suggesting descriptions (via "precontext"), make them informative but atmospheric. Describe the "vibe" and identifying features without being a dry list of facts.
+3. When suggesting hints, make them helpful but NOT obvious. They should guide the player's eyes or logical deduction rather than giving the answer away.
 
 ACTIONABLE OUTPUT (JSON FORMAT):
 When you want to explicitly suggest a hint or an evidence description that the admin can add with one click, include it in your response as a JSON block using this exact format:
