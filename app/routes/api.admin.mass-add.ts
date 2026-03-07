@@ -63,7 +63,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         try {
             const aiResponse = await chatWithGemini(
-                "gemini-3-flash-preview", // modelName
+                "gemini-2.5-flash", // modelName
                 message,
                 history,
                 "", // contextUrl Not needed for directBase64

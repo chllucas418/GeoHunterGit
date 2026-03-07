@@ -1,16 +1,16 @@
-import { type ActionFunctionArgs, json } from "@remix-run/cloudflare";
+import type { ActionFunctionArgs } from "react-router";
 import { requireDeveloper } from "~/lib/auth.server";
 import { chatWithGemini } from "~/lib/gemini.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
     if (request.method !== "POST") {
-        return json({ error: "Method not allowed" }, { status: 405 });
+        return Response.json({ error: "Method not allowed" }, { status: 405 });
     }
 
     try {
         await requireDeveloper(request);
     } catch (e) {
-        return json({ error: "Unauthorized" }, { status: 401 });
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const env = context.cloudflare.env as any;
@@ -20,10 +20,10 @@ export async function action({ request, context }: ActionFunctionArgs) {
         const { modelName, message, history, base64Image, location, evidenceList } = body;
 
         if (!message) {
-            return json({ error: "Message is required" }, { status: 400 });
+            return Response.json({ error: "Message is required" }, { status: 400 });
         }
 
-        const model = modelName || "gemini-3.0-flash"; // Default to flash
+        const model = modelName || "gemini-2.5-flash"; // Default to flash
 
         const responseText = await chatWithGemini(
             model,
@@ -38,9 +38,9 @@ export async function action({ request, context }: ActionFunctionArgs) {
             base64Image
         );
 
-        return json({ text: responseText });
+        return Response.json({ text: responseText });
     } catch (e: any) {
         console.error("Chat API Error:", e);
-        return json({ error: e.message || "Failed to process chat request" }, { status: 500 });
+        return Response.json({ error: e.message || "Failed to process chat request" }, { status: 500 });
     }
 }

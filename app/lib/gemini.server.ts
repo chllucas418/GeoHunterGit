@@ -16,7 +16,9 @@ async function callGeminiApi(
     imageData: { mimeType: string; data: string },
     baseUrl: string,
     gatewayToken: string,
-    apiKey?: string
+    apiKey?: string,
+    responseMimeType?: string,
+    useGrounding?: boolean
 ) {
     if (!baseUrl) {
         throw new Error("GEMINI_BASE_URL is not set. Cannot call Gemini API.");
@@ -39,7 +41,7 @@ async function callGeminiApi(
         headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
     }
 
-    const payload = {
+    const payload: any = {
         contents: [{
             parts: [
                 { text: prompt },
@@ -52,6 +54,14 @@ async function callGeminiApi(
             ]
         }]
     };
+
+    if (responseMimeType) {
+        payload.generationConfig = { responseMimeType };
+    }
+    
+    if (useGrounding) {
+        payload.tools = [{ googleMaps: {} }];
+    }
 
     const response = await fetch(url, {
         method: "POST",
@@ -109,13 +119,13 @@ async function callGeminiChatApi(
 
     const contents = [...history, { role: "user", parts: latestUserParts }];
 
-    const payload = {
+    const payload: any = {
         systemInstruction: {
             parts: [{ text: systemInstruction }]
         },
         contents: contents,
         tools: [
-            { googleSearch: {} }
+            { googleMaps: {} }
         ]
     };
 
@@ -218,25 +228,29 @@ export async function checkEvidenceListWithGemini(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
             gatewayToken,
-            apiKey
+            apiKey,
+            "application/json",
+            true
         );
 
-        let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-
         try {
+            const parsed = JSON.parse(responseText.trim());
+            if (!parsed.results) parsed.results = [];
+            return parsed;
+        } catch (e) {
+            console.error("JSON Parse Error:", e);
+            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
             const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
                 if (!parsed.results) parsed.results = [];
                 return parsed;
             }
-        } catch (e) {
-            console.error("JSON Parse Error:", e);
         }
 
         return { results: [], summary_explanation: "AI feedback unavailable." };
@@ -309,18 +323,25 @@ export async function analyzeImageQuality(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
             gatewayToken,
-            apiKey
+            apiKey,
+            "application/json",
+            true
         );
 
-        const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
+        try {
+            return JSON.parse(responseText.trim());
+        } catch (e) {
+            console.error("JSON Parse Fallback Error:", e);
+            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
         }
         return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually", generated_hints: [] };
 
@@ -368,12 +389,14 @@ export async function generateEvidenceDescription(
 
     try {
         const description = await callGeminiApi(
-            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
             gatewayToken,
-            apiKey
+            apiKey,
+            undefined,
+            true
         );
         return description.trim();
     } catch (e: any) {
@@ -420,19 +443,26 @@ export async function batchAnalyzeOfficialEvidence(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
             gatewayToken,
-            apiKey
+            apiKey,
+            "application/json",
+            true
         );
 
-        const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
+        try {
+            const parsed = JSON.parse(responseText.trim());
             return parsed.results || [];
+        } catch (e) {
+            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                return parsed.results || [];
+            }
         }
         return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: Invalid JSON response` }));
     } catch (e: any) {
@@ -492,12 +522,14 @@ export async function generateSocraticHint(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3-flash-preview",
+            "gemini-2.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
             gatewayToken,
-            apiKey
+            apiKey,
+            undefined,
+            true
         );
         return responseText.trim();
     } catch (e: any) {

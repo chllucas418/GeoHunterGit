@@ -207,7 +207,7 @@ export default function AddLocation() {
     const [chatHistory, setChatHistory] = useState<{role: string, text: string, isAction?: boolean, actionType?: string, actionData?: string}[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [isChatting, setIsChatting] = useState(false);
-    const [chatModel, setChatModel] = useState("gemini-3-flash-preview");
+    const [chatModel, setChatModel] = useState("gemini-2.5-flash");
     const chatScrollRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll chat
@@ -789,10 +789,9 @@ export default function AddLocation() {
                                     value={chatModel}
                                     onChange={(e) => setChatModel(e.target.value)}
                                 >
-                                    <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-                                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                                     <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                                 </select>
                             </div>
 
