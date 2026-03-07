@@ -6,10 +6,11 @@ interface EvidenceCanvasProps {
     onBoxChange: (box: BoxCoordinates | null) => void;
     disabled?: boolean;
     hasDrawnBoxes?: boolean;
+    guidedBox?: BoxCoordinates | null;
     children?: ReactNode;
 }
 
-export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDrawnBoxes = false, children }: EvidenceCanvasProps) {
+export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDrawnBoxes = false, guidedBox = null, children }: EvidenceCanvasProps) {
     const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
     const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number } | null>(null);
 
@@ -189,6 +190,23 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
 
                 {/* Result/Overlay Content (Anchored to this container) */}
                 {children}
+
+                {/* Guided Box Overlay */}
+                {!hasDrawnBoxes && guidedBox && (
+                    <div
+                        className="absolute border-2 border-dashed border-yellow-400 animate-pulse pointer-events-none z-40 bg-yellow-400/10"
+                        style={{
+                            left: `${guidedBox.x / 10}%`,
+                            top: `${guidedBox.y / 10}%`,
+                            width: `${guidedBox.w / 10}%`,
+                            height: `${guidedBox.h / 10}%`
+                        }}
+                    >
+                        <div className="absolute -top-6 left-0 text-[10px] font-black uppercase tracking-widest text-yellow-400 bg-black/60 px-2 py-0.5 rounded">
+                            Draw Here
+                        </div>
+                    </div>
+                )}
 
                 {/* Instruction Overlay */}
                 {!drawRect && !isDrawing && !disabled && !hasDrawnBoxes && (

@@ -15,21 +15,29 @@ async function callGeminiApi(
     prompt: string,
     imageData: { mimeType: string; data: string },
     baseUrl: string,
-    gatewayToken: string
+    gatewayToken: string,
+    apiKey?: string
 ) {
-    if (!baseUrl || !gatewayToken) {
-        throw new Error("Cloudflare AI Gateway configuration missing. Ensure baseUrl and gatewayToken are provided.");
+    if (!baseUrl) {
+        throw new Error("GEMINI_BASE_URL is not set. Cannot call Gemini API.");
     }
 
     // Ensure the base URL does not end with a slash
     const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-    // URL format: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/google-ai-studio/v1beta/models/{modelName}:generateContent
-    const url = `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent`;
+    // If apiKey provided, append ?key= (direct auth). Otherwise rely on BYOK configured in AI Gateway dashboard.
+    const url = apiKey
+        ? `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`
+        : `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent`;
+
+    console.log(`[Gemini] Calling: ${cleanBaseUrl}/v1beta/models/${modelName}:generateContent (BYOK: ${!apiKey})`);
 
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "cf-aig-authorization": `Bearer ${gatewayToken}`
     };
+    // Add gateway auth if token is provided (authenticates to Cloudflare AI Gateway)
+    if (gatewayToken) {
+        headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
+    }
 
     const payload = {
         contents: [{
@@ -59,6 +67,77 @@ async function callGeminiApi(
     return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
+// Helper for raw fetch to Gemini API with chat history and tools
+async function callGeminiChatApi(
+    modelName: string,
+    systemInstruction: string,
+    history: any[], // { role, parts: [{text}] }
+    newMessage: string,
+    imageData: { mimeType: string; data: string } | null,
+    baseUrl: string,
+    gatewayToken: string,
+    apiKey?: string
+) {
+    if (!baseUrl) {
+        throw new Error("GEMINI_BASE_URL is not set. Cannot call Gemini API.");
+    }
+
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const url = apiKey
+        ? `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`
+        : `${cleanBaseUrl}/v1beta/models/${modelName}:generateContent`;
+
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    if (gatewayToken) {
+        headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
+    }
+
+    // Construct the new message part
+    const latestUserParts: any[] = [{ text: newMessage }];
+    
+    // Inject image into the latest message if provided
+    if (imageData) {
+        latestUserParts.push({
+            inlineData: {
+                mimeType: imageData.mimeType,
+                data: imageData.data
+            }
+        });
+    }
+
+    const contents = [...history, { role: "user", parts: latestUserParts }];
+
+    const payload = {
+        systemInstruction: {
+            parts: [{ text: systemInstruction }]
+        },
+        contents: contents,
+        tools: [
+            { googleSearch: {} }
+        ]
+    };
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        throw new Error(`Cloudflare AI Gateway Chat Error: ${response.status} ${response.statusText} - ${await response.text()}`);
+    }
+
+    const data = await response.json() as any;
+    // Return both the text and the full candidate (to capture groundingMetadata if needed)
+    const candidate = data?.candidates?.[0];
+    return {
+        text: candidate?.content?.parts?.[0]?.text || "",
+        candidate: candidate
+    };
+}
+
 export async function checkEvidenceListWithGemini(
     imageUrl: string,
     evidenceList: { box: { x: number; y: number; w: number; h: number }; description?: string }[],
@@ -66,6 +145,7 @@ export async function checkEvidenceListWithGemini(
     adminEvidence: any[] = [],
     baseUrl: string,
     gatewayToken: string,
+    apiKey: string,
     directBase64?: string
 ) {
     let base64Data = "";
@@ -112,12 +192,13 @@ export async function checkEvidenceListWithGemini(
        - Explanation: "Correctly identified [Official Clue Name]."
        - If the box is nearby but misses the actual feature visually (e.g. empty wall next to sign), validity = 0.2.
     3. If the user found a legitimate clue that is NOT in the Ground Truth (a "Novel Discovery"):
-       - **STRICT CRITERIA:** Only accept if it is **legible text** (shop sign, street name) or a **highly unique landmark** (statue, distinct mural).
+       - **STRICT CRITERIA:** Only accept if it is **legible text** (shop sign, street name) or a **highly unique landmark** (statue, distinct mural, architectural oddity).
        - **REJECT** generic features like "red wall", "pavement", "tree", "sky", "building corner" with LOW validity (0.1).
-       - If Valid: HIGH (0.7-0.9).
+       - If Valid: HIGH (0.7-0.95). 
+       - **PROMOTION SIGNAL:** If validity is >= 0.9, it means the discovery is "Ground Truth Quality" (accurate, well-framed, and unique). 
        - Matched Index: -1.
-       - Description: Describe specifically what it is.
-       - Explanation: "Good eye! You spotted [Feature] which wasn't in our database."
+       - Description: Provide a concise (max 10 words) official-sounding name for this feature (e.g. "St. Paul's Secondary School Signage").
+       - Explanation: "Excellent discovery! You found [Feature], a high-confidence landmark we'll add to our records."
     4. If invalid/random/empty/generic:
        - Valid: LOW (0.0 - 0.1).
        - Matched Index: -1.
@@ -141,7 +222,8 @@ export async function checkEvidenceListWithGemini(
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
-            gatewayToken
+            gatewayToken,
+            apiKey
         );
 
         let cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -169,6 +251,7 @@ export async function analyzeImageQuality(
     imageUrl: string,
     baseUrl: string,
     gatewayToken: string,
+    apiKey: string,
     context?: {
         lat?: number;
         lng?: number;
@@ -221,7 +304,8 @@ export async function analyzeImageQuality(
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
-            gatewayToken
+            gatewayToken,
+            apiKey
         );
 
         const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -242,6 +326,7 @@ export async function generateEvidenceDescription(
     evidenceBox: { x: number; y: number; w: number; h: number },
     baseUrl: string,
     gatewayToken: string,
+    apiKey: string,
     directBase64?: string
 ) {
     let base64Data = "";
@@ -278,7 +363,8 @@ export async function generateEvidenceDescription(
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
-            gatewayToken
+            gatewayToken,
+            apiKey
         );
         return description.trim();
     } catch (e: any) {
@@ -291,7 +377,8 @@ export async function batchAnalyzeOfficialEvidence(
     imageUrl: string,
     items: { id: string; box: any; description: string }[],
     baseUrl: string,
-    gatewayToken: string
+    gatewayToken: string,
+    apiKey: string
 ) {
     const response = await fetch(imageUrl);
     if (!response.ok) throw new Error("Failed to fetch image");
@@ -328,7 +415,8 @@ export async function batchAnalyzeOfficialEvidence(
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
-            gatewayToken
+            gatewayToken,
+            apiKey
         );
 
         const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -351,6 +439,7 @@ export async function generateSocraticHint(
     curriculumFocus: string,
     baseUrl: string,
     gatewayToken: string,
+    apiKey: string,
     directBase64?: string
 ) {
     let base64Data = "";
@@ -398,11 +487,101 @@ export async function generateSocraticHint(
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
-            gatewayToken
+            gatewayToken,
+            apiKey
         );
         return responseText.trim();
     } catch (e: any) {
         console.error("Socratic Hint Error via Gateway:", e);
         return "Warning: Info-Link degraded. Check the architectural style again.";
+    }
+}
+
+export async function chatWithGemini(
+    modelName: string,
+    message: string,
+    history: any[],
+    contextUrl: string,
+    locationData: { lat: number; lng: number } | null,
+    evidenceList: any[],
+    baseUrl: string,
+    gatewayToken: string,
+    apiKey: string,
+    directBase64?: string
+) {
+    let base64Data = "";
+    let mimeType = "image/jpeg";
+    let imageData = null;
+
+    if (directBase64) {
+        if (directBase64.startsWith("data:")) {
+            const parts = directBase64.split(",");
+            mimeType = parts[0].split(":")[1].split(";")[0];
+            base64Data = parts[1];
+        } else {
+            base64Data = directBase64;
+        }
+        imageData = { mimeType, data: base64Data };
+    }
+
+    const contextStr = locationData 
+        ? `Location Coordinates: ${locationData.lat}, ${locationData.lng}\n` 
+        : "";
+        
+    const evidenceStr = evidenceList && evidenceList.length > 0
+        ? `Currently Marked Evidence:\n${JSON.stringify(evidenceList, null, 2)}\n`
+        : "No evidence marked yet.\n";
+
+    const systemInstruction = `
+You are a highly capable AI assistant specifically designed to help the Admin/Teacher create official "Map Evidence" and "Hints" for a geography identification game called GeoHunter.
+You have access to Google Search to look up real-world locations based on the provided coordinates or image.
+
+Context:
+${contextStr}
+${evidenceStr}
+
+Core Responsibilities:
+1. Act as a collaborative partner. Answer the admin's questions about the location, architecture, history, or specific objects in the image.
+2. If the admin asks for hints, you can suggest them.
+3. If the admin asks you to identify good evidence points, suggest them.
+
+ACTIONABLE OUTPUT (JSON FORMAT):
+When you want to explicitly suggest a hint or an evidence description that the admin can add with one click, include it in your response as a JSON block using this exact format:
+
+TO SUGGEST A HINT:
+\`\`\`json
+{
+  "action": "addHint",
+  "data": "The suggested hint text here"
+}
+\`\`\`
+
+TO SUGGEST AN EVIDENCE DESCRIPTION (if they have drawn a box):
+\`\`\`json
+{
+  "action": "addEvidenceDescription",
+  "data": "The suggested succinct description here"
+}
+\`\`\`
+
+You can output conversational text alongside these JSON blocks. The UI will parse the JSON blocks and turn them into interactive buttons for the admin.
+Keep your conversational responses helpful, insightful, and concise. Use Google Search to verify real-world facts if you are unsure.
+    `.trim();
+
+    try {
+        const response = await callGeminiChatApi(
+            modelName,
+            systemInstruction,
+            history,
+            message,
+            imageData,
+            baseUrl,
+            gatewayToken,
+            apiKey
+        );
+        return response.text;
+    } catch (e: any) {
+        console.error("AI Chat Error:", e);
+        throw new Error(`Chat failed: ${e.message}`);
     }
 }

@@ -46,7 +46,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
             imageUrl,
             items,
             env.GEMINI_BASE_URL,
-            env.GEMINI_GATEWAY_TOKEN
+            env.GEMINI_GATEWAY_TOKEN,
+            env.GEMINI_API_KEY
         );
 
         logs.push(`[${new Date().toISOString()}] Analysis Complete.`);

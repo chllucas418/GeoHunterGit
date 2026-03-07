@@ -48,7 +48,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             query,
             room.curriculum_focus || "None",
             env.GEMINI_BASE_URL,
-            env.GEMINI_GATEWAY_TOKEN
+            env.GEMINI_GATEWAY_TOKEN,
+            env.GEMINI_API_KEY
         );
 
         return Response.json({ success: true, hint });

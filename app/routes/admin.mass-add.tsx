@@ -24,6 +24,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 dataUri,
                 env.GEMINI_BASE_URL,
                 env.GEMINI_GATEWAY_TOKEN,
+                env.GEMINI_API_KEY,
                 undefined
             );
             return Response.json({ success: true, aiData });
@@ -69,8 +70,24 @@ export async function action({ request, context }: ActionFunctionArgs) {
             publicUrl,
             metadata.photographer,
             metadata.quality_score || 80,
-            JSON.stringify(metadata.evidence || [])
+            JSON.stringify(metadata.evidence || []),
+            1
         ).run();
+
+        // [FIX] Also insert into the map_evidence table so the game logic can find it!
+        if (metadata.evidence && metadata.evidence.length > 0) {
+            const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
+            const batch = metadata.evidence.map((ev: any) => 
+                stmt.bind(
+                    `ev_${Math.random().toString(36).substring(2, 9)}`,
+                    locationId,
+                    JSON.stringify(ev.box),
+                    ev.description,
+                    "Real-time analysis active."
+                )
+            );
+            await db.batch(batch);
+        }
 
         // Add to Dataset if selected
         if (metadata.addToSet) {
@@ -234,7 +251,10 @@ export default function MassAdd() {
         });
     };
 
-    const { getRootProps, getInputProps } = useDropzone({ onDrop, accept: { 'image/*': [] } });
+    const { getRootProps, getInputProps } = useDropzone({ 
+        onDrop, 
+        accept: { 'image/*': [] } 
+    } as any);
 
 
     const removeFile = (index: number) => {
@@ -409,7 +429,7 @@ export default function MassAdd() {
                                         mapContainerClassName="w-full h-56 rounded-xl border border-gray-700"
                                         center={item.lat ? { lat: item.lat, lng: item.lng } : { lat: 22.3193, lng: 114.1694 }}
                                         zoom={item.lat ? 16 : 11}
-                                        onLoad={map => {
+                                        onLoad={(map: google.maps.Map) => {
                                             itemsMapRef.current = map;
                                             // Initialize Autocomplete
                                             if (searchInputRef.current && window.google) {
@@ -438,7 +458,7 @@ export default function MassAdd() {
                                                 });
                                             }
                                         }}
-                                        onClick={(e) => {
+                                        onClick={(e: google.maps.MapMouseEvent) => {
                                             if (e.latLng) {
                                                 setFiles(prev => {
                                                     const cp = [...prev];
@@ -585,7 +605,7 @@ export default function MassAdd() {
             <h1 className="text-2xl font-bold mb-6">Mass Add Locations</h1>
 
             <div {...getRootProps()} className="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center hover:border-emerald-500 transition-colors cursor-pointer bg-gray-900/50">
-                <input {...getInputProps()} />
+                <input {...(getInputProps() as any)} />
                 <p className="text-gray-400">Drag & drop files here, or click to select files</p>
                 <p className="text-sm text-gray-500 mt-2">Supports JPG, PNG with EXIF awareness</p>
             </div>

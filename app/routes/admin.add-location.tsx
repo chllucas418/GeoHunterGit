@@ -51,6 +51,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
                 imageUrl,
                 env.GEMINI_BASE_URL,
                 env.GEMINI_GATEWAY_TOKEN,
+                env.GEMINI_API_KEY,
                 contextData
             );
             return { analysis };
@@ -123,28 +124,12 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
             const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
 
-            // Process sequentially to manage API load
-            const processedEvidence = await Promise.all(evidenceList.map(async (ev: any) => {
-                let analysis = "Pending analysis...";
-                try {
-                    const { generateEvidenceDescription } = await import("~/lib/gemini.server");
-
-                    // Check if we have a base64 image (fresh upload) or URL (update)
-                    const isBase64 = imageUrl.startsWith("data:");
-
-                    analysis = await generateEvidenceDescription(
-                        isBase64 ? "" : imageUrl, // URL ignored if base64 provided
-                        ev.box,
-                        env.GEMINI_BASE_URL,
-                        env.GEMINI_GATEWAY_TOKEN,
-                        isBase64 ? imageUrl : undefined // Pass base64 directly
-                    );
-                } catch (e) {
-                    console.error("AI Gen Error", e);
-                    analysis = "Analysis unavailable.";
-                }
-                return { ...ev, analysis };
-            }));
+            // Process sequentially
+            const processedEvidence = evidenceList.map((ev: any) => {
+                // [BYOK/REAL-TIME] We no longer generate or store AI analysis in the DB at this stage.
+                // Analysis is generated in real-time when viewed.
+                return { ...ev, analysis: "Real-time analysis active." };
+            });
 
             const batch = processedEvidence.map((ev: any) =>
                 stmt.bind(
@@ -217,6 +202,98 @@ export default function AddLocation() {
     const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null);
     const [showDescModal, setShowDescModal] = useState(false);
     const [tempDesc, setTempDesc] = useState("");
+
+    // --- AI Chat Agent State ---
+    const [chatHistory, setChatHistory] = useState<{role: string, text: string, isAction?: boolean, actionType?: string, actionData?: string}[]>([]);
+    const [chatInput, setChatInput] = useState("");
+    const [isChatting, setIsChatting] = useState(false);
+    const [chatModel, setChatModel] = useState("gemini-3-flash-preview");
+    const chatScrollRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll chat
+    useEffect(() => {
+        if (chatScrollRef.current) {
+            chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+    }, [chatHistory, isChatting]);
+
+    const handleChatSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!chatInput.trim() || isChatting) return;
+
+        const userMsg = chatInput.trim();
+        setChatInput("");
+        setChatHistory(prev => [...prev, { role: "user", text: userMsg }]);
+        setIsChatting(true);
+
+        try {
+            const formattedHistory = chatHistory.map(msg => ({
+                role: msg.role === "user" ? "user" : "model",
+                parts: [{ text: msg.text }]
+            }));
+
+            const res = await fetch("/api/admin/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    modelName: chatModel,
+                    message: userMsg,
+                    history: formattedHistory,
+                    base64Image: base64,
+                    location: marker,
+                    evidenceList: evidenceList
+                })
+            });
+
+            const data = await res.json() as any;
+            if (data.error) throw new Error(data.error);
+
+            let responseText = data.text;
+            let actionType = undefined;
+            let actionData = undefined;
+
+            try {
+                const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[1]);
+                    if (parsed.action && parsed.data) {
+                        actionType = parsed.action;
+                        actionData = parsed.data;
+                        responseText = responseText.replace(jsonMatch[0], "").trim();
+                    }
+                }
+            } catch (err) {
+                console.error("Parse JSON action err:", err);
+            }
+
+            setChatHistory(prev => [...prev, { 
+                role: "model", 
+                text: responseText || (actionType ? "[Action Generated]" : "Done."), 
+                isAction: !!actionType,
+                actionType,
+                actionData
+            }]);
+        } catch (error: any) {
+            console.error(error);
+            setChatHistory(prev => [...prev, { role: "model", text: `Error: ${error.message}` }]);
+        } finally {
+            setIsChatting(false);
+        }
+    };
+
+    const acceptChatAction = (type?: string, data?: string) => {
+        if (!type || !data) return;
+        if (type === "addHint") {
+            setHintsList(prev => [...prev, data]);
+            alert("Hint added to the list!");
+        } else if (type === "addEvidenceDescription") {
+            setTempDesc(data);
+            if (!currentBox && !showDescModal) {
+                alert("Copied directly into description input, but draw a box first to save it!");
+            }
+        }
+    };
+    // ---------------------------
 
     // Sync status with AI
     useEffect(() => {
@@ -394,7 +471,7 @@ export default function AddLocation() {
                     </div>
                 </header>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className={`grid grid-cols-1 ${evidenceStep ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-8`}>
                     {!evidenceStep ? (
                         <Form method="post" className="space-y-6 bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-xl">
                             <input type="hidden" name="base64Image" value={base64} />
@@ -690,6 +767,94 @@ export default function AddLocation() {
                                         <p className="text-sm text-slate-300 leading-tight">{ev.description}</p>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* AI Chat Agent UI */}
+                    {evidenceStep && (
+                        <div className="lg:col-span-1 bg-slate-900 rounded-3xl border border-slate-800 flex flex-col h-[600px] shadow-xl overflow-hidden relative">
+                            <div className="p-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                                    <h3 className="font-bold text-sm">AI Copilot</h3>
+                                </div>
+                                <select 
+                                    className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 outline-none"
+                                    value={chatModel}
+                                    onChange={(e) => setChatModel(e.target.value)}
+                                >
+                                    <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                                    <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
+                                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                </select>
+                            </div>
+
+                            <div 
+                                ref={chatScrollRef}
+                                className="flex-1 overflow-y-auto p-4 space-y-4"
+                            >
+                                {chatHistory.length === 0 && (
+                                    <div className="text-center text-slate-500 text-xs mt-10 space-y-2">
+                                        <p>✨ Ready to assist with coordinates and visual analysis.</p>
+                                        <p>Try asking: <i>"Give me 3 hints for this place"</i> or <i>"What is visually unique here?"</i></p>
+                                    </div>
+                                )}
+                                {chatHistory.map((msg, idx) => (
+                                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[85%] rounded-2xl p-3 text-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'}`}>
+                                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                                            
+                                            {msg.isAction && msg.actionType && (
+                                                <div className="mt-3 bg-slate-900 border border-slate-700 rounded-xl p-3">
+                                                    <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">Generated Suggestion:</span>
+                                                    <p className="text-xs text-slate-300 italic mb-2">"{msg.actionData}"</p>
+                                                    <button 
+                                                        onClick={() => acceptChatAction(msg.actionType, msg.actionData)}
+                                                        className="w-full py-1.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-bold transition-colors"
+                                                    >
+                                                        {msg.actionType === 'addHint' ? 'Add to Hints' : 'Use Description'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                                {isChatting && (
+                                    <div className="flex justify-start">
+                                        <div className="bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-none p-3 px-4">
+                                            <div className="flex gap-1 items-center">
+                                                <div className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" />
+                                                <div className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                <div className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="p-3 bg-slate-800/50 border-t border-slate-800">
+                                <form 
+                                    onSubmit={handleChatSubmit}
+                                    className="flex gap-2"
+                                >
+                                    <input 
+                                        type="text"
+                                        value={chatInput}
+                                        onChange={(e) => setChatInput(e.target.value)}
+                                        placeholder="Ask for hints, details..."
+                                        className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm outline-none w-full focus:border-blue-500"
+                                        disabled={isChatting}
+                                    />
+                                    <button 
+                                        type="submit"
+                                        disabled={isChatting || !chatInput.trim()}
+                                        className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-xl px-3 flex items-center justify-center transition-colors"
+                                    >
+                                        ➤
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     )}

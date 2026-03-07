@@ -79,7 +79,7 @@ export async function loader({ request, params, context }: any) {
                     db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(defaultSim.id).all<any>()
                 ]);
                 let evidence: any[] = [];
-                if (room.status === 'REVIEW') evidence = allEvidence.results || [];
+                if (room.status === 'REVIEW' || isGuidedRound) evidence = allEvidence.results || [];
                 const evidenceCount = allEvidence.results?.length || 0;
                 currentRound = {
                     index: room.current_index,
@@ -163,6 +163,17 @@ export default function StudentLiveGame() {
 
     // Parse Metadata & Hints when location changes
     const hintList = location?.hints ? (typeof location.hints === 'string' ? (location.hints.startsWith('[') ? JSON.parse(location.hints) : location.hints.split('\n')) : location.hints) : [];
+
+    let guidedBoxObj = null;
+    if (currentRound?.isGuidedRound && tutorialStep === 2 && currentRound?.evidence?.[0]?.bounding_box) {
+        try {
+            guidedBoxObj = typeof currentRound.evidence[0].bounding_box === 'string' 
+                ? JSON.parse(currentRound.evidence[0].bounding_box) 
+                : currentRound.evidence[0].bounding_box;
+        } catch (e) {
+            console.error("Failed to parse guidedBox", e);
+        }
+    }
 
     // Initialize state from existingGuess if available
     useEffect(() => {
@@ -912,10 +923,29 @@ export default function StudentLiveGame() {
                 {/* Mode Toggle */}
                 {!submitted && (
                     <div className="absolute top-4 right-4 md:top-6 md:right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
-                        <button onClick={() => setIsEvidenceMode(!isEvidenceMode)} className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'}`}>
+                        <button onClick={() => setIsEvidenceMode(!isEvidenceMode)} className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'} ${currentRound?.isGuidedRound && tutorialStep === 2 && !isEvidenceMode ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}>
                             {isEvidenceMode ? "Scanner Active" : "Enable Scanner"}
                         </button>
+                        
+                        {/* [UI] Official Evidence Count & Motivation */}
+                        {currentRound?.evidenceCount !== undefined && (
+                            <div className="flex flex-col items-end gap-1 animate-in slide-in-from-right-10">
+                                <div className="px-3 py-1 bg-black/60 backdrop-blur-md border border-white/20 rounded-lg shadow-xl flex items-center gap-2">
+                                    <span className="text-[10px] font-black text-white/90 uppercase tracking-tighter">
+                                        TARGETS: <span className="text-yellow-400">{currentRound.evidenceCount}</span> OFFICIAL CLUES
+                                    </span>
+                                </div>
+                                <div className="text-[9px] font-bold text-blue-300 uppercase tracking-widest bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
+                                    Extra marks for novel discoveries! 🗃️
+                                </div>
+                            </div>
+                        )}
                     </div>
+                )}
+
+                {/* Tutorial Column 1 Blur Overlay */}
+                {!submitted && currentRound?.isGuidedRound && (tutorialStep === 1 || tutorialStep === 3 || tutorialStep === 4) && (
+                    <div className="absolute inset-0 z-[65] bg-black/60 backdrop-blur-md transition-all duration-500" />
                 )}
 
                 {/* Canvas */}
@@ -927,81 +957,115 @@ export default function StudentLiveGame() {
                             onBoxChange={isEvidenceMode ? handleBoxDrawn : () => { }}
                             disabled={submitted || !isEvidenceMode}
                             hasDrawnBoxes={evidenceList.length > 0}
+                            guidedBox={guidedBoxObj}
                         >
                             {/* User Evidence */}
                             {evidenceList.map((ev, index) => {
-                                // Default color: Yellow (Guessing phase)
-                                let borderColorClass = "border-yellow-400";
-                                let bgColorClass = "bg-yellow-400/20";
+                                // Review phase color coding using AI feedback:
+                                // Yellow = student choice (base)
+                                // Green = Valid match
+                                // Red = Invalid match (attempted but wrong)
+                                // Blue = No match / Novel discovery
+                                let borderColorClass = "border-transparent";
+                                let bgColorClass = "bg-transparent";
 
-                                // Review phase: dynamically color based on AI Validity
-                                if (room.status === 'REVIEW' && result?.aiFeedback?.results) {
-                                    const grading = result.aiFeedback.results.find((r: any) => r.index === index);
-                                    if (grading) {
-                                        if (grading.validity > 0.7) {
-                                            // Correct
+                                if (room.status === 'REVIEW') {
+                                    const aiResults = result?.aiFeedback?.results || [];
+                                    const aiResult = aiResults.find((r: any) => r.index === index);
+                                    
+                                    if (aiResult) {
+                                        const hasMatch = typeof aiResult.matched_admin_index === 'number' && aiResult.matched_admin_index >= 0;
+                                        if (hasMatch) {
+                                            if (aiResult.validity >= 0.7) {
+                                                borderColorClass = "border-green-400";
+                                                bgColorClass = "bg-green-400/30";
+                                            } else {
+                                                borderColorClass = "border-red-500";
+                                                bgColorClass = "bg-red-500/30";
+                                            }
+                                        } else {
+                                            // Novel Discovery or Generic
+                                            borderColorClass = "border-blue-500";
+                                            bgColorClass = "bg-blue-500/30";
+                                        }
+                                    } else {
+                                        // Fallback to spatial check if AI result missing for this index
+                                        const officialList = result?.officialEvidence || currentRound?.evidence || [];
+                                        const studentBox = ev.box;
+                                        const overlapsOfficial = officialList.some((oe: any) => {
+                                            let oBox;
+                                            try { oBox = typeof oe.bounding_box === 'string' ? JSON.parse(oe.bounding_box) : oe.bounding_box; } catch { return false; }
+                                            if (!oBox) return false;
+                                            const ax1 = studentBox.x, ay1 = studentBox.y, ax2 = studentBox.x + studentBox.w, ay2 = studentBox.y + studentBox.h;
+                                            const bx1 = oBox.x, by1 = oBox.y, bx2 = oBox.x + oBox.w, by2 = oBox.y + oBox.h;
+                                            const ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1);
+                                            const ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
+                                            const iw = Math.max(0, ix2 - ix1), ih = Math.max(0, iy2 - iy1);
+                                            const intersection = iw * ih;
+                                            const areaB = oBox.w * oBox.h;
+                                            return (intersection / areaB) >= 0.3;
+                                        });
+
+                                        if (overlapsOfficial) {
                                             borderColorClass = "border-green-400";
                                             bgColorClass = "bg-green-400/20";
-                                        } else if (grading.validity <= 0.1) {
-                                            // Did not help locating effort (Generic/Sky/Wall)
+                                        } else {
                                             borderColorClass = "border-blue-500";
                                             bgColorClass = "bg-blue-500/20";
-                                        } else {
-                                            // Incorrect / Missed actual feature
-                                            borderColorClass = "border-red-500";
-                                            bgColorClass = "bg-red-500/20";
                                         }
                                     }
                                 }
 
                                 return (
-                                    <div key={ev.id} className={`absolute border-2 ${borderColorClass} ${bgColorClass} transition-colors duration-500`}
+                                    <div key={ev.id} className="absolute transition-all duration-500"
                                         style={{ left: `${ev.box.x / 10}%`, top: `${ev.box.y / 10}%`, width: `${ev.box.w / 10}%`, height: `${ev.box.h / 10}%` }}
                                     >
+                                        {/* BASE YELLOW BOX (Student's choice) */}
+                                        <div className="absolute inset-0 border-2 border-yellow-400/50 bg-yellow-400/10" />
+                                        
+                                        {/* OVERLAP RESULT BOX */}
+                                        <div className={`absolute inset-0 border-2 ${borderColorClass} ${bgColorClass} transition-colors duration-700`} />
+
                                         {!submitted && (
-                                            <button onClick={(e) => { e.stopPropagation(); setEvidenceList(prev => prev.filter(i => i.id !== ev.id)); }} className="bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs absolute -top-2 -right-2 rounded-full">✕</button>
+                                            <button onClick={(e) => { e.stopPropagation(); setEvidenceList(prev => prev.filter(i => i.id !== ev.id)); }} className="bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs absolute -top-2 -right-2 rounded-full z-[100]">✕</button>
                                         )}
                                     </div>
                                 );
                             })}
 
-                            {/* Official Evidence - Only in Review */}
+                            {/* Official Evidence - Only in Review (Shows found/not found) */}
                             {room.status === 'REVIEW' && (result?.officialEvidence || currentRound?.evidence)?.map((ev: any) => {
                                 let box;
                                 try { box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box; } catch (e) { return null; }
                                 if (!box) return null;
 
-                                // Check if user found this evidence
-                                // result.evidenceFound is usually an array of IDs of OFFICIAL evidence found.
-                                // Or check result.userEvidence? 
-                                // Submit API saves "evidence_found" as list of IDs.
-                                // round_result returns "evidenceFound" (parsed).
-                                const isFound = result?.evidenceFound?.includes(ev.id); // result might differ structure, checking logic...
-                                // In round_result.ts: evidenceFound = guess.evidence_found ? JSON.parse...
-                                // Wait, round_result.ts didn't return "evidenceFound" explicitly in JSON!
-                                // It returned `userEvidence` (which is room_evidence table) and `guesses`.
-                                // Let's check api.room.$code.round_result.ts return structure again.
-                                // Step 710: returns { guesses, userEvidence, officialEvidence ... }
-                                // It does NOT return `evidenceFound` array explicitly, but `guesses` has `evidence_found` string.
-
-                                let foundIds: string[] = [];
-                                if (result?.guesses && result.guesses.length > 0) {
-                                    try { foundIds = JSON.parse(result.guesses[0].evidence_found || "[]"); } catch (e) { }
-                                } else if (result?.evidence_found) {
-                                    // From existingGuess or direct result
-                                    try { foundIds = typeof result.evidence_found === 'string' ? JSON.parse(result.evidence_found) : result.evidence_found; } catch (e) { }
-                                }
-
-                                const wasFound = foundIds.includes(ev.id);
+                                const wasFound = evidenceList.some((userEv, uIdx) => {
+                                    const aiResult = result?.aiFeedback?.results?.find((r: any) => r.index === uIdx);
+                                    if (aiResult && aiResult.matched_admin_index !== -1) {
+                                        // Use AI matching if available
+                                        const officialEvidenceList = result?.officialEvidence || currentRound?.evidence || [];
+                                        return officialEvidenceList[aiResult.matched_admin_index]?.id === ev.id && aiResult.validity >= 0.7;
+                                    }
+                                    // Spatial fallback
+                                    const sBox = userEv.box;
+                                    const ax1 = sBox.x, ay1 = sBox.y, ax2 = sBox.x + sBox.w, ay2 = sBox.y + sBox.h;
+                                    const bx1 = box.x, by1 = box.y, bx2 = box.x + box.w, by2 = box.y + box.h;
+                                    const ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1);
+                                    const ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
+                                    const iw = Math.max(0, ix2 - ix1), ih = Math.max(0, iy2 - iy1);
+                                    const intersection = iw * ih;
+                                    const areaB = box.w * box.h;
+                                    return (intersection / areaB) >= 0.3;
+                                });
 
                                 return (
-                                    <div key={ev.id} className={`absolute border-2 ${wasFound ? 'border-yellow-400 bg-yellow-400/10' : 'border-red-500 bg-red-500/10'} flex flex-col items-start p-1`}
+                                    <div key={ev.id} className={`absolute border-2 border-dashed ${wasFound ? 'border-green-400/40 bg-green-400/5' : 'border-red-500/40 bg-red-500/5'} flex flex-col items-start p-1 pointer-events-none`}
                                         style={{ left: `${box.x / 10}%`, top: `${box.y / 10}%`, width: `${box.w / 10}%`, height: `${box.h / 10}%` }}
                                     >
-                                        <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] ${wasFound ? 'bg-yellow-500 text-black' : 'bg-red-600 text-white'} text-[9px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[150px] pointer-events-none`}>
+                                        <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] ${wasFound ? 'bg-green-600' : 'bg-red-600'} text-white text-[9px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[150px]`}>
                                             {ev.ai_analysis ? (
                                                 <>
-                                                    <span className={`block mb-1 ${wasFound ? 'text-black' : 'text-red-200'}`}>
+                                                    <span className={`block mb-1 ${wasFound ? 'text-green-200' : 'text-red-200'}`}>
                                                         {wasFound ? "✅ Verified Intel:" : "❌ Missed Intel:"}
                                                     </span>
                                                     {ev.ai_analysis}
@@ -1040,6 +1104,11 @@ export default function StudentLiveGame() {
                 style={layoutMode !== "result" ? { flexBasis: `${100 - splitRatio}%` } : {}}
             >    <div ref={mapRef} className="w-full h-full relative z-0" />
 
+                {/* Tutorial Column 2 Blur Overlay */}
+                {!submitted && currentRound?.isGuidedRound && (tutorialStep === 1 || tutorialStep === 2) && (
+                    <div className="absolute inset-0 z-[65] bg-black/60 backdrop-blur-md transition-all duration-500" />
+                )}
+
                 {/* SYNCHRONIZED DRAWING LAYER */}
                 <canvas
                     ref={mapCanvasRef}
@@ -1070,7 +1139,7 @@ export default function StudentLiveGame() {
                             )}
 
                             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-                                <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'}`}>
+                                <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'} ${currentRound?.isGuidedRound && tutorialStep === 4 ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}>
                                     CONFIRM COORDINATES
                                 </button>
                             </div>
@@ -1171,47 +1240,142 @@ export default function StudentLiveGame() {
                                 <p className="text-xs text-slate-500 uppercase">Deviation</p>
 
                                 <div className="mt-8 space-y-4">
-                                    <h3 className="text-xs uppercase text-slate-400 mb-2">Analysis</h3>
-                                    {result.aiFeedback && result.aiFeedback.results && result.aiFeedback.results.length > 0 ? (
-                                        result.aiFeedback.results.map((item: any, i: number) => (
-                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
-                                                <div className="flex justify-between">
-                                                    <span className="font-bold text-blue-400 block mb-1">Found: {item.description}</span>
-                                                </div>
-                                                <p className="opacity-80 leading-snug">{item.explanation}</p>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <p className="text-xs text-slate-500 italic mb-4">No anomalies detected by agent.</p>
-                                    )}
+                                    <h3 className="text-xs uppercase text-slate-400 mb-2">Evidence Analysis</h3>
 
-                                    {/* Missed Evidence List */}
-                                    {(result?.officialEvidence || currentRound?.evidence)?.filter((ev: any) => !result.evidenceFound?.includes(ev.id)).length > 0 && (
-                                        <div className="mt-4 space-y-2">
-                                            <h3 className="text-xs uppercase text-red-400 mb-2">Missed Intel</h3>
-                                            {(result?.officialEvidence || currentRound?.evidence).filter((ev: any) => !result.evidenceFound?.includes(ev.id)).map((ev: any) => {
-                                                // Look for a personalized Gemini explanation
-                                                let personalizedExplanation = null;
-                                                if (result.aiFeedback?.missed_evidence_explanations && Array.isArray(result.aiFeedback.missed_evidence_explanations)) {
-                                                    const AIExplanation = result.aiFeedback.missed_evidence_explanations.find((m: any) => m.admin_id === ev.id);
-                                                    if (AIExplanation && AIExplanation.explanation) {
-                                                        personalizedExplanation = AIExplanation.explanation;
-                                                    }
+                                    {/* Compute categorized evidence using IoU spatial overlap */}
+                                    {(() => {
+                                        const officialList = result?.officialEvidence || currentRound?.evidence || [];
+                                        const aiResults = result?.aiFeedback?.results || [];
+
+                                        // Helper: compute overlap between two boxes
+                                        const boxesOverlap = (sBox: any, oBox: any) => {
+                                            const ax1 = sBox.x, ay1 = sBox.y, ax2 = sBox.x + sBox.w, ay2 = sBox.y + sBox.h;
+                                            const bx1 = oBox.x, by1 = oBox.y, bx2 = oBox.x + oBox.w, by2 = oBox.y + oBox.h;
+                                            const ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1);
+                                            const ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
+                                            const iw = Math.max(0, ix2 - ix1), ih = Math.max(0, iy2 - iy1);
+                                            const intersection = iw * ih;
+                                            const areaA = sBox.w * sBox.h;
+                                            const areaB = oBox.w * oBox.h;
+                                            const union = areaA + areaB - intersection;
+                                            const iou = union > 0 ? intersection / union : 0;
+                                            const coverageOfOfficial = areaB > 0 ? intersection / areaB : 0;
+                                            return iou >= 0.15 || coverageOfOfficial >= 0.3;
+                                        };
+
+                                        // Parse official bounding boxes
+                                        const parsedOfficials = officialList.map((ev: any) => {
+                                            let box = null;
+                                            try { box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box; } catch {}
+                                            return { ...ev, box };
+                                        });
+
+                                        // Categorize student evidence
+                                        const foundEvidence: { userIndex: number; official: any; aiItem: any }[] = [];
+                                        const novelEvidence: { userIndex: number; aiItem: any }[] = [];
+                                        const matchedOfficialIds = new Set<string>();
+
+                                        evidenceList.forEach((userEv, index) => {
+                                            const aiItem = aiResults.find((r: any) => r.index === index);
+                                            let matchedOfficial = null;
+
+                                            for (const oe of parsedOfficials) {
+                                                if (!oe.box) continue;
+                                                if (boxesOverlap(userEv.box, oe.box)) {
+                                                    matchedOfficial = oe;
+                                                    break;
                                                 }
+                                            }
 
-                                                return (
-                                                    <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
-                                                        <div className="flex justify-between">
-                                                            <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
-                                                        </div>
-                                                        {(personalizedExplanation || ev.ai_analysis) && (
-                                                            <p className="opacity-70 leading-snug">{personalizedExplanation || ev.ai_analysis}</p>
-                                                        )}
+                                            if (matchedOfficial) {
+                                                foundEvidence.push({ userIndex: index, official: matchedOfficial, aiItem });
+                                                matchedOfficialIds.add(matchedOfficial.id);
+                                            } else {
+                                                novelEvidence.push({ userIndex: index, aiItem });
+                                            }
+                                        });
+
+                                        // Missed = official evidence not matched by any student box
+                                        const missedEvidence = parsedOfficials.filter((oe: any) => oe.box && !matchedOfficialIds.has(oe.id));
+
+                                        return (
+                                            <>
+                                                {/* ✅ FOUND EVIDENCE */}
+                                                {foundEvidence.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <h4 className="text-[10px] uppercase text-green-400 tracking-widest flex items-center gap-1">
+                                                            <span>✅</span> Found ({foundEvidence.length})
+                                                        </h4>
+                                                        {foundEvidence.map((item, i) => (
+                                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-green-500/50 pl-3 py-1">
+                                                                <span className="font-bold text-green-400 block mb-1">
+                                                                    {item.official.description || item.aiItem?.description || `Evidence #${item.userIndex + 1}`}
+                                                                </span>
+                                                                <p className="opacity-80 leading-snug text-green-200/80">
+                                                                    {item.aiItem?.explanation || item.official.ai_analysis || "Correctly identified this landmark feature."}
+                                                                </p>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
+                                                )}
+
+                                                {/* 🔵 NOVEL DISCOVERIES */}
+                                                {novelEvidence.length > 0 && (
+                                                    <div className="space-y-2 mt-3">
+                                                        <h4 className="text-[10px] uppercase text-blue-400 tracking-widest flex items-center gap-1">
+                                                            <span>🔍</span> Additional Observations ({novelEvidence.length})
+                                                        </h4>
+                                                        {novelEvidence.map((item, i) => (
+                                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
+                                                                <span className="font-bold text-blue-400 block mb-1">
+                                                                    {item.aiItem?.description || `Observation #${item.userIndex + 1}`}
+                                                                </span>
+                                                                <p className="opacity-80 leading-snug">
+                                                                    {item.aiItem?.explanation || "Selected area did not match any official evidence."}
+                                                                </p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* ❌ MISSED INTEL */}
+                                                {missedEvidence.length > 0 && (
+                                                    <div className="space-y-2 mt-3">
+                                                        <h4 className="text-[10px] uppercase text-red-400 tracking-widest flex items-center gap-1">
+                                                            <span>❌</span> Missed Intel ({missedEvidence.length})
+                                                        </h4>
+                                                        {missedEvidence.map((ev: any) => {
+                                                            let personalizedExplanation = null;
+                                                            if (result.aiFeedback?.missed_evidence_explanations && Array.isArray(result.aiFeedback.missed_evidence_explanations)) {
+                                                                const AIExplanation = result.aiFeedback.missed_evidence_explanations.find((m: any) => m.admin_id === ev.id);
+                                                                if (AIExplanation?.explanation) personalizedExplanation = AIExplanation.explanation;
+                                                            }
+                                                            return (
+                                                                <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
+                                                                    <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                                                    {(personalizedExplanation || ev.ai_analysis) && (
+                                                                        <p className="opacity-70 leading-snug">{personalizedExplanation || ev.ai_analysis}</p>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+
+                                                {/* Summary if AI feedback has a summary */}
+                                                {result.aiFeedback?.summary_explanation && (
+                                                    <div className="mt-3 p-3 bg-slate-800/50 rounded border border-white/5">
+                                                        <p className="text-xs text-slate-400 leading-relaxed italic">{result.aiFeedback.summary_explanation}</p>
+                                                    </div>
+                                                )}
+
+                                                {/* No evidence at all */}
+                                                {foundEvidence.length === 0 && novelEvidence.length === 0 && missedEvidence.length === 0 && (
+                                                    <p className="text-xs text-slate-500 italic">No evidence data available for this round.</p>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
 
                                     {/* Matched Evidence Summary */}
                                     {result.evidenceScore > 0 && (

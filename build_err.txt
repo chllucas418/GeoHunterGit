@@ -1,0 +1,75 @@
+
+> build
+> react-router build
+
+(node:39522) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Using Vite Environment API (experimental)
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 125 modules transformed.
+Generated an empty chunk: "logout".
+Generated an empty chunk: "api.submit-turn".
+Generated an empty chunk: "resources.image._locationId".
+Generated an empty chunk: "api.room._code.action".
+Generated an empty chunk: "api.room._code.join".
+Generated an empty chunk: "api.room._code.review".
+Generated an empty chunk: "api.room._code.round_result".
+Generated an empty chunk: "api.room._code.status".
+Generated an empty chunk: "api.room._code.submit".
+Generated an empty chunk: "api.room._code.ws".
+Generated an empty chunk: "api.room._code.hint".
+rendering chunks...
+computing gzip size...
+build/client/.vite/manifest.json                              11.04 kB │ gzip:  1.25 kB
+build/client/assets/root-DYsvQEZu.css                         95.69 kB │ gzip: 14.41 kB
+build/client/assets/logout-l0sNRNKZ.js                         0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.submit-turn-l0sNRNKZ.js                0.00 kB │ gzip:  0.02 kB
+build/client/assets/resources.image._locationId-l0sNRNKZ.js    0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.action-l0sNRNKZ.js          0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.join-l0sNRNKZ.js            0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.review-l0sNRNKZ.js          0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.round_result-l0sNRNKZ.js    0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.status-l0sNRNKZ.js          0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.submit-l0sNRNKZ.js          0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.ws-l0sNRNKZ.js              0.00 kB │ gzip:  0.02 kB
+build/client/assets/api.room._code.hint-l0sNRNKZ.js            0.00 kB │ gzip:  0.02 kB
+build/client/assets/index-DaoVeR9E.js                          1.41 kB │ gzip:  0.80 kB
+build/client/assets/privacy-DzZ8AZms.js                        1.69 kB │ gzip:  0.76 kB
+build/client/assets/join-Dl01biCC.js                           1.86 kB │ gzip:  0.91 kB
+build/client/assets/admin.create-teacher-Dvewf5pW.js           2.59 kB │ gzip:  0.94 kB
+build/client/assets/EvidenceCanvas-fpuEtnjY.js                 2.66 kB │ gzip:  1.30 kB
+build/client/assets/root-DHx3KfOP.js                           3.03 kB │ gzip:  1.37 kB
+build/client/assets/login-DO-osm0f.js                          3.30 kB │ gzip:  1.24 kB
+build/client/assets/admin.datasets._setId-BNodBlCD.js          3.31 kB │ gzip:  1.15 kB
+build/client/assets/index-B-DTD9vt.js                          3.68 kB │ gzip:  1.40 kB
+build/client/assets/admin.datasets-DFRz9_2_.js                 3.68 kB │ gzip:  1.32 kB
+build/client/assets/admin.users._userId-DKNw1-ks.js            4.13 kB │ gzip:  1.48 kB
+build/client/assets/admin.locations-DM1AByoM.js                4.64 kB │ gzip:  1.69 kB
+build/client/assets/leaderboard-D3VxxGwR.js                    4.69 kB │ gzip:  1.35 kB
+build/client/assets/admin.users-DgE4PX1f.js                    5.18 kB │ gzip:  1.71 kB
+build/client/assets/admin.index-CCdxSd5W.js                    5.20 kB │ gzip:  1.09 kB
+build/client/assets/register-BUCDX8-0.js                       5.35 kB │ gzip:  1.54 kB
+build/client/assets/home-BK3nVGFH.js                           7.36 kB │ gzip:  2.41 kB
+build/client/assets/teacher.control._code-D8_uocmN.js          7.86 kB │ gzip:  2.92 kB
+build/client/assets/teacher.dashboard-C_OuFYSE.js              8.05 kB │ gzip:  2.52 kB
+build/client/assets/profile-KkR2rY_Z.js                        8.18 kB │ gzip:  2.38 kB
+build/client/assets/admin.add-location-C2qnLuR5.js            14.75 kB │ gzip:  4.53 kB
+build/client/assets/game._locationId-Dxg6NQQk.js              16.78 kB │ gzip:  5.20 kB
+build/client/assets/live._code-BZ3XEcVR.js                    29.23 kB │ gzip:  9.46 kB
+build/client/assets/teacher.room._code-BqqRhADb.js            43.87 kB │ gzip: 13.86 kB
+build/client/assets/chunk-JZWAC4HX-DGdQaBW5.js               126.35 kB │ gzip: 42.52 kB
+build/client/assets/entry.client-DOzr2zQO.js                 186.77 kB │ gzip: 59.06 kB
+build/client/assets/admin.mass-add-Dbln006L.js               300.69 kB │ gzip: 80.22 kB
+✓ built in 5.47s
+vite v7.3.1 building ssr environment for production...
+transforming...
+✓ 116 modules transformed.
+rendering chunks...
+build/server/.vite/manifest.json                   0.72 kB
+build/server/wrangler.json                         1.57 kB
+build/server/assets/server-build-DYsvQEZu.css     95.69 kB
+build/server/index.js                              0.18 kB
+build/server/assets/worker-entry-ByLjq2O6.js     296.27 kB
+build/server/assets/server-build-HqtqgbcB.js   1,490.58 kB
+✓ built in 4.02s

@@ -31,7 +31,13 @@ export async function action({ request, context }: ActionFunctionArgs) {
     const db = env.DB as D1Database;
 
     if (intent === "delete") {
+        // Cascade delete dependent records first to satisfy foreign key constraints
+        await db.prepare("DELETE FROM map_evidence WHERE location_id = ?").bind(locId).run();
+        await db.prepare("DELETE FROM room_guesses WHERE location_id = ?").bind(locId).run();
+        await db.prepare("DELETE FROM map_set_items WHERE location_id = ?").bind(locId).run();
         await db.prepare("DELETE FROM game_sessions WHERE location_id = ?").bind(locId).run();
+        
+        // Finally delete the location
         await db.prepare("DELETE FROM locations WHERE id = ?").bind(locId).run();
         return { success: true };
     }

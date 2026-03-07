@@ -246,7 +246,7 @@ export default function TeacherRoom() {
                                 img.style.cssText = "width: 100%; height: 100%; object-fit: cover;";
                                 innerCircle.appendChild(img);
                             } else {
-                                innerCircle.innerText = g.display_name ? g.display_name[0].toUpperCase() : "?";
+                                innerCircle.innerText = (g.display_name && g.display_name.length > 0) ? g.display_name[0].toUpperCase() : "?";
                             }
 
                             const nameLabel = document.createElement("div");

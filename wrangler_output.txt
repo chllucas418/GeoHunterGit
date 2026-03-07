@@ -1,0 +1,37 @@
+
+ ⛅️ wrangler 4.61.1 (update available 4.71.0)
+─────────────────────────────────────────────
+Using redirected Wrangler configuration.
+ - Configuration being used: "build/server/wrangler.json"
+ - Original user's configuration: "wrangler.jsonc"
+ - Deploy configuration file: ".wrangler/deploy/config.json"
+Your Worker has access to the following bindings:
+Binding                                                      Resource                  Mode
+env.GEOHUNTER_ROOM_DO (GeoHunterRoomDO)                      Durable Object            local
+env.DB (geohunter-db)                                        D1 Database               local
+env.ASSETS_BUCKET (geohunter-assets)                         R2 Bucket                 local
+env.VALUE_FROM_CLOUDFLARE ("Hello from Cloudflare")          Environment Variable      local
+env.DEVELOPER_PASSWORD ("<REDACTED_PASSWORD>@4@18&3&16")         Environment Variable      local
+
+Attaching additional modules:
+┌─────────────────────────────────┬──────┬─────────────┐
+│ Name                            │ Type │ Size        │
+├─────────────────────────────────┼──────┼─────────────┤
+│ assets/server-build-v61CNgin.js │ esm  │ 1455.65 KiB │
+├─────────────────────────────────┼──────┼─────────────┤
+│ assets/worker-entry-XNYs0noJ.js │ esm  │ 289.32 KiB  │
+├─────────────────────────────────┼──────┼─────────────┤
+│ Total (2 modules)               │      │ 1744.97 KiB │
+└─────────────────────────────────┴──────┴─────────────┘
+⎔ Starting local server...
+[wrangler:info] Ready on http://localhost:8888
+⎔ Reloading local server...
+
+[31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mENOENT: no such file or directory, scandir '/home/chllucas/Desktop/Lucas/GeoHunterGit/build/client'[0m
+
+
+[32mIf you think this is a bug then please create an issue at https://github.com/cloudflare/workers-sdk/issues/new/choose[0m
+Note that there is a newer version of Wrangler available (4.71.0). Consider checking whether upgrading resolves this error.
+? Would you like to report this error to Cloudflare? Wrangler's output and the error details will be shared with the Wrangler team to help us diagnose and fix the issue.
+🤖 Using fallback value in non-interactive context: no
+🪵  Logs were written to "/home/chllucas/.config/.wrangler/logs/wrangler-2026-03-06_16-52-08_176.log"

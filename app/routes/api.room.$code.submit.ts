@@ -130,6 +130,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         try {
             const GEMINI_BASE_URL = context.cloudflare.env.GEMINI_BASE_URL;
             const GEMINI_GATEWAY_TOKEN = context.cloudflare.env.GEMINI_GATEWAY_TOKEN;
+            const GEMINI_API_KEY = context.cloudflare.env.GEMINI_API_KEY;
 
             const fullFeedback = await checkEvidenceListWithGemini(
                 trueLoc.image_url,
@@ -137,7 +138,8 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                 trueLoc.name,
                 adminBoxes,
                 GEMINI_BASE_URL,
-                GEMINI_GATEWAY_TOKEN
+                GEMINI_GATEWAY_TOKEN,
+                GEMINI_API_KEY
             );
 
             aiFeedback = fullFeedback;
@@ -177,6 +179,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                             const unionArea = userArea + adminArea - intersectionArea;
 
                             const iou = unionArea > 0 ? intersectionArea / unionArea : 0;
+                            const coverageOfAdmin = adminArea > 0 ? intersectionArea / adminArea : 0;
 
                             // Center distance fallback
                             const userCx = userBox.x + userBox.w / 2;
@@ -185,7 +188,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                             const adminCy = adminBox.y + adminBox.h / 2;
                             const dist = Math.sqrt(Math.pow(userCx - adminCx, 2) + Math.pow(userCy - adminCy, 2));
 
-                            if (iou > 0.3 || dist < 50) {
+                            if (iou >= 0.15 || coverageOfAdmin >= 0.3 || dist < 50) {
                                 matchedAdminId = adminEv.id;
                                 break;
                             }
@@ -194,7 +197,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
                     // Scoring
                     // Scoring
-                    if (item.validity > 0.7) {
+                    if (item.validity > 0.4) {
                         // AI Confirmed
                         if (matchedAdminId) {
                             if (!matchedEvidenceIds.includes(matchedAdminId)) {
@@ -204,28 +207,48 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                         } else {
                             // Novel Discovery
                             aiBonus += 250;
+
+                            // Peer-to-Permanent Evidence Flow: 
+                            // If AI is highly confident (>= 0.9) and it's a novel discovery, promote it!
+                            if (item.validity >= 0.9) {
+                                try {
+                                    const newId = `ev_peer_${Math.random().toString(36).substring(2, 9)}`;
+                                    await db.prepare(
+                                        "INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, confidence_score, created_by_user_id, ai_analysis) VALUES (?, ?, ?, ?, 1, ?, ?, ?)"
+                                    ).bind(
+                                        newId, 
+                                        trueLoc.id, 
+                                        JSON.stringify(userBox), 
+                                        item.description || "Student Discovery", 
+                                        Math.round(item.validity * 100), 
+                                        userId,
+                                        "Promoted from high-confidence student discovery."
+                                    ).run();
+                                    console.log(`[Promotion] Student discovery ${newId} added to permanent evidence for ${trueLoc.id}`);
+                                } catch (err) {
+                                    console.error("Failed to promote student evidence:", err);
+                                }
+                            }
                         }
                     } else if (matchedAdminId) {
-                        // Geometry Match Only (Gemini missed it, but box overlaps)
-                        // We must add this to results so it shows in UI
+                        // Geometry Match — student's box overlaps an official box
+                        // Give credit even without strong AI confirmation
                         if (!matchedEvidenceIds.includes(matchedAdminId)) {
-                            evidenceScore += 1000;
+                            evidenceScore += 750;
                             matchedEvidenceIds.push(matchedAdminId);
 
                             const adminItem = adminBoxes.find(a => a.id === matchedAdminId);
                             if (adminItem) {
-                                // Inject into feedback
                                 if (!aiFeedback.results) aiFeedback.results = [];
                                 aiFeedback.results.push({
                                     index: item.index,
                                     description: adminItem.description,
                                     explanation: "Visual confirmation via scanner alignment.",
-                                    validity: 1.0
+                                    validity: 0.8
                                 });
                             }
                         }
                     }
-
                 }
             }
         } catch (e) {
@@ -263,9 +286,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
 
         // Save Guess (Update: Added distance_score and evidence_score columns)
+        // [BYOK/REAL-TIME] We store the RAW evidence list (boxes) instead of AI feedback.
+        // This allows generating analysis in real-time during review without DB persistence.
         await db.prepare(
             "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback, distance_score, evidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(aiFeedback), distanceScore, evidenceScore).run();
+        ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(userEvidenceList), distanceScore, evidenceScore).run();
 
         // Update Participant Totals (skip for guided round)
         if (!isGuidedRound) {

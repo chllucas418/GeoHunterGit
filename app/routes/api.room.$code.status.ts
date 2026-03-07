@@ -58,7 +58,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
                 ).bind(code, defaultSim.id).first<any>()
             ]);
             let evidence: any[] = [];
-            if (room.status === 'REVIEW') evidence = allEvidence.results || [];
+            if (room.status === 'REVIEW' || isGuidedRound) evidence = allEvidence.results || [];
             const evidenceCount = allEvidence.results?.length || 0;
             currentRound = {
                 index: room.current_index,

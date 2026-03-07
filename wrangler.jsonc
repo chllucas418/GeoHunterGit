@@ -9,7 +9,12 @@
 	"main": "./workers/app.ts",
 	"vars": {
 		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-		"DEVELOPER_PASSWORD": "<REDACTED_PASSWORD>@4@18&3&16"
+		"DEVELOPER_PASSWORD": "<REDACTED_PASSWORD>@4@18&3&16",
+		"DEVELOPER_REGISTRATION_KEY": "",
+		"GEMINI_API_KEY": "",
+		"GOOGLE_MAPS_API_KEY": "",
+		"GEMINI_BASE_URL": "",
+		"GEMINI_GATEWAY_TOKEN": ""
 	},
 	"d1_databases": [
 		{

@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { requireUser } from "~/lib/auth.server";
+import { checkEvidenceListWithGemini, batchAnalyzeOfficialEvidence } from "~/lib/gemini.server";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
     const userId = await requireUser(request);
@@ -53,66 +54,61 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
         // Get Official Data (Location + Evidence)
         const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>();
-        const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>();
-        let officialEvidence = evidenceResult.results || [];
+        const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(targetLocationId).all<any>();
+        const officialEvidence = evidenceResult.results || [];
 
-        // Check if any official evidence is missing 'ai_analysis'
-        const missingAnalysis = officialEvidence.filter((e: any) => !e.ai_analysis || e.ai_analysis === "Analysis unavailable." || e.ai_analysis.startsWith("Analysis failed:"));
+        // --- REAL-TIME AI ANALYSIS (NO DB STORAGE) ---
+        // 1. Prepare Inputs
+        const adminBoxes = officialEvidence.map((ae: any) => ({
+            id: ae.id,
+            box: typeof ae.bounding_box === 'string' ? JSON.parse(ae.bounding_box) : ae.bounding_box,
+            description: ae.description
+        }));
 
-        if (missingAnalysis.length > 0) {
-            console.log(`[RoundResult] Found ${missingAnalysis.length} items missing analysis. Triggering On-Demand AI...`);
+        const studentEvidence = guess.ai_feedback ? JSON.parse(guess.ai_feedback) : [];
 
-            // Trigger AI (Ensure we have keys)
-            const GEMINI_BASE_URL = env.GEMINI_BASE_URL;
-            const GEMINI_GATEWAY_TOKEN = env.GEMINI_GATEWAY_TOKEN;
+        let liveAiFeedback = null;
+        let finalOfficialEvidence = [...officialEvidence];
 
-            if (GEMINI_BASE_URL) {
-                try {
-                    // Import dynamically or assuming it's available
-                    const { batchAnalyzeOfficialEvidence } = await import("~/lib/gemini.server");
-
-                    // Parse boxes if stored as JSON string (likely stored as JSON string in DB?)
-                    // DB schema says 'box' is likely text/json. passing it as is or parsing?
-                    // Usually it's stored as JSON string in SQLite.
-                    const itemsToAnalyze = missingAnalysis.map((e: any) => ({
-                        id: e.id,
-                        box: typeof e.bounding_box === 'string' ? JSON.parse(e.bounding_box) : e.bounding_box,
-                        description: e.description
-                    }));
-
-                    const analysisResults = await batchAnalyzeOfficialEvidence(
-                        location.image_url,
-                        itemsToAnalyze,
-                        GEMINI_BASE_URL,
-                        GEMINI_GATEWAY_TOKEN
-                    );
-
-                    // Update DB and local array
-                    for (const res of analysisResults) {
-                        if (res.ai_analysis) {
-                            await db.prepare("UPDATE map_evidence SET ai_analysis = ? WHERE id = ?")
-                                .bind(res.ai_analysis, res.id).run();
-
-                            // Update local object to return immediately
-                            const localItem = officialEvidence.find((e: any) => e.id === res.id);
-                            if (localItem) localItem.ai_analysis = res.ai_analysis;
-                        }
-                    }
-
-                } catch (e) {
-                    console.error("[RoundResult] On-Demand Analysis Failed:", e);
-                }
-            }
-        }
-
-        // Parse Guess Data
-        let aiFeedback = null;
         try {
-            aiFeedback = guess.ai_feedback ? JSON.parse(guess.ai_feedback) : null;
+            // Standardizing to static imports to fix build transformation issues
+            // Resolved at top level now.
+
+            // 2. Resolve Student Analysis Live
+            if (studentEvidence.length >= 0) {
+                liveAiFeedback = await checkEvidenceListWithGemini(
+                    location.image_url,
+                    studentEvidence,
+                    location.name,
+                    adminBoxes,
+                    env.GEMINI_BASE_URL,
+                    env.GEMINI_GATEWAY_TOKEN,
+                    env.GEMINI_API_KEY
+                );
+            }
+
+            // 3. Resolve Official Analysis Live (e.g. for Missed Intel)
+            // We can just analyze ALL official evidence live as requested
+            const officialAnalysis = await batchAnalyzeOfficialEvidence(
+                location.image_url,
+                adminBoxes,
+                env.GEMINI_BASE_URL,
+                env.GEMINI_GATEWAY_TOKEN,
+                env.GEMINI_API_KEY
+            );
+
+            // Merge live analysis back to official items for return
+            finalOfficialEvidence = officialEvidence.map(oe => {
+                const analysis = officialAnalysis.find((a: any) => a.id === oe.id);
+                return { ...oe, ai_analysis: analysis?.ai_analysis || "Analysis unavailable." };
+            });
+
         } catch (e) {
-            console.error("JSON Parse Error for AI Feedback", e);
+            console.error("[RoundResult] Real-time Analysis Failed:", e);
+            liveAiFeedback = { error: "Live analysis failed", results: [] };
         }
 
+        // Parse matched IDs
         let evidenceFound = [];
         try {
             evidenceFound = guess.evidence_found ? JSON.parse(guess.evidence_found) : [];
@@ -123,10 +119,10 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             distance: guess.distance * 1000,
             distanceScore: guess.distance_score || 0,
             evidenceScore: guess.evidence_score || 0,
-            aiFeedback,
+            aiFeedback: liveAiFeedback,
             evidenceFound,
             officialLocation: location,
-            officialEvidence // Returned updated evidence
+            officialEvidence: finalOfficialEvidence
         });
     } catch (error) {
         console.error("ROUND RESULT ERROR:", error);
