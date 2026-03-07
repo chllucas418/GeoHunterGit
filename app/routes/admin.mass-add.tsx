@@ -37,7 +37,7 @@ export default function MassAdd() {
         const indexToPrompt = files.findIndex(f => f.description !== "" && f.evidence.length === 0 && !f.prompted);
         if (indexToPrompt !== -1) {
             setEditingId(indexToPrompt);
-            setFiles(prev => {
+            setFiles((prev: any[]) => {
                 const cp = [...prev];
                 if (cp[indexToPrompt]) cp[indexToPrompt].prompted = true;
                 return cp;
@@ -75,7 +75,7 @@ export default function MassAdd() {
             if (contentType && contentType.includes("application/json")) {
                 const data = (await res.json()) as { success: boolean, aiData?: any, error?: string };
                 if (data.success && data.aiData) {
-                    setFiles(prev => prev.map(f => {
+                    setFiles((prev: any[]) => prev.map(f => {
                         if (f.id === fileId) {
                             return {
                                 ...f,
@@ -152,7 +152,7 @@ export default function MassAdd() {
         }));
 
         // Add to state
-        setFiles(prev => [...prev, ...newFiles]);
+        setFiles((prev: any[]) => [...prev, ...newFiles]);
 
         // Auto-run AI check
         newFiles.forEach(nf => {
@@ -335,7 +335,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                             className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setFiles(prev => {
+                                                setFiles((prev: any[]) => {
                                                     const cp = [...prev];
                                                     cp[editingId].evidence = cp[editingId].evidence.filter((_: any, idx: number) => idx !== i);
                                                     return cp;
@@ -373,7 +373,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                 <button
                                                     onClick={() => {
                                                         if (tempEvidenceDesc.trim()) {
-                                                            setFiles(prev => {
+                                                            setFiles((prev: any[]) => {
                                                                 const cp = [...prev];
                                                                 cp[editingId].evidence = [...cp[editingId].evidence, { box: tempEvidenceBox, description: tempEvidenceDesc.trim() }];
                                                                 return cp;
@@ -434,7 +434,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                 // Auto-set marker on search result
                                                 const newLat = place.geometry.location.lat();
                                                 const newLng = place.geometry.location.lng();
-                                                setFiles(prev => {
+                                                setFiles((prev: any[]) => {
                                                     const cp = [...prev];
                                                     cp[editingId].lat = newLat;
                                                     cp[editingId].lng = newLng;
@@ -445,7 +445,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                     }}
                                     onClick={(e: google.maps.MapMouseEvent) => {
                                         if (e.latLng) {
-                                            setFiles(prev => {
+                                            setFiles((prev: any[]) => {
                                                 const cp = [...prev];
                                                 cp[editingId].lat = e.latLng?.lat();
                                                 cp[editingId].lng = e.latLng?.lng();
@@ -476,7 +476,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                     className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 outline-none"
                                     rows={3}
                                     value={item.description}
-                                    onChange={(e) => setFiles(prev => {
+                                    onChange={(e) => setFiles((prev: any[]) => {
                                         const cp = [...prev];
                                         cp[editingId].description = e.target.value;
                                         return cp;
@@ -492,7 +492,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                     <input
                                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
                                         value={item.photographer}
-                                        onChange={(e) => setFiles(prev => {
+                                        onChange={(e) => setFiles((prev: any[]) => {
                                             const cp = [...prev];
                                             cp[editingId].photographer = e.target.value;
                                             return cp;
@@ -507,7 +507,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                         min="1" max="10" step="0.5"
                                         className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
                                         value={item.difficulty}
-                                        onChange={(e) => setFiles(prev => {
+                                        onChange={(e) => setFiles((prev: any[]) => {
                                             const cp = [...prev];
                                             cp[editingId].difficulty = parseFloat(e.target.value);
                                             return cp;
@@ -522,7 +522,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                 <select
                                     className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
                                     value={item.addToSet || ""}
-                                    onChange={(e) => setFiles(prev => {
+                                    onChange={(e) => setFiles((prev: any[]) => {
                                         const cp = [...prev];
                                         cp[editingId].addToSet = e.target.value;
                                         return cp;
@@ -540,7 +540,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="block text-gray-400 text-sm font-bold uppercase tracking-wider">Hints</label>
                                     <button
-                                        onClick={() => setFiles(prev => {
+                                        onClick={() => setFiles((prev: any[]) => {
                                             const cp = [...prev];
                                             cp[editingId].hints.push("");
                                             return cp;
@@ -556,7 +556,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                             <input
                                                 className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none"
                                                 value={hint}
-                                                onChange={(e) => setFiles(prev => {
+                                                onChange={(e) => setFiles((prev: any[]) => {
                                                     const cp = [...prev];
                                                     cp[editingId].hints[hIdx] = e.target.value;
                                                     return cp;
@@ -564,7 +564,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                                 placeholder={`Hint #${hIdx + 1}`}
                                             />
                                             <button
-                                                onClick={() => setFiles(prev => {
+                                                onClick={() => setFiles((prev: any[]) => {
                                                     const cp = [...prev];
                                                     cp[editingId].hints = cp[editingId].hints.filter((_: any, i: number) => i !== hIdx);
                                                     return cp;
