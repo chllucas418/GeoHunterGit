@@ -329,6 +329,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
     // Resizer logic
     const [splitRatio, setSplitRatio] = useState(35);
     const [isResizing, setIsResizing] = useState(false);
+    const [isEvidenceFullscreen, setIsEvidenceFullscreen] = useState(false);
 
     useEffect(() => {
         const saved = localStorage.getItem("geohunter-mass-add-split");
@@ -337,8 +338,9 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
 
     const handleMouseMove = (e: MouseEvent) => {
         if (!isResizing) return;
+        // Calculate relative to the actual modal container if possible, but window-relative is fine for h-split if max-w-vw
         const newRatio = (1 - (e.clientX / window.innerWidth)) * 100;
-        setSplitRatio(Math.min(Math.max(newRatio, 20), 60));
+        setSplitRatio(Math.min(Math.max(newRatio, 15), 75)); // Expanded range 15% - 75%
     };
 
     const handleMouseUp = () => {
@@ -362,6 +364,16 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatHistory]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isEvidenceFullscreen) {
+                setIsEvidenceFullscreen(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isEvidenceFullscreen]);
 
     const handleChat = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -446,6 +458,16 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                     
                     <div className="flex items-center gap-3">
                         <button 
+                            onClick={() => setIsEvidenceFullscreen(!isEvidenceFullscreen)}
+                            className={`px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all border flex items-center gap-2 ${
+                                isEvidenceFullscreen 
+                                ? "bg-amber-600/20 border-amber-500/50 text-amber-400 hover:bg-amber-600/30" 
+                                : "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white"
+                            }`}
+                        >
+                            {isEvidenceFullscreen ? "⏹ Exit Fullscreen" : "⛶ Fullscreen Editor"}
+                        </button>
+                        <button 
                             disabled={isSaving}
                             onClick={async () => {
                                 setIsSaving(true);
@@ -454,7 +476,7 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                             }}
                             className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2"
                         >
-                            {isSaving ? "SAVING..." : "💾 Save to Database"}
+                            {isSaving ? "SAVING..." : "💾 Save"}
                         </button>
                         <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white font-bold border border-gray-700 text-xs uppercase tracking-widest">
                             Exit
@@ -464,11 +486,23 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
 
                 <div className="flex flex-1 overflow-hidden">
                     {/* LEFT PANEL: CONTENT EDITOR */}
-                    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-gray-900/30" style={{ width: `${100 - splitRatio}%` }}>
-                        <div className="max-w-4xl mx-auto space-y-10 pb-20">
+                    <div 
+                        className={`flex-1 overflow-y-auto p-8 custom-scrollbar bg-gray-900/30 transition-all ${isEvidenceFullscreen ? 'fixed inset-0 z-[60] bg-gray-950 p-0' : ''}`} 
+                        style={isEvidenceFullscreen ? {} : { width: `${100 - splitRatio}%` }}
+                    >
+                        <div className={`${isEvidenceFullscreen ? 'w-full h-full' : 'max-w-4xl mx-auto space-y-10 pb-20'}`}>
                             {/* Visuals Section */}
-                            <div className="grid grid-cols-1 gap-6">
-                        <div className="bg-black rounded-2xl overflow-hidden border border-gray-700 relative h-[400px]">
+                            <div className={`${isEvidenceFullscreen ? 'w-full h-full' : 'grid grid-cols-1 gap-6'}`}>
+                        <div className={`${isEvidenceFullscreen ? 'w-full h-full rounded-none border-none' : 'bg-black rounded-2xl overflow-hidden border border-gray-700 relative h-[400px]'}`}>
+                            {isEvidenceFullscreen && (
+                                <button 
+                                    onClick={() => setIsEvidenceFullscreen(false)}
+                                    className="absolute top-6 right-6 z-[70] p-3 bg-red-600/80 hover:bg-red-600 text-white rounded-full shadow-2xl transition-all"
+                                    title="Close Fullscreen (Esc)"
+                                >
+                                    <span className="text-xl font-bold">×</span>
+                                </button>
+                            )}
                             <EvidenceCanvas
                                 imageUrl={item.preview}
                                 onBoxChange={(newBox) => {
@@ -758,16 +792,25 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
             </div>
 
             {/* RESIZER DRAG HANDLE */}
-                    <div 
-                        onMouseDown={() => setIsResizing(true)}
-                        className={`w-1 hover:w-2 bg-blue-500/10 hover:bg-blue-500/40 cursor-col-resize transition-all relative group z-20 ${isResizing ? 'bg-blue-500/60 w-1.5' : ''}`}
-                    >
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-0.5 bg-gray-700 rounded-full group-hover:bg-blue-400/50" />
-                    </div>
+                    {!isEvidenceFullscreen && (
+                        <div 
+                            onMouseDown={() => setIsResizing(true)}
+                            className={`w-1.5 hover:w-2.5 bg-blue-500/5 hover:bg-blue-500/30 cursor-col-resize transition-all relative group z-20 flex items-center justify-center ${isResizing ? 'bg-blue-500/50 w-2.5' : ''}`}
+                        >
+                            <div className="h-10 w-1 bg-gray-700/50 rounded-full group-hover:bg-blue-400/50 transition-colors" />
+                            {/* Visual grab handle lines */}
+                            <div className="absolute flex flex-col gap-1 items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="w-0.5 h-0.5 bg-blue-400 rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-blue-400 rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-blue-400 rounded-full" />
+                            </div>
+                        </div>
+                    )}
 
                     {/* RIGHT PANEL: AI COPILOT */}
-                    <div className="bg-gray-950 flex flex-col h-full border-l border-gray-800" style={{ width: `${splitRatio}%` }}>
-                        <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-black/40">
+                    {!isEvidenceFullscreen && (
+                        <div className="bg-gray-950 flex flex-col h-full border-l border-gray-800 flex-shrink-0" style={{ width: `${splitRatio}%` }}>
+                            <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-black/40">
                             <h3 className="text-sm font-black bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text uppercase tracking-widest flex items-center gap-2">
                                 <span>✨</span> AI Copilot (v2.2)
                             </h3>
@@ -932,8 +975,9 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                             </button>
                         </form>
                     </div>
-                </div>
+                )}
             </div>
         </div>
-    );
+    </div>
+);
 }
