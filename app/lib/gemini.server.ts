@@ -55,7 +55,7 @@ async function callGeminiApi(
         }]
     };
 
-    if (responseMimeType) {
+    if (responseMimeType && !useGrounding) {
         payload.generationConfig = { responseMimeType };
     }
     
@@ -248,7 +248,7 @@ export async function checkEvidenceListWithGemini(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-flash",
+            "gemini-2.5-pro",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -317,43 +317,46 @@ export async function analyzeImageQuality(
     }
 
     const prompt = `
-    Analyze this image for a geography identification game. ${contextStr}
+    You are a technical geolocation analyst providing raw factual data for Tuen Mun, Hong Kong.
     
-    1. Is the image clear enough to identify landmarks or locations?
-    2. Suggest a "quality_score" from 0 to 100 based on clarity and uniqueness.
-    3. Suggest a "difficulty_rating" from 1 to 10 based on how hard it would be to find this exact spot.
-    4. Provide a brief "precontext" description of what you see. CRITICAL: Do NOT reveal the location name, specific coordinates, or any direct spoilers. Keep it atmospheric.
-    ${context?.lat ? "5. Verify if the visual environment matches the provided coordinates." : ""}
-    6. Generate 3 progressive hints for players.
-       ${context?.evidenceList && context.evidenceList.length > 0
-            ? `CRITICAL: The admin has identified these key "Ground Truth" items: ${JSON.stringify(context.evidenceList.map((e: any) => e.description || e))}. 
-            Your hints must subtly guide the player towards finding these specific items without explicitly naming them in the first two hints.`
-            : "Focus on general visual features."}
-       - Hint 1: Visual/Vague (High-level, e.g. "Focus on the architectural style or the color of the signage").
-       - Hint 2: Contextual (Mid-level, e.g. "The vegetation suggests a tropical climate, look for specific trees").
-       - Hint 3: Specific (Direct clue but still playful, e.g. "A unique feature on the left wall holds the key").
+    Task:
+    Analyze the image and provided context to generate a factual description and three progressive hints.
     
-    - Descriptive Strategy: Create an "Informative Snapshot". Focus on clear, factual identifiers that help a student ground the location on a map. Describe architectural eras, specific signage, types of flora, or unique terrain features. Avoid flowery or "fancy" adjectives.
-    - Hint Strategy: Generate three hints that follow a "Vague-to-Specific" gradient.
-       - **Hyper-Local Context**: ALL locations are in Tuen Mun. Never mention "Hong Kong", "New Territories", or general city-wide facts.
-       - Hint 1 (Vague): Environmental/Style clues (e.g., "The red-roofed housing style is typical of estates built in the late 80s in this sector").
-       - Hint 2 (Medium): Specific identifiable features (e.g., "Look for the distinct yellow LRT bridge supports that pass nearby").
-       - Hint 3 (Specific): Playful deduction (e.g., "The shadow of the ventilation shaft points directly toward the Butterfly Estate market").
-    - RESTRICTION: NEVER name the city or specific landmark in a hint. Aim for "Map Grounding"—information that can be cross-referenced with a map.
+    Context:
+    ${contextStr}
     
-    Return a JSON object with this exact schema:
+    Tone and Style (ABSOLUTE RESTRICTION):
+    - **NO FANCY WORDS**: Strictly forbid words like "shimmering," "whispering," "nestled," "vibrant," "azure," "quaint," "atmosphere," "vibe," or any poetic/artistic language.
+    - **NO STORYTELLING**: Do not try to "draw a picture." Do not mention lighting, mood, or feelings.
+    - **FACTUAL ONLY**: Describe ONLY physical objects, colors, building heights, and street names.
+    - **TECHNICAL TONE**: Your output should read like a dry building survey or a police report.
+
+    Instructions for Hints (STRICT):
+    1. **Hint 1 (Vague)**: Describe the primary physical objects or environment (e.g., "A row of 20-story residential buildings with brown facades").
+    2. **Hint 2 (Medium)**: Identify specific physical features (e.g., "Building A has a green sign at the top. There is a light rail track next to a concrete bridge").
+    3. **Hint 3 (Specific)**: Reference specific estate names or street names (e.g., "The location is a concrete walkway between On Ting Estate and the Tuen Mun River").
+    
+    Orientation Analysis:
+    - Identify the camera's orientation (e.g., "Facing North-East").
+    - Ensure all hints are grounded in this factual orientation.
+
+    Professional Quality Standards:
+    - **Significant Landmarks Only**: Focus on buildings and infrastructure that are permanent and map-identifiable.
+    - **Exclude Generic Items**: Ignore lamp posts, trash cans, or generic street signs.
+    
+    Output strictly in this JSON format:
     {
+      "precontext": "string (Factual description of physical objects)",
+      "generated_hints": ["Hint 1", "Hint 2", "Hint 3"],
       "quality_score": number,
       "difficulty_rating": number,
-      "precontext": "string (Informative Snapshot description)",
-      "recommendation": "string",
-      "generated_hints": ["Subtle Hint 1", "Subtle Hint 2", "Subtle Hint 3"]
+      "recommendation": "string"
     }
-  `;
+    `;
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-flash",
+            "gemini-2.5-pro",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -409,17 +412,18 @@ export async function generateEvidenceDescription(
     }
 
     const prompt = `
-    Analyze the specific region of the image defined by this bounding box:
-    x: ${evidenceBox.x}%, y: ${evidenceBox.y}%, width: ${evidenceBox.w}%, height: ${evidenceBox.h}% (Percentages of image dimensions).
+    Identify the object in this bounding box:
+    x: ${evidenceBox.x}%, y: ${evidenceBox.y}%, width: ${evidenceBox.w}%, height: ${evidenceBox.h}%.
     
-    1. Identify the object or feature inside this box.
-    2. Provide a concise, 1-sentence analytical description of what this evidence represents in the context of a geolocation game (e.g., "Unique architectural style of the 19th century", "Specific street sign font used in this region").
-    3. Keep it under 30 words.
+    Tone: Strictly factual. 
+    1. Identify the object.
+    2. Provide a 1-sentence description using only physical attributes (color, material, type).
+    3. No "fancy" words. Keep it under 20 words.
     `;
 
     try {
         const description = await callGeminiApi(
-            "gemini-2.5-flash",
+            "gemini-2.5-pro",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -432,6 +436,101 @@ export async function generateEvidenceDescription(
     } catch (e: any) {
         console.error("AI Gateway Error:", e);
         return `Analysis failed: ${e.message}`;
+    }
+}
+
+export async function autoDetectMapEvidence(
+    imageUrl: string,
+    locationData: { lat: number, lng: number, name?: string },
+    baseUrl: string,
+    gatewayToken: string,
+    apiKey: string,
+    directBase64?: string
+) {
+    let base64Data = "";
+    let mimeType = "image/jpeg";
+
+    if (directBase64) {
+        if (directBase64.startsWith("data:")) {
+            const parts = directBase64.split(",");
+            mimeType = parts[0].split(":")[1].split(";")[0];
+            base64Data = parts[1];
+        } else {
+            base64Data = directBase64;
+        }
+    } else {
+        const response = await fetch(imageUrl);
+        if (!response.ok) throw new Error("Failed to fetch image");
+        const arrayBuffer = await response.arrayBuffer();
+        base64Data = arrayBufferToBase64(arrayBuffer);
+        mimeType = response.headers.get("content-type") || "image/jpeg";
+    }
+
+    const { lat, lng, name } = locationData;
+    const locationContext = name ? `Location Name: ${name}. Coordinates: ${lat}, ${lng}` : `Coordinates: ${lat}, ${lng}`;
+
+    const prompt = `
+    You are an expert geolocation analyst specialized in factual GSV (Google Street View) map grounding.
+    
+    Context:
+    ${locationContext}
+    
+    Tone and Style (STRICT):
+    - **PLAIN ENGLISH ONLY**: No "fancy" words or storytelling.
+    - **OBJECTIVE**: Descriptions must be raw physical data.
+    
+    Pre-Analysis:
+    - Determine camera orientation (e.g., Facing North).
+    
+    Targeting Instructions:
+    1. **Significant Landmarks Only**: Permanent markers distinctive to the area and found on Google Maps.
+    2. **Examples**: Store names, building facades, estate entrances.
+    3. **EXCLUSION ZONE**: IGNORE lamp posts, traffic lights, trash cans, trees, or generic street signs.
+    
+    Instructions:
+    - provide a bounding box (0-1000 system).
+    - Provide a short, factual description (max 10 words).
+    
+    Output strictly in this JSON format:
+    {
+      "evidence": [
+        {
+          "description": "Factual name of landmark (e.g., 'Tuen Mun Town Plaza Entrance')",
+          "box": { "x": number, "y": number, "w": number, "h": number }
+        }
+      ]
+    }
+    `;
+
+    try {
+        // Enforce the smartest available model (gemini-2.5-pro) for complex spatial analysis
+        const responseText = await callGeminiApi(
+            "gemini-2.5-pro",
+            prompt,
+            { mimeType, data: base64Data },
+            baseUrl,
+            gatewayToken,
+            apiKey,
+            "application/json",
+            true // Enable tools (Google Search/Maps Grounding)
+        );
+
+        try {
+            const parsed = JSON.parse(responseText.trim());
+            return parsed.evidence || [];
+        } catch (e) {
+            console.warn("[Gemini] JSON Parse Fallback in autoDetectMapEvidence:", e);
+            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                return parsed.evidence || [];
+            }
+            throw e;
+        }
+    } catch (e: any) {
+        console.error("Auto-Detect AI Gateway Error:", e);
+        throw new Error(`Auto-Detect failed: ${e.message}`);
     }
 }
 
@@ -473,7 +572,7 @@ export async function batchAnalyzeOfficialEvidence(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-flash",
+            "gemini-2.5-pro",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -498,6 +597,70 @@ export async function batchAnalyzeOfficialEvidence(
     } catch (e: any) {
         console.error("Batch Analysis Failed via Gateway", e);
         return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: ${e.message}` }));
+    }
+}
+
+export async function classifyBatchImages(
+    images: { mimeType: string; data: string }[],
+    baseUrl: string,
+    gatewayToken: string,
+    apiKey: string
+) {
+    if (images.length === 0) return [];
+
+    const prompt = `
+    Analyze these ${images.length} images. 
+    Identify which images are likely to be "True Location" real-world photographs suitable for a geolocation identfication game (buildings, streets, landmarks in Hong Kong).
+    Exclude: Logos, decorative graphics, UI icons, generic template art, or unrelated text charts.
+    
+    Return a JSON array of the indices (0 to ${images.length - 1}) that represent real-world location photos.
+    Format: { "valid_indices": [0, 2, 5...] }
+    `;
+
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const url = apiKey
+        ? `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+        : `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent`;
+
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    if (gatewayToken) {
+        headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
+    }
+
+    const payload: any = {
+        contents: [{
+            parts: [
+                { text: prompt },
+                ...images.map(img => ({
+                    inlineData: {
+                        mimeType: img.mimeType,
+                        data: img.data
+                    }
+                }))
+            ]
+        }],
+        generationConfig: { responseMimeType: "application/json" }
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error(`Status: ${response.status}`);
+        
+        const data = await response.json() as any;
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const parsed = JSON.parse(text.trim());
+        return Array.isArray(parsed.valid_indices) ? parsed.valid_indices : [];
+    } catch (e) {
+        console.error("[Gemini] Batch classification failed:", e);
+        // Fallback: return everything so we don't block work if AI fails
+        return images.map((_, i) => i);
     }
 }
 
@@ -552,7 +715,7 @@ export async function generateSocraticHint(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-flash",
+            "gemini-2.5-pro",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,

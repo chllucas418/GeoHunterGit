@@ -13,6 +13,7 @@ export default [
     route("profile", "routes/profile.tsx"),
     route("leaderboard", "routes/leaderboard.tsx"),
     route("privacy", "routes/privacy.tsx"),
+    route("support", "routes/support.tsx"),
     route("resources/image/:locationId", "routes/resources.image.$locationId.ts"),
 
     // Teacher Mode Routes
@@ -30,6 +31,10 @@ export default [
     route("admin/datasets/:setId", "routes/admin.datasets.$setId.tsx"),
     route("admin/mass-add", "routes/admin.mass-add.tsx"),
     route("api/admin/mass-add", "routes/api.admin.mass-add.ts"),
+    route("api/admin/auto-detect", "routes/api.admin.auto-detect.ts"),
+    route("api/admin/chat", "routes/api.admin.chat.ts"),
+    route("api/admin/export-locations", "routes/api.admin.export-locations.ts"),
+    route("api/admin/export-sessions", "routes/api.admin.export-sessions.ts"),
 
     // Room APIs
     route("api/room/:code/action", "routes/api.room.$code.action.ts"),

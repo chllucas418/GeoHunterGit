@@ -79,12 +79,28 @@ export default function AdminLocations() {
                         </h1>
                         <p className="text-blue-200/60 font-mono mt-2">Manage deployment zones and intelligence assets.</p>
                     </div>
-                    <Link
-                        to="/admin/add-location"
-                        className="px-8 py-3 bg-blue-500 hover:bg-blue-400 text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-105"
-                    >
-                        + Deploy Asset
-                    </Link>
+                    <div className="flex items-center gap-3">
+                        <a
+                            href="/api/admin/export-locations"
+                            download
+                            className="px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold uppercase tracking-widest rounded-xl shadow-lg transition-all"
+                        >
+                            ⬇ Locations CSV
+                        </a>
+                        <a
+                            href="/api/admin/export-sessions"
+                            download
+                            className="px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold uppercase tracking-widest rounded-xl shadow-lg transition-all"
+                        >
+                            ⬇ Sessions CSV
+                        </a>
+                        <Link
+                            to="/admin/add-location"
+                            className="px-8 py-3 bg-blue-500 hover:bg-blue-400 text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/20 transition-all hover:scale-105"
+                        >
+                            + Deploy Asset
+                        </Link>
+                    </div>
                 </header>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">

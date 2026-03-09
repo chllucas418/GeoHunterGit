@@ -12,7 +12,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const limit = 20;
     const offset = (page - 1) * limit;
 
-    const { results: users } = await db.prepare("SELECT id, email, display_name, current_elo, total_games, accuracy_avg FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
+    const { results: users } = await db.prepare("SELECT id, email, display_name, profile_picture_url, class_grade, class_number, current_elo, total_games, accuracy_avg FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(limit, offset).all<any>();
 
     const countResult = await db.prepare("SELECT COUNT(*) as count FROM users").first<any>();
     const totalUsers = countResult.count;
@@ -85,11 +85,18 @@ export default function AdminUsers() {
                                     <h2 className="text-xl font-black text-white group-hover:text-blue-300 transition-colors">
                                         {user.display_name || "Unknown Agent"}
                                     </h2>
-                                    <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mt-1">ID: {user.id.substring(0, 8)}</p>
+                                    <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mt-1">
+                                        ID: {user.id.substring(0, 8)} 
+                                        {user.class_grade && ` • ${user.class_grade}${user.class_number?.toString().padStart(2, '0')}`}
+                                    </p>
                                     <p className="text-xs text-white/50 font-mono mt-2">{user.email}</p>
                                 </div>
-                                <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-white/40 group-hover:text-white group-hover:bg-blue-500/20 transition-all">
-                                    {user.display_name?.[0]?.toUpperCase() || "?"}
+                                <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-lg font-black text-white/40 group-hover:text-white group-hover:bg-blue-500/20 transition-all overflow-hidden">
+                                    {user.profile_picture_url ? (
+                                        <img src={user.profile_picture_url} className="w-full h-full object-cover" alt="Profile" />
+                                    ) : (
+                                        user.display_name?.[0]?.toUpperCase() || "?"
+                                    )}
                                 </div>
                             </div>
 

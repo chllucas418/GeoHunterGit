@@ -72,14 +72,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Content Layer */}
         <div className="relative z-10 flex-grow flex flex-col">
           {children}
-          <footer className="relative z-20 py-8 mt-auto text-center border-t border-white/5 bg-black/40 backdrop-blur-md transition-colors duration-500 footer-glass">
-            <div className="flex justify-center gap-6 text-[10px] uppercase font-bold tracking-[0.2em] text-white/40 mb-2">
-              <a href="/privacy" className="hover:text-white transition-colors duration-300">Privacy Protocol</a>
-              <span className="text-white/20">/</span>
-              <a href="mailto:contact@geohunter.com" className="hover:text-white transition-colors duration-300">Support</a>
+          {/* --- Global System Footer (Sleek Centered Design) --- */}
+          <footer className="relative z-20 py-12 mt-auto text-center border-t border-white/5 bg-[#030712]/40 backdrop-blur-md transition-colors duration-500 footer-glass">
+            <div className="flex justify-center items-center gap-6 text-[10px] uppercase font-bold tracking-[0.3em] text-white/40 mb-4">
+              <a href="/privacy" className="hover:text-blue-400 transition-all duration-300">Privacy Protocol</a>
+              <span className="text-white/10">/</span>
+              <a href="/support" className="hover:text-indigo-400 transition-all duration-300">Support</a>
             </div>
-            <div className="text-[9px] uppercase tracking-[0.3em] font-black text-white/20">
-              Engineered by <span className="text-white/40">Lucas Cheung</span>
+            <div className="text-[9px] uppercase tracking-[0.5em] font-black text-white/10 flex flex-col items-center gap-2">
+              <span>Engineered by <span className="text-white/30 tracking-[0.2em] font-black">Lucas Cheung</span></span>
+              <span className="opacity-40 text-[7px] font-mono">Status: Optimized // All Rights Reserved</span>
             </div>
           </footer>
         </div>

@@ -105,14 +105,15 @@ export async function action({ request, context }: ActionFunctionArgs) {
             }
         }
 
+        const description = formData.get("description") as string;
         if (existingId) {
             await db.prepare(
-                "UPDATE locations SET image_url = ?, lat = ?, lng = ?, difficulty_rating = ?, quality_score = ?, hints = ?, image_metadata = ? WHERE id = ?"
-            ).bind(finalImageUrl, lat, lng, difficulty, qualityScore, hints, metadata, existingId).run();
+                "UPDATE locations SET image_url = ?, lat = ?, lng = ?, difficulty_rating = ?, quality_score = ?, hints = ?, image_metadata = ?, description = ? WHERE id = ?"
+            ).bind(finalImageUrl, lat, lng, difficulty, qualityScore, hints, metadata, description, existingId).run();
         } else {
             await db.prepare(
-                "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini, hints, image_metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            ).bind(locationId, finalImageUrl, lat, lng, difficulty, qualityScore, 1, hints, metadata).run();
+                "INSERT INTO locations (id, image_url, lat, lng, difficulty_rating, quality_score, verified_by_gemini, hints, image_metadata, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            ).bind(locationId, finalImageUrl, lat, lng, difficulty, qualityScore, 1, hints, metadata, description).run();
         }
 
         // Handle Evidence
@@ -185,16 +186,16 @@ export default function AddLocation() {
 
     const [previewUrl, setPreviewUrl] = useState<string>(existingLocation?.image_url ?? "");
     const [base64, setBase64] = useState<string>(existingLocation?.image_url ?? "");
-    const [qualityScore, setQualityScore] = useState<number>(existingLocation?.quality_score ?? 100);
+    const [qualityScore, setQualityScore] = useState<number>(existingLocation?.quality_score ?? 80);
     const [difficulty, setDifficulty] = useState<number>(existingLocation?.difficulty_rating ?? 5);
     const [hintsList, setHintsList] = useState<string[]>(
         existingLocation?.hints ?
-            // Try parsing JSON first, fallback to newline split, fallback to empty
             (() => {
                 try { return JSON.parse(existingLocation.hints); } catch { return existingLocation.hints ? existingLocation.hints.split(/\n\n|\n/) : []; }
             })()
             : []
     );
+    const [locationDescription, setLocationDescription] = useState<string>(existingLocation?.description ?? "");
     const [photographer, setPhotographer] = useState<string>(initialMetadata.photographer ?? "");
 
     const [evidenceStep, setEvidenceStep] = useState(false);
@@ -202,12 +203,13 @@ export default function AddLocation() {
     const [currentBox, setCurrentBox] = useState<BoxCoordinates | null>(null);
     const [showDescModal, setShowDescModal] = useState(false);
     const [tempDesc, setTempDesc] = useState("");
+    const [isEvidenceFullscreen, setIsEvidenceFullscreen] = useState(false);
 
     // --- AI Chat Agent State ---
     const [chatHistory, setChatHistory] = useState<{role: string, text: string, isAction?: boolean, actionType?: string, actionData?: string}[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [isChatting, setIsChatting] = useState(false);
-    const [chatModel, setChatModel] = useState("gemini-2.5-flash");
+    const [chatModel, setChatModel] = useState("gemini-2.5-pro");
     const chatScrollRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll chat
@@ -248,48 +250,138 @@ export default function AddLocation() {
             const data = await res.json() as any;
             if (data.error) throw new Error(data.error);
 
-            let responseText = data.text;
-            let actionType = undefined;
-            let actionData = undefined;
+            // Quick hack to parse JSON blocks for action suggestions
+            const jsonMatch = data.text.match(/```json\s([\s\S]*?)\s```/);
+            let actionData = null;
+            let actionType: string | undefined = undefined;
+            let cleanText = data.text;
 
-            try {
-                const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
-                if (jsonMatch) {
+            if (jsonMatch) {
+                try {
                     const parsed = JSON.parse(jsonMatch[1]);
-                    if (parsed.action && parsed.data) {
-                        actionType = parsed.action;
-                        actionData = parsed.data;
-                        responseText = responseText.replace(jsonMatch[0], "").trim();
+                    if (parsed.action === 'addHint') {
+                        actionType = 'addHint';
+                        actionData = parsed.hint;
+                    } else if (parsed.action === 'setDescription') {
+                        actionType = 'setDescription';
+                        actionData = parsed.description;
                     }
+                    cleanText = data.text.replace(jsonMatch[0], '').trim();
+                } catch (e) {
+                    console.error("Failed to parse AI action");
                 }
-            } catch (err) {
-                console.error("Parse JSON action err:", err);
             }
 
-            setChatHistory(prev => [...prev, { 
-                role: "model", 
-                text: responseText || (actionType ? "[Action Generated]" : "Done."), 
+            setChatHistory(prev => [...prev, {
+                role: 'model',
+                text: cleanText,
                 isAction: !!actionType,
-                actionType,
-                actionData
+                actionData,
+                actionType
             }]);
         } catch (error: any) {
             console.error(error);
             setChatHistory(prev => [...prev, { role: "model", text: `Error: ${error.message}` }]);
         } finally {
             setIsChatting(false);
+            chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' });
         }
     };
 
-    const acceptChatAction = (type?: string, data?: string) => {
-        if (!type || !data) return;
-        if (type === "addHint") {
+    const handleAutoGenerateDetails = () => {
+        if (!base64) {
+            alert("Please upload an image first.");
+            return;
+        }
+        setIsChatting(true);
+        setChatHistory(prev => [...prev, { role: "user", text: "✨ Auto-generating hints and description..." }]);
+        
+        const fd = new FormData();
+        fd.append("intent", "analyze");
+        fd.append("base64Image", base64);
+        if (marker) {
+            fd.append("lat", marker.lat.toString());
+            fd.append("lng", marker.lng.toString());
+        }
+        if (evidenceList.length > 0) {
+            fd.append("evidenceList", JSON.stringify(evidenceList));
+        }
+        fetcher.submit(fd, { method: "post" });
+    };
+
+    const handleAutoDetectEvidence = async () => {
+        if (isChatting || !base64) return;
+        
+        // VALIDATION: Ensure location is pinned
+        if (!marker?.lat || !marker?.lng) {
+            setChatHistory(prev => [...prev, { 
+                role: "model", 
+                text: "⚠️ **Location Required**: Please pin the location on the map first so the AI can ground the evidence against real map data!" 
+            }]);
+            return;
+        }
+
+        setIsChatting(true);
+        setChatHistory(prev => [...prev, { role: "user", text: "Please auto-detect evidence for this location." }]);
+
+        const locationPayload = {
+            lat: marker?.lat,
+            lng: marker?.lng,
+            name: photographer
+        };
+
+        try {
+            let payload: any = { location: locationPayload };
+            if (base64.startsWith('http')) {
+                payload.imageUrl = base64;
+            } else {
+                payload.base64Image = base64;
+            }
+
+            const res = await fetch("/api/admin/auto-detect", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json() as any;
+            if (data.error) throw new Error(data.error);
+
+            if (data.evidence && data.evidence.length > 0) {
+                const mappedEvidence = data.evidence.map((ev: any) => ({
+                    id: Math.random().toString(36).substr(2, 9),
+                    description: ev.description,
+                    box: {
+                        x: ev.box.x,
+                        y: ev.box.y,
+                        w: ev.box.w,
+                        h: ev.box.h
+                    }
+                }));
+
+                setEvidenceList(prev => [...prev, ...mappedEvidence]);
+                setChatHistory(prev => [...prev, { role: "model", text: `✅ Successfully auto-detected ${mappedEvidence.length} evidence markers.` }]);
+            } else {
+                setChatHistory(prev => [...prev, { role: "model", text: "No distinct evidence landmarks could be automatically detected." }]);
+            }
+        } catch (e: any) {
+            console.error(e);
+            setChatHistory(prev => [...prev, { role: "model", text: `⚠️ Auto-detect failed: ${e.message}` }]);
+        } finally {
+            setIsChatting(false);
+            chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' });
+        }
+    };
+
+    const acceptChatAction = (type: string | undefined, data: any) => {
+        if (!type) return;
+        if (type === 'addHint') {
             setHintsList(prev => [...prev, data]);
             alert("Hint added to the list!");
-        } else if (type === "addEvidenceDescription") {
+        } else if (type === 'setDescription') {
             setTempDesc(data);
             if (!currentBox && !showDescModal) {
-                alert("Copied directly into description input, but draw a box first to save it!");
+                 alert("Copied directly into description input, but draw a box first to save it!");
             }
         }
     };
@@ -300,11 +392,13 @@ export default function AddLocation() {
         if (analysis) {
             if (analysis.quality_score) setQualityScore(analysis.quality_score);
             if (analysis.difficulty_rating) setDifficulty(analysis.difficulty_rating);
+            if (analysis.precontext) setLocationDescription(analysis.precontext);
             if (analysis.generated_hints && Array.isArray(analysis.generated_hints)) {
-                // Only pre-fill if empty to avoid overwriting manual edits
-                if (hintsList.length === 0) {
-                    setHintsList(analysis.generated_hints);
-                }
+                setHintsList(analysis.generated_hints);
+            }
+            if (isChatting) {
+                setChatHistory(prev => [...prev, { role: "model", text: "✅ Successfully auto-generated hints and description." }]);
+                setIsChatting(false);
             }
         }
     }, [analysis]);
@@ -386,12 +480,16 @@ export default function AddLocation() {
 
             if (mapRef.current) {
                 const center = marker || { lat: 22.3193, lng: 114.1694 };
-                const map = new Map(mapRef.current, { 
-                    center, 
-                    zoom: marker ? 15 : 11,
-                    fullscreenControl: true,
-                    gestureHandling: 'greedy'
-                });
+                const mapOptions: google.maps.MapOptions = {
+                    center: { lat: 22.3193, lng: 114.1694 }, // Default HK
+                    zoom: 11,
+                    mapId: "DEMO_MAP_ID",
+                    mapTypeId: 'satellite',
+                    mapTypeControl: true,
+                    disableDefaultUI: false,
+                    streetViewControl: false,
+                };
+                const map = new Map(mapRef.current, mapOptions);
 
                 if (marker) {
                     markerRef.current = new Marker({
@@ -448,6 +546,17 @@ export default function AddLocation() {
             initMap();
         }
     }, [mapsApiKey, evidenceStep]);
+
+    // Fullscreen escape key exit
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isEvidenceFullscreen) {
+                setIsEvidenceFullscreen(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isEvidenceFullscreen]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-50 p-8">
@@ -573,6 +682,27 @@ export default function AddLocation() {
                             )}
 
                             <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-sm font-medium text-slate-400">Atmospheric Description</label>
+                                    <button
+                                        type="button"
+                                        onClick={handleAutoGenerateDetails}
+                                        disabled={isChatting}
+                                        className="text-[10px] font-black text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                                    >
+                                        <span>✨ Auto-Generate Details</span>
+                                    </button>
+                                </div>
+                                <textarea
+                                    name="description"
+                                    value={locationDescription}
+                                    onChange={(e) => setLocationDescription(e.target.value)}
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none h-24 resize-none"
+                                    placeholder="Enter atmospheric description (Informative Snapshot)..."
+                                />
+                            </div>
+
+                            <div className="space-y-4">
                                 <label className="block text-sm font-medium text-slate-400">Step 3: Quality & Difficulty</label>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
@@ -690,28 +820,45 @@ export default function AddLocation() {
                             </button>
                         </Form>
                     ) : (
-                        <div className="lg:col-span-2 bg-slate-900 p-8 rounded-3xl border border-slate-800 min-h-[600px] flex flex-col relative">
+                        <div className={`lg:col-span-2 bg-slate-900 p-8 rounded-3xl border border-slate-800 ${isEvidenceFullscreen ? 'fixed inset-0 z-[100] m-0 rounded-none bg-black flex flex-col p-4' : 'min-h-[600px] flex flex-col relative'}`}>
                             <div className="mb-4 flex justify-between items-start">
                                 <div>
                                     <h3 className="text-xl font-bold">Mark Identification Area</h3>
                                     <p className="text-slate-500 text-sm">Draw a box around a distinct visual feature (sign, mountain, architecture).</p>
                                 </div>
-                                <button
-                                    onClick={() => setEvidenceStep(false)}
-                                    className="text-sm text-blue-400 hover:text-blue-300 font-bold"
-                                >
-                                    Done & Return
-                                </button>
+                                <div className="flex items-center gap-4">
+                                    <button
+                                        onClick={() => setIsEvidenceFullscreen(!isEvidenceFullscreen)}
+                                        className="text-sm bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors flex items-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            {isEvidenceFullscreen 
+                                                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                            }
+                                        </svg>
+                                        {isEvidenceFullscreen ? "Exit Fullscreen" : "⛶ Fullscreen Editor"}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (isEvidenceFullscreen) setIsEvidenceFullscreen(false);
+                                            setEvidenceStep(false);
+                                        }}
+                                        className="text-sm text-blue-400 hover:text-blue-300 font-bold"
+                                    >
+                                        Done & Return
+                                    </button>
+                                </div>
                             </div>
 
-                            <div className="flex-grow relative bg-black rounded-2xl overflow-hidden shadow-2xl">
+                            <div className={`flex-grow relative bg-black rounded-2xl overflow-hidden shadow-2xl ${isEvidenceFullscreen ? 'h-full' : ''}`}>
                                 <EvidenceCanvas imageUrl={previewUrl} onBoxChange={handleBoxDrawn} />
 
                                 {/* Overlay existing boxes */}
                                 {evidenceList.map(ev => (
                                     <div
                                         key={ev.id}
-                                        className="absolute border-2 border-green-400 bg-green-400/10 pointer-events-none"
+                                        className="absolute border-2 border-green-400 bg-green-400/10 z-30 group"
                                         style={{
                                             left: `${ev.box.x / 10}%`,
                                             top: `${ev.box.y / 10}%`,
@@ -719,7 +866,22 @@ export default function AddLocation() {
                                             height: `${ev.box.h / 10}%`
                                         }}
                                         title={ev.description}
-                                    />
+                                    >
+                                        <button
+                                            className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 active:scale-90 z-40"
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onTouchStart={(e) => e.stopPropagation()}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEvidenceList(prev => prev.filter(item => item.id !== ev.id));
+                                            }}
+                                        >
+                                            ×
+                                        </button>
+                                        <div className="absolute bottom-full left-0 bg-black/70 text-white text-[10px] px-2 py-1 rounded mb-1 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">
+                                            {ev.description}
+                                        </div>
+                                    </div>
                                 ))}
 
                                 {/* Description Prompt Modal */}
@@ -763,8 +925,13 @@ export default function AddLocation() {
                                         <div className="flex justify-between items-start">
                                             <span className="text-xs font-bold text-green-400">EVIDENCE</span>
                                             <button
-                                                onClick={() => setEvidenceList(prev => prev.filter(e => e.id !== ev.id))}
-                                                className="text-slate-500 hover:text-red-400 transition-colors"
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                onTouchStart={(e) => e.stopPropagation()}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEvidenceList(prev => prev.filter(e => e.id !== ev.id));
+                                                }}
+                                                className="text-slate-500 hover:text-red-400 transition-colors p-1"
                                             >
                                                 ✕
                                             </button>
@@ -777,22 +944,32 @@ export default function AddLocation() {
                     )}
 
                     {/* AI Chat Agent UI */}
-                    {evidenceStep && (
+                    {evidenceStep && !isEvidenceFullscreen && (
                         <div className="lg:col-span-1 bg-slate-900 rounded-3xl border border-slate-800 flex flex-col h-[600px] shadow-xl overflow-hidden relative">
-                            <div className="p-4 border-b border-slate-800 bg-slate-800/50 flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                                    <h3 className="font-bold text-sm">AI Copilot</h3>
+                            <div className="p-4 border-b border-slate-800 bg-slate-800/50 flex flex-col gap-2">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                                        <h3 className="font-bold text-sm">AI Copilot</h3>
+                                    </div>
+                                    <select 
+                                        className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 outline-none"
+                                        value={chatModel}
+                                        onChange={(e) => setChatModel(e.target.value)}
+                                    >
+                                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Legacy)</option>
+                                        <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                    </select>
                                 </div>
-                                <select 
-                                    className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 outline-none"
-                                    value={chatModel}
-                                    onChange={(e) => setChatModel(e.target.value)}
+                                <button
+                                    onClick={handleAutoDetectEvidence}
+                                    disabled={isChatting}
+                                    className="w-full bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 text-[10px] font-black py-1.5 rounded-lg border border-emerald-500/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
                                 >
-                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                </select>
+                                    <span className={isChatting ? "animate-pulse" : ""}>✨</span>
+                                    {isChatting ? "AUTO-DETECTING..." : "AUTO-DETECT MAP EVIDENCE"}
+                                </button>
                             </div>
 
                             <div 
@@ -800,9 +977,11 @@ export default function AddLocation() {
                                 className="flex-1 overflow-y-auto p-4 space-y-4"
                             >
                                 {chatHistory.length === 0 && (
-                                    <div className="text-center text-slate-500 text-xs mt-10 space-y-2">
-                                        <p>✨ Ready to assist with coordinates and visual analysis.</p>
-                                        <p>Try asking: <i>"Give me 3 hints for this place"</i> or <i>"What is visually unique here?"</i></p>
+                                    <div className="text-center text-slate-500 text-xs mt-10 space-y-4 flex flex-col items-center">
+                                        <div className="space-y-2">
+                                            <p>✨ Ready to assist with coordinates and visual analysis.</p>
+                                            <p>Try asking: <i>"Give me 3 hints for this place"</i> or <i>"What is visually unique here?"</i></p>
+                                        </div>
                                     </div>
                                 )}
                                 {chatHistory.map((msg, idx) => (
