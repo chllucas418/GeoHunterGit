@@ -308,9 +308,15 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
 
         // Update Participant Totals (skip for guided round)
         if (!isGuidedRound) {
+            // Powerup Energy: roughly 1 energy per 100 score, capped at 100 max capacity.
+            const energyEarned = Math.min(50, Math.floor(finalScore / 100));
+
             await db.prepare(
-                "UPDATE room_participants SET score = score + ? WHERE room_code = ? AND user_id = ?"
-            ).bind(finalScore, code, userId).run();
+                `UPDATE room_participants 
+                 SET score = score + ?,
+                     powerup_energy = MIN(100, powerup_energy + ?)
+                 WHERE room_code = ? AND user_id = ?`
+            ).bind(finalScore, energyEarned, code, userId).run();
         }
 
         // Update User Elo & Accuracies (skip for guided round)

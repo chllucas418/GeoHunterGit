@@ -5,6 +5,7 @@ import { requireTeacher } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import type { BoxCoordinates } from "~/types/shared";
+import { motion, animate, useMotionValue, useTransform } from "framer-motion";
 // import { GoogleMap, Marker } from "@react-google-maps/api"; // Will need to adapt for Remix/Vite or use existing loader
 
 export async function loader({ request, params, context }: any) {
@@ -115,6 +116,19 @@ export default function TeacherRoom() {
     const [timeLeft, setTimeLeft] = useState(300);
     const [reviewSplitRatio, setReviewSplitRatio] = useState(35);
     const [isResizing, setIsResizing] = useState(false);
+
+    // --- ANIMATED COUNTER COMPONENT ---
+    const AnimatedCounter = ({ value }: { value: number }) => {
+        const count = useMotionValue(0);
+        const rounded = useTransform(count, Math.round);
+
+        useEffect(() => {
+            const animation = animate(count, value, { duration: 2, delay: 0.5, ease: "easeOut" });
+            return animation.stop;
+        }, [value]);
+
+        return <motion.span>{rounded}</motion.span>;
+    };
 
     // --- MEMOIZED DATA ---
     const officialEvidence = useMemo(() => {
@@ -403,7 +417,7 @@ export default function TeacherRoom() {
             </div>
 
             {/* Settings Config */}
-            <div className="bg-slate-900 border border-white/10 p-6 rounded-xl flex gap-8 items-center">
+            <div className="bg-slate-900 border border-white/10 p-6 rounded-xl flex gap-8 items-center flex-wrap justify-center">
                 <div className="flex flex-col">
                     <label className="text-xs uppercase font-bold text-slate-400 mb-2">Hint Frequency</label>
                     <div className="flex items-center gap-2">
@@ -411,7 +425,7 @@ export default function TeacherRoom() {
                             type="number"
                             defaultValue={room.hint_interval || 30}
                             min="5" max="120"
-                            className="bg-black/50 border border-white/20 rounded px-3 py-2 text-white font-mono w-20 text-center"
+                            className="bg-black/50 border border-white/20 rounded px-3 py-2 text-white font-mono w-20 text-center focus:outline-none focus:border-blue-500"
                             onChange={(e) => {
                                 const val = parseInt(e.target.value);
                                 if (val > 0) {
@@ -425,7 +439,71 @@ export default function TeacherRoom() {
                         <span className="text-sm text-slate-400">seconds</span>
                     </div>
                 </div>
+
+                <div className="w-px h-12 bg-white/10 hidden md:block" />
+
+                <div className="flex flex-col">
+                    <label className="text-xs uppercase font-bold text-slate-400 mb-2">Game Mode</label>
+                    <div className="flex items-center gap-2">
+                        <select
+                            defaultValue={room.game_mode || 'standard'}
+                            className="bg-black/50 border border-white/20 rounded px-3 py-2 text-white font-mono w-40 focus:outline-none focus:border-blue-500"
+                            onChange={(e) => {
+                                const fd = new FormData();
+                                fd.append("action", "UPDATE_SETTINGS");
+                                fd.append("gameMode", e.target.value);
+                                actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
+                            }}
+                        >
+                            <option value="standard">Standard (Solo)</option>
+                            <option value="time_attack">Time Attack</option>
+                            <option value="teams">Team Battles</option>
+                        </select>
+                    </div>
+                </div>
+                
+                {room.game_mode === 'teams' && (
+                    <>
+                        <div className="w-px h-12 bg-white/10 hidden md:block" />
+                        <div className="flex items-center">
+                             <button
+                                onClick={() => {
+                                    const fd = new FormData();
+                                    fd.append("action", "ASSIGN_TEAMS");
+                                    fd.append("teamCount", "2");
+                                    actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
+                                }}
+                                className="px-4 py-2 bg-purple-600/50 hover:bg-purple-500 text-white rounded-lg font-bold text-xs uppercase tracking-widest border border-purple-400 transition-all flex items-center gap-2"
+                            >
+                                👥 Auto-Assign Teams (2)
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
+
+            {/* Team Distribution Preview */}
+            {room.game_mode === 'teams' && participants.some((p: any) => p.team_id) && (
+                <div className="w-full max-w-5xl mt-8">
+                     <h3 className="text-xs text-center uppercase font-bold text-slate-500 mb-4 tracking-widest">Squad Assignments</h3>
+                     <div className="flex flex-wrap justify-center gap-8">
+                         {Array.from(new Set(participants.map((p: any) => p.team_id).filter(Boolean))).map((teamId: any) => (
+                             <div key={teamId} className="flex flex-col items-center bg-white/5 p-4 rounded-xl border border-white/10 min-w-[200px]">
+                                 <div className={`text-lg font-black uppercase mb-3 ${teamId.includes('Red') ? 'text-red-400' : teamId.includes('Blue') ? 'text-blue-400' : teamId.includes('Green') ? 'text-green-400' : 'text-yellow-400'}`}>
+                                     {teamId}
+                                 </div>
+                                 <div className="flex flex-col gap-2 w-full">
+                                     {participants.filter((p: any) => p.team_id === teamId).map((p: any) => (
+                                         <div key={p.display_name} className="text-sm font-bold text-slate-300 text-center bg-black/30 rounded py-1">
+                                             {p.display_name}
+                                         </div>
+                                     ))}
+                                 </div>
+                             </div>
+                         ))}
+                     </div>
+                </div>
+            )}
 
             <div className="fixed bottom-12 inset-x-0 flex justify-center">
                 <button
@@ -672,22 +750,52 @@ export default function TeacherRoom() {
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-2">
                         <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-2">
-                            Deployment Log
+                            Deployment Log {room.game_mode === 'teams' ? '(SQUAD SCORES)' : ''}
                         </h3>
-                        {participants.map((p: any, i: number) => (
-                            <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-white'}`}>
-                                        {i + 1}
+
+                        {room.game_mode === 'teams' ? (
+                            (() => {
+                                // Aggregate scores by team
+                                const teamScores = participants.reduce((acc: any, p: any) => {
+                                    if (p.team_id) {
+                                        acc[p.team_id] = (acc[p.team_id] || 0) + p.score;
+                                    }
+                                    return acc;
+                                }, {});
+                                
+                                const sortedTeams = Object.entries(teamScores).sort((a: any, b: any) => b[1] - a[1]);
+
+                                return sortedTeams.map(([teamId, score], i) => (
+                                    <div key={teamId} className={`flex items-center justify-between p-4 rounded-xl border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-white'}`}>
+                                                {i + 1}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className={`font-bold text-lg uppercase truncate max-w-[200px] ${teamId.includes('Red') ? 'text-red-400' : teamId.includes('Blue') ? 'text-blue-400' : teamId.includes('Green') ? 'text-green-400' : 'text-yellow-400'}`}>{teamId}</span>
+                                                {i === 0 && <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest">Winning Squad</span>}
+                                            </div>
+                                        </div>
+                                        <span className="font-mono text-2xl text-blue-300 font-black">{score as number}</span>
                                     </div>
-                                    <div className="flex flex-col">
-                                        <span className="font-bold text-lg text-white truncate max-w-[200px]">{p.display_name}</span>
-                                        {i === 0 && <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest">Current Leader</span>}
+                                ));
+                            })()
+                        ) : (
+                            participants.map((p: any, i: number) => (
+                                <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-white'}`}>
+                                            {i + 1}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-lg text-white truncate max-w-[200px]">{p.display_name}</span>
+                                            {i === 0 && <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest">Current Leader</span>}
+                                        </div>
                                     </div>
+                                    <span className="font-mono text-2xl text-blue-300 font-black">{p.score}</span>
                                 </div>
-                                <span className="font-mono text-2xl text-blue-300 font-black">{p.score}</span>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
 
                     {/* Official Evidence List Toggle/View */}
@@ -760,69 +868,110 @@ export default function TeacherRoom() {
         );
     };
 
-    const renderPodium = () => (
-        <div className="h-full flex flex-col items-center justify-center space-y-12 animate-in fade-in">
-            <h1 className="text-8xl font-black text-yellow-400 tracking-tighter drop-shadow-2xl">MISSION ACCOMPLISHED</h1>
+    const renderPodium = () => {
+        let sortedEntities: any[] = [];
+        let isTeamMode = room.game_mode === 'teams';
 
-            <div className="flex items-end gap-8">
-                {/* 2nd Place */}
-                {participants[1] && (
-                    <div className="flex flex-col items-center">
-                        <div className="w-32 h-32 rounded-full bg-slate-300 border-4 border-white mb-4 flex items-center justify-center text-4xl font-black text-slate-800">
-                            {participants[1].display_name?.[0] || "?"}
-                        </div>
-                        <div className="h-48 w-40 bg-slate-700 rounded-t-2xl flex items-end justify-center pb-4">
-                            <span className="text-4xl font-black text-white">#2</span>
-                        </div>
-                        <div className="mt-4 text-center">
-                            <h3 className="text-2xl font-bold text-white">{participants[1].display_name}</h3>
-                            <p className="text-xl text-slate-400">{participants[1].score} pts</p>
-                        </div>
-                    </div>
-                )}
+        if (isTeamMode) {
+            const teamScores = participants.reduce((acc: any, p: any) => {
+                if (p.team_id) {
+                    acc[p.team_id] = (acc[p.team_id] || 0) + p.score;
+                }
+                return acc;
+            }, {});
+            sortedEntities = Object.entries(teamScores)
+                .map(([name, score]) => ({ display_name: name, score }))
+                .sort((a, b) => (b.score as number) - (a.score as number));
+        } else {
+            sortedEntities = [...participants].sort((a, b) => b.score - a.score);
+        }
 
-                {/* 1st Place */}
-                {participants[0] && (
-                    <div className="flex flex-col items-center">
-                        <div className="text-6xl mb-6">👑</div>
-                        <div className="w-40 h-40 rounded-full bg-yellow-400 border-4 border-white mb-4 flex items-center justify-center text-5xl font-black text-yellow-900 shadow-[0_0_50px_rgba(250,204,21,0.5)]">
-                            {participants[0].display_name?.[0] || "?"}
-                        </div>
-                        <div className="h-64 w-48 bg-yellow-600 rounded-t-2xl flex items-end justify-center pb-4 relative overflow-hidden">
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                            <span className="text-6xl font-black text-white relative z-10">#1</span>
-                        </div>
-                        <div className="mt-4 text-center">
-                            <h3 className="text-3xl font-black text-white">{participants[0].display_name}</h3>
-                            <p className="text-2xl text-yellow-400 font-bold">{participants[0].score} pts</p>
-                        </div>
-                    </div>
-                )}
+        return (
+            <div className="h-full flex flex-col items-center justify-center space-y-12 animate-in fade-in">
+                <h1 className="text-8xl font-black text-yellow-400 tracking-tighter drop-shadow-2xl">MISSION ACCOMPLISHED</h1>
 
-                {/* 3rd Place */}
-                {participants[2] && (
-                    <div className="flex flex-col items-center">
-                        <div className="w-28 h-28 rounded-full bg-orange-400 border-4 border-white mb-4 flex items-center justify-center text-3xl font-black text-orange-900">
-                            {participants[2].display_name?.[0] || "?"}
-                        </div>
-                        <div className="h-40 w-40 bg-orange-700 rounded-t-2xl flex items-end justify-center pb-4">
-                            <span className="text-4xl font-black text-white">#3</span>
-                        </div>
-                        <div className="mt-4 text-center">
-                            <h3 className="text-xl font-bold text-white">{participants[2].display_name}</h3>
-                            <p className="text-lg text-slate-400">{participants[2].score} pts</p>
-                        </div>
-                    </div>
-                )}
+                <div className="flex items-end gap-8">
+                    {/* 2nd Place */}
+                    {sortedEntities[1] && (
+                        <motion.div 
+                            initial={{ y: 200, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ duration: 0.8, delay: 1, type: "spring", bounce: 0.5 }}
+                            className="flex flex-col items-center"
+                        >
+                            <div className={`w-32 h-32 rounded-full border-4 border-white mb-4 flex items-center justify-center text-4xl font-black ${isTeamMode && sortedEntities[1].display_name.includes('Red') ? 'bg-red-500 text-white' : isTeamMode && sortedEntities[1].display_name.includes('Blue') ? 'bg-blue-500 text-white' : isTeamMode && sortedEntities[1].display_name.includes('Green') ? 'bg-green-500 text-white' : 'bg-slate-300 text-slate-800'}`}>
+                                {sortedEntities[1].display_name?.[0] || "?"}
+                            </div>
+                            <div className="h-48 w-40 bg-slate-700 rounded-t-2xl flex items-end justify-center pb-4">
+                                <span className="text-4xl font-black text-white">#2</span>
+                            </div>
+                            <div className="mt-4 text-center">
+                                <h3 className="text-2xl font-bold text-white">{sortedEntities[1].display_name}</h3>
+                                <p className="text-xl text-slate-400"><AnimatedCounter value={sortedEntities[1].score || 0} /> pts</p>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* 1st Place */}
+                    {sortedEntities[0] && (
+                        <motion.div 
+                            initial={{ y: 300, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ duration: 1, delay: 2, type: "spring", bounce: 0.6 }}
+                            className="flex flex-col items-center z-10"
+                        >
+                            <motion.div 
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ delay: 3, type: "spring" }}
+                                className="text-6xl mb-6"
+                            >
+                                👑
+                            </motion.div>
+                            <div className={`w-40 h-40 rounded-full border-4 border-white mb-4 flex items-center justify-center text-5xl font-black shadow-[0_0_50px_rgba(250,204,21,0.5)] ${isTeamMode && sortedEntities[0].display_name.includes('Red') ? 'bg-red-500 text-white' : isTeamMode && sortedEntities[0].display_name.includes('Blue') ? 'bg-blue-500 text-white' : isTeamMode && sortedEntities[0].display_name.includes('Green') ? 'bg-green-500 text-white' : 'bg-yellow-400 text-yellow-900'}`}>
+                                {sortedEntities[0].display_name?.[0] || "?"}
+                            </div>
+                            <div className="h-64 w-48 bg-yellow-600 rounded-t-2xl flex items-end justify-center pb-4 relative overflow-hidden">
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                                <span className="text-6xl font-black text-white relative z-10">#1</span>
+                            </div>
+                            <div className="mt-4 text-center">
+                                <h3 className="text-3xl font-black text-white">{sortedEntities[0].display_name}</h3>
+                                <p className="text-2xl text-yellow-400 font-bold"><AnimatedCounter value={sortedEntities[0].score || 0} /> pts</p>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* 3rd Place */}
+                    {sortedEntities[2] && (
+                        <motion.div 
+                            initial={{ y: 150, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ duration: 0.8, delay: 0.5, type: "spring", bounce: 0.4 }}
+                            className="flex flex-col items-center"
+                        >
+                            <div className={`w-28 h-28 rounded-full border-4 border-white mb-4 flex items-center justify-center text-3xl font-black ${isTeamMode && sortedEntities[2].display_name.includes('Red') ? 'bg-red-500 text-white' : isTeamMode && sortedEntities[2].display_name.includes('Blue') ? 'bg-blue-500 text-white' : isTeamMode && sortedEntities[2].display_name.includes('Green') ? 'bg-green-500 text-white' : 'bg-orange-400 text-orange-900'}`}>
+                                {sortedEntities[2].display_name?.[0] || "?"}
+                            </div>
+                            <div className="h-40 w-40 bg-orange-700 rounded-t-2xl flex items-end justify-center pb-4">
+                                <span className="text-4xl font-black text-white">#3</span>
+                            </div>
+                            <div className="mt-4 text-center">
+                                <h3 className="text-xl font-bold text-white">{sortedEntities[2].display_name}</h3>
+                                <p className="text-lg text-slate-400"><AnimatedCounter value={sortedEntities[2].score || 0} /> pts</p>
+                            </div>
+                        </motion.div>
+                    )}
+                </div>
+
+                <div className="mt-12">
+                    <Link to="/teacher/dashboard" className="px-8 py-4 bg-white/10 hover:bg-white/20 rounded-xl text-white font-bold uppercase tracking-widest">
+                        Return to Base
+                    </Link>
+                </div>
             </div>
-
-            <div className="mt-12">
-                <Link to="/teacher/dashboard" className="px-8 py-4 bg-white/10 hover:bg-white/20 rounded-xl text-white font-bold uppercase tracking-widest">
-                    Return to Base
-                </Link>
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="w-screen h-screen bg-slate-950 overflow-hidden font-sans">

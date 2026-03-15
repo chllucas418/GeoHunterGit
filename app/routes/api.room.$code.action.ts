@@ -63,6 +63,37 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                 "UPDATE rooms SET hint_interval = ? WHERE code = ?"
             ).bind(hintInterval, code).run();
         }
+        
+        const gameMode = formData.get("gameMode") as string;
+        if (gameMode && ['standard', 'teams', 'time_attack'].includes(gameMode)) {
+            await db.prepare(
+                "UPDATE rooms SET game_mode = ? WHERE code = ?"
+            ).bind(gameMode, code).run();
+        }
+    }
+
+    if (action === "ASSIGN_TEAMS") {
+        const teamCount = parseInt(formData.get("teamCount") as string) || 2;
+        const participants = await db.prepare("SELECT user_id FROM room_participants WHERE room_code = ?").bind(code).all<any>();
+        
+        if (participants.results && participants.results.length > 0) {
+            // Shuffle
+            const shuffled = [...participants.results].sort(() => 0.5 - Math.random());
+            const teamNames = ["Red Team", "Blue Team", "Green Team", "Yellow Team"];
+            
+            const statements = [];
+            for (let i = 0; i < shuffled.length; i++) {
+                const p = shuffled[i];
+                const teamName = teamNames[i % teamCount];
+                statements.push(
+                    db.prepare("UPDATE room_participants SET team_id = ? WHERE room_code = ? AND user_id = ?")
+                    .bind(teamName, code, p.user_id)
+                );
+            }
+            if (statements.length > 0) {
+                await db.batch(statements);
+            }
+        }
     }
 
     if (action === "TOGGLE_PAUSE") {

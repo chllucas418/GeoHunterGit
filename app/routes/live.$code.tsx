@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { requireUser } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
+import { useSound } from "~/lib/useSound";
 import type { BoxCoordinates } from "~/types/shared";
 
 export async function loader({ request, params, context }: any) {
@@ -160,6 +161,23 @@ export default function StudentLiveGame() {
     const room = roomState?.room;
     const currentRound = roomState?.currentRound;
     const location = currentRound?.location;
+
+    // --- POWER-UP STATES ---
+    const me = roomState?.participants?.find((p: any) => p.user_id === userId);
+    const myTeam = me?.team_id;
+    const powerupEnergy = me?.powerup_energy || 0;
+    const [isBlurred, setIsBlurred] = useState(false);
+    const [activePowerups, setActivePowerups] = useState<string[]>([]);
+    const [pointMultiplier, setPointMultiplier] = useState(1);
+
+    // --- AUDIO HOOKS ---
+    // Tiny base64 blips for quick audio feedback without needing external assets
+    const TICK_SOUND = "data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"; 
+    const SUCCESS_SOUND = "data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+    
+    const [playTick] = useSound(TICK_SOUND, { volume: 0.2 });
+    const [playSuccess] = useSound(SUCCESS_SOUND, { volume: 0.5 });
+    const [lastTickSecond, setLastTickSecond] = useState(-1);
 
     // Parse Metadata & Hints when location changes
     const hintList = location?.hints ? (typeof location.hints === 'string' ? (location.hints.startsWith('[') ? JSON.parse(location.hints) : location.hints.split('\n')) : location.hints) : [];
@@ -353,10 +371,19 @@ export default function StudentLiveGame() {
                 const start = roomState.currentRound.startTime;
                 const diff = Math.floor((synchronizedNow - start) / 1000);
                 setSecondsElapsed(diff >= 0 ? diff : 0);
+
+                // Play tick sound for last 10 seconds
+                const timeRemaining = (roomState.currentRound.timeLimit || 120) - diff;
+                if (timeRemaining <= 10 && timeRemaining > 0 && !submitted && room?.status === 'PLAYING') {
+                    if (lastTickSecond !== timeRemaining) {
+                        playTick();
+                        setLastTickSecond(timeRemaining);
+                    }
+                }
             }
         }, 1000);
         return () => clearInterval(timer);
-    }, [roomState?.currentRound?.startTime]);
+    }, [roomState?.currentRound?.startTime, submitted, room?.status, lastTickSecond, playTick]);
 
     // 2. Map & WebSocket Init
     const mapRef = useRef<HTMLDivElement>(null);
@@ -453,6 +480,16 @@ export default function StudentLiveGame() {
                         });
                     } else if (data.type === "pause_toggle") {
                         fetcher.load(`/api/room/${code}/status`);
+                    } else if (data.type === "powerup") {
+                        // Handle Power-Up Events
+                        if (data.effect === "blur" && data.targetTeam !== myTeam) {
+                            setIsBlurred(true);
+                            setActivePowerups(prev => [...prev, "Enemy Sabotage: Vision Blurred!"]);
+                            setTimeout(() => {
+                                setIsBlurred(false);
+                                setActivePowerups(prev => prev.filter(p => p !== "Enemy Sabotage: Vision Blurred!"));
+                            }, 5000); // 5 seconds of blur
+                        }
                     }
                 } catch (e) { }
             };
@@ -631,6 +668,7 @@ export default function StudentLiveGame() {
     const handleSubmit = () => {
         if (!guess) return;
         setSubmitted(true);
+        playSuccess(); // Audio feedback
         const formData = new FormData();
         formData.append("lat", guess.lat.toString());
         formData.append("lng", guess.lng.toString());
@@ -780,7 +818,7 @@ export default function StudentLiveGame() {
     const layoutMode = room.status === 'REVIEW' ? "result" : "game";
 
     return (
-        <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row shadow-2xl">
+        <div className={`h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row shadow-2xl ${isBlurred ? 'blur-md pointer-events-none transition-all duration-1000' : 'transition-none'}`}>
 
             {/* FREEZE RAY OVERLAY */}
             {room.is_paused === 1 && (
@@ -791,6 +829,17 @@ export default function StudentLiveGame() {
                     <p className="text-blue-300 font-mono text-sm tracking-widest bg-blue-900/40 px-6 py-3 rounded-full border border-blue-500/30">
                         INSTRUCTOR BRIEFING IN PROGRESS
                     </p>
+                </div>
+            )}
+
+            {/* ACTIVE POWERUP ALERTS */}
+            {activePowerups.length > 0 && (
+                <div className="absolute top-32 inset-x-0 z-[9998] flex flex-col items-center pointer-events-none gap-2">
+                    {activePowerups.map((msg, i) => (
+                        <div key={i} className="bg-red-600/90 text-white px-6 py-2 rounded-full font-black uppercase tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-bounce border-2 border-red-400">
+                            ⚠️ {msg} ⚠️
+                        </div>
+                    ))}
                 </div>
             )}
 
@@ -829,6 +878,26 @@ export default function StudentLiveGame() {
                                     <span className="text-[10px] font-black text-white uppercase tracking-[0.3em] flex items-center gap-2">
                                         <span className="text-sm">🔥</span> REWARD ROUND: 2X POINTS <span className="text-sm">🔥</span>
                                     </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* [UI] TIME ATTACK BURN BAR */}
+                        {room.game_mode === 'time_attack' && (
+                            <div className="absolute top-[80px] inset-x-8 md:inset-x-32 flex flex-col items-center pointer-events-none">
+                                <div className="w-full max-w-2xl bg-black/50 backdrop-blur-md rounded-full border border-white/20 h-4 relative overflow-hidden shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                                    <div 
+                                        className="absolute top-0 left-0 h-full transition-all duration-1000 ease-linear rounded-full"
+                                        style={{
+                                            width: `${Math.max(0, 100 - (secondsElapsed / 25) * 100)}%`,
+                                            backgroundColor: secondsElapsed < 10 ? '#22c55e' : secondsElapsed < 20 ? '#eab308' : '#ef4444',
+                                            boxShadow: `0 0 10px ${secondsElapsed < 10 ? '#22c55e' : secondsElapsed < 20 ? '#eab308' : '#ef4444'}`
+                                        }}
+                                    />
+                                </div>
+                                <div className="mt-1 flex justify-between w-full max-w-2xl px-2">
+                                    <span className="text-[10px] font-bold text-green-400 uppercase tracking-widest">1.8x Bonus</span>
+                                    <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest text-right">0.8x Penalty</span>
                                 </div>
                             </div>
                         )}
@@ -1191,6 +1260,34 @@ export default function StudentLiveGame() {
                     )
                 }
             </div >
+
+            {/* ACTION BAR (Bottom Center Global) */}
+            {room.status === 'PLAYING' && !submitted && (
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-4 bg-slate-900/80 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-full shadow-2xl">
+                    <div className="flex flex-col items-center border-r border-white/20 pr-4">
+                        <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest">Energy</span>
+                        <span className="text-xl font-black font-mono text-yellow-400">{powerupEnergy}/100</span>
+                    </div>
+                    <div className="flex gap-2">
+                        <button 
+                            disabled={powerupEnergy < 50}
+                            onClick={() => {
+                                if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+                                wsRef.current.send(JSON.stringify({
+                                    type: "powerup",
+                                    effect: "blur",
+                                    targetTeam: myTeam, // We want to target enemies, server/clients handle inverse
+                                    from: userId
+                                }));
+                                // Optimistically deduct energy
+                            }}
+                            className={`px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest transition-all shadow-lg border ${powerupEnergy >= 50 ? 'bg-red-600/80 hover:bg-red-500 text-white border-red-400 hover:scale-105' : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                        >
+                            <span className="mr-1">👁️‍🗨️</span> Sabotage: Blur (50)
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Logout Button */}
             < div className="absolute top-4 left-4 z-50" >

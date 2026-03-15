@@ -6,6 +6,8 @@ import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { EvidenceCanvas } from '~/components/EvidenceCanvas';
 import JSZip from 'jszip';
 import type { BoxCoordinates } from '~/types/shared';
+// pdfjs-dist dynamically imported client-side to prevent SSR DOMMatrix errors
+
 
 
 
@@ -37,6 +39,7 @@ export default function MassAdd() {
     const [analyzingIds, setAnalyzingIds] = useState<Set<number>>(new Set());
     const [editingId, setEditingId] = useState<number | null>(null); // Index of file being edited
     const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>(draft ? 'synced' : 'idle');
+    const [extractionQueue, setExtractionQueue] = useState<{name: string, items: {blob: Blob, url: string, name: string}[]}[]>([]);
 
 
     // Auto-prompt developer to add map evidence
@@ -229,16 +232,63 @@ export default function MassAdd() {
                 const mediaDir = extension === 'pptx' ? 'ppt/media/' : 'word/media/';
                 const mediaFiles = Object.keys(zip.files).filter(path => path.startsWith(mediaDir));
                 
+                const items: {blob: Blob, url: string, name: string}[] = [];
                 for (const path of mediaFiles) {
                     const zipFile = zip.files[path];
                     if (zipFile.dir) continue;
                     const blob = await zipFile.async('blob');
                     const fileName = path.split('/').pop() || 'image.jpg';
-                    const newFile = new File([blob], `${file.name.split('.')[0]}_${fileName}`, { type: blob.type });
-                    await addToFileList(newFile);
+                    const type = fileName.endsWith('.png') ? 'image/png' : fileName.endsWith('.gif') ? 'image/gif' : 'image/jpeg';
+                    const typedBlob = new Blob([blob], { type: blob.type || type });
+                    items.push({
+                        blob: typedBlob,
+                        url: URL.createObjectURL(typedBlob),
+                        name: `${file.name.split('.')[0]}_${fileName}`
+                    });
+                }
+                if (items.length > 0) {
+                    setExtractionQueue(prev => [...prev, { name: file.name, items }]);
+                } else {
+                    alert(`No images found in ${file.name}`);
                 }
             } catch (e) {
                 console.error("Failed to extract from office doc:", e);
+                alert(`Failed to read documents from ${file.name}`);
+            }
+        } else if (extension === 'pdf') {
+            try {
+                const pdfjsLib = await import('pdfjs-dist');
+                pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const items: {blob: Blob, url: string, name: string}[] = [];
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 2.0 });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    if (context) {
+                        await page.render({ canvasContext: context, viewport } as any).promise;
+                        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+                        if (blob) {
+                            items.push({
+                                blob,
+                                url: URL.createObjectURL(blob),
+                                name: `${file.name.split('.')[0]}_Page_${i}`
+                            });
+                        }
+                    }
+                }
+                if (items.length > 0) {
+                    setExtractionQueue(prev => [...prev, { name: file.name, items }]);
+                } else {
+                    alert(`No pages extracted from PDF ${file.name}`);
+                }
+            } catch (e) {
+                console.error("Failed to extract PDF:", e);
+                alert(`Failed to extract pages from ${file.name}.`);
             }
         } else {
             await addToFileList(file);
@@ -378,13 +428,13 @@ export default function MassAdd() {
                 // View for My Drive with folder navigation
                 const docsView = new google.picker.DocsView(google.picker.ViewId.DOCS)
                     .setIncludeFolders(true)
-                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf');
                 
                 // View for Shared Drives
                 const drivesView = new google.picker.DocsView(google.picker.ViewId.DOCS)
                     .setEnableDrives(true)
                     .setIncludeFolders(true)
-                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf');
 
                 const picker = new google.picker.PickerBuilder()
                     .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
@@ -429,7 +479,12 @@ export default function MassAdd() {
 
     const { getRootProps, getInputProps } = useDropzone({
         onDrop,
-        accept: { 'image/*': [] }
+        accept: { 
+            'image/*': [],
+            'application/pdf': ['.pdf'],
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+        }
     } as any);
 
 
@@ -606,8 +661,8 @@ export default function MassAdd() {
             <div {...getRootProps()} className="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center hover:border-emerald-500 transition-colors cursor-pointer bg-gray-900/50 relative group">
                 <input {...getInputProps()} />
                 <div className="flex flex-col items-center gap-2">
-                    <p className="text-gray-300">Drag & drop images or Office documents here</p>
-                    <p className="text-xs text-gray-500">Supports JPG, PNG, WEBP, **PPTX**, and **DOCX**</p>
+                    <p className="text-gray-300">Drag & drop images or documents here</p>
+                    <p className="text-xs text-gray-500">Supports JPG, PNG, WEBP, **PPTX**, **DOCX**, and **PDF**</p>
                     
                     <div className="flex gap-4 mt-6">
                         <div className="px-6 py-2 bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-sm font-bold flex items-center gap-2 group-hover:bg-emerald-600/30 transition-all">
@@ -714,10 +769,106 @@ export default function MassAdd() {
             </div>
 
             <EditModal editingId={editingId} files={files} setFiles={setFiles} setEditingId={setEditingId} isLoaded={isLoaded} mapSets={mapSets} onSave={saveLocation} />
+
+            {extractionQueue.length > 0 && (
+                <ExtractionModal
+                    document={extractionQueue[0]}
+                    onConfirm={async (selectedIndices) => {
+                        const doc = extractionQueue[0];
+                        for (const idx of selectedIndices) {
+                            const item = doc.items[idx];
+                            const file = new File([item.blob], `${item.name}.jpg`, { type: item.blob.type });
+                            await addToFileList(file);
+                        }
+                        setExtractionQueue(prev => prev.slice(1));
+                    }}
+                    onCancel={() => {
+                        setExtractionQueue(prev => prev.slice(1));
+                    }}
+                />
+            )}
         </div>
     );
 }
 
+export function ExtractionModal({ document, onConfirm, onCancel }: { document: { name: string, items: { blob: Blob, url: string, name: string }[] }, onConfirm: (indices: number[]) => void, onCancel: () => void }) {
+    const [selected, setSelected] = useState<Set<number>>(new Set(document.items.map((_, i) => i)));
+
+    const toggle = (idx: number) => {
+        const next = new Set(selected);
+        if (next.has(idx)) next.delete(idx);
+        else next.add(idx);
+        setSelected(next);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
+            <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+                <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-950">
+                    <div>
+                        <h2 className="text-xl font-bold text-white">Extract Images</h2>
+                        <p className="text-sm text-gray-400">Select images/pages to import from <span className="text-blue-400 font-mono">{document.name}</span></p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setSelected(new Set(document.items.map((_, i) => i)))}
+                            className="px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-800 text-xs text-blue-400 font-bold transition-colors"
+                        >
+                            Select All
+                        </button>
+                        <button
+                            onClick={() => setSelected(new Set())}
+                            className="px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-800 text-xs text-gray-400 font-bold transition-colors"
+                        >
+                            Deselect All
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-900/50 custom-scrollbar">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {document.items.map((item, idx) => {
+                            const isSelected = selected.has(idx);
+                            return (
+                                <div 
+                                    key={idx} 
+                                    onClick={() => toggle(idx)}
+                                    className={`relative rounded-xl border-2 overflow-hidden cursor-pointer transition-all aspect-square ${isSelected ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'border-gray-800 opacity-60 hover:opacity-100 hover:border-gray-600'}`}
+                                >
+                                    <img src={item.url} className="w-full h-full object-cover bg-gray-800" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2 pointer-events-none">
+                                        <div className="text-[10px] text-white truncate w-full">{item.name}</div>
+                                    </div>
+                                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-500 bg-black/50'}`}>
+                                        {isSelected && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-gray-800 bg-gray-950 flex justify-between items-center">
+                    <div className="text-sm font-bold text-gray-400">
+                        <span className="text-emerald-400">{selected.size}</span> / {document.items.length} selected
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={onCancel} className="px-5 py-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700 font-bold transition-colors">
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={() => onConfirm(Array.from(selected))}
+                            disabled={selected.size === 0}
+                            className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:bg-gray-700 text-white font-black uppercase tracking-widest transition-all shadow-[0_4px_15px_rgba(16,185,129,0.3)]"
+                        >
+                            Import Selected
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets, onSave }: any) {
     if (editingId === null) return null;

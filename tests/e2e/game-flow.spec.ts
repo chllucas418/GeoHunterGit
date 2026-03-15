@@ -28,6 +28,9 @@ test.describe('Teacher-Student Game Flow', () => {
         // Trigger Dev Override
         await teacherPage.click('text=Developer Access');
         await teacherPage.fill('input[name="developerKey"]', '<REDACTED_DEV_KEY>');
+        
+        // Agree to terms
+        await teacherPage.check('input[name="agreeToTerms"]');
 
         await teacherPage.click('button[type="submit"]');
 
@@ -52,6 +55,9 @@ test.describe('Teacher-Student Game Flow', () => {
         // Redirect to Room
         await expect(teacherPage).toHaveURL(/\/teacher\/room\/\d+/, { timeout: 15000 });
 
+        // Set Game Mode to Time Attack immediately
+        await teacherPage.locator('select').filter({ hasText: 'Standard' }).selectOption('time_attack');
+
         // Get Room Code
         const codeElement = teacherPage.locator('h1'); // The big code display
         await expect(codeElement).toBeVisible();
@@ -71,6 +77,9 @@ test.describe('Teacher-Student Game Flow', () => {
         await studentPage.fill('input[name="classNumber"]', '1');
         await studentPage.fill('input[name="email"]', `student_${Date.now()}@makopan.edu.hk`); // Needs valid domain
         await studentPage.fill('input[name="password"]', 'Password123'); // Needs checks?
+
+        // Agree to terms
+        await studentPage.check('input[name="agreeToTerms"]');
 
         await studentPage.click('button[type="submit"]');
 
@@ -95,6 +104,12 @@ test.describe('Teacher-Student Game Flow', () => {
         // Student sees game
         // Wait for splash to disappear or just check for confirmation button
         await expect(studentPage.locator('text=CONFIRM COORDINATES')).toBeVisible({ timeout: 10000 });
+
+        // Verify Time Attack Burn Bar is visible since we set mode to time_attack
+        // The burn bar translates to a div with 'h-1.5' or something from our new feature
+        // It should exist in the DOM inside live.$code.tsx
+        const burnBar = studentPage.locator('.h-1\\.5.rounded-r-full');
+        await expect(burnBar).toBeVisible();
 
         // --- STUDENT PLAY ---
         // Click Map (simulated)
