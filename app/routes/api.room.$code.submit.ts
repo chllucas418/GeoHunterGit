@@ -146,7 +146,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                 adminBoxes,
                 GEMINI_BASE_URL,
                 GEMINI_GATEWAY_TOKEN,
-                GEMINI_API_KEY
+                GEMINI_API_KEY,
+                undefined,
+                trueLoc.lat,
+                trueLoc.lng
             );
 
             aiFeedback = fullFeedback;

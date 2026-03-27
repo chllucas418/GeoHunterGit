@@ -60,7 +60,10 @@ async function callGeminiApi(
     }
     
     if (useGrounding) {
-        payload.tools = [{ googleMaps: {} }];
+        payload.tools = [
+            { googleSearch: {} },
+            { googleMaps: {} }
+        ];
     }
 
     const response = await fetch(url, {
@@ -70,7 +73,38 @@ async function callGeminiApi(
     });
 
     if (!response.ok) {
-        throw new Error(`Cloudflare AI Gateway Error: ${response.status} ${response.statusText} - ${await response.text()}`);
+        const errorText = await response.text();
+        if (response.status === 429) {
+            // First Fallback: Cloudflare Unified Billing (Omit API Key)
+            if (apiKey) {
+                console.warn("[Gemini Fallback] Personal quota hit. Falling back to Cloudflare Unified Billing.");
+                return callGeminiApi(
+                    modelName,
+                    prompt,
+                    imageData,
+                    baseUrl,
+                    gatewayToken,
+                    undefined, // Erase API key to let CF Gateway bill the fallback
+                    responseMimeType,
+                    useGrounding
+                );
+            }
+            // Second Fallback: Downgrade to 2.5-pro if all else fails
+            if (modelName.includes("3.1-pro")) {
+                console.warn("[Gemini Fallback] 3.1 Pro quota hit completely. Downgrading to 2.5 Pro.");
+                return callGeminiApi(
+                    "gemini-2.5-pro",
+                    prompt,
+                    imageData,
+                    baseUrl,
+                    gatewayToken,
+                    apiKey,
+                    responseMimeType,
+                    useGrounding
+                );
+            }
+        }
+        throw new Error(`Cloudflare AI Gateway Error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json() as any;
@@ -141,6 +175,7 @@ async function callGeminiChatApi(
         },
         contents: contents,
         tools: [
+            { googleSearch: {} },
             { googleMaps: {} }
         ]
     };
@@ -152,7 +187,38 @@ async function callGeminiChatApi(
     });
 
     if (!response.ok) {
-        throw new Error(`Cloudflare AI Gateway Chat Error: ${response.status} ${response.statusText} - ${await response.text()}`);
+        const errorText = await response.text();
+        if (response.status === 429) {
+            // First Fallback: Cloudflare Unified Billing (Omit API Key)
+            if (apiKey) {
+                console.warn("[Gemini Chat Fallback] Personal quota hit. Falling back to Cloudflare Unified Billing.");
+                return callGeminiChatApi(
+                    modelName,
+                    systemInstruction,
+                    history,
+                    newMessage,
+                    imageData,
+                    baseUrl,
+                    gatewayToken,
+                    undefined
+                );
+            }
+            // Second Fallback: Downgrade to 2.5-pro
+            if (modelName.includes("3.1-pro")) {
+                console.warn("[Gemini Chat Fallback] 3.1 Pro quota hit completely. Downgrading to 2.5 Pro.");
+                return callGeminiChatApi(
+                    "gemini-2.5-pro",
+                    systemInstruction,
+                    history,
+                    newMessage,
+                    imageData,
+                    baseUrl,
+                    gatewayToken,
+                    apiKey
+                );
+            }
+        }
+        throw new Error(`Cloudflare AI Gateway Chat Error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json() as any;
@@ -176,7 +242,9 @@ export async function checkEvidenceListWithGemini(
     baseUrl: string,
     gatewayToken: string,
     apiKey: string,
-    directBase64?: string
+    directBase64?: string,
+    lat?: number,
+    lng?: number
 ) {
     let base64Data = "";
     let mimeType = "image/jpeg";
@@ -205,6 +273,7 @@ export async function checkEvidenceListWithGemini(
     const prompt = `
     Analyze the image and the following USER marked evidence regions.
     Location: "${locationName}".
+    ${lat && lng ? `Coordinates: ${lat}, ${lng}. EXPLICITLY USE YOUR GOOGLE MAPS AND GOOGLE SEARCH GROUNDING TOOLS to verify these coordinates and the surrounding area before generating insight.` : ''}
 
     GROUND TRUTH (Official Evidence for this location):
     ${adminContextStr}
@@ -248,7 +317,7 @@ export async function checkEvidenceListWithGemini(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-pro",
+            "gemini-3.0-flash-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -317,37 +386,36 @@ export async function analyzeImageQuality(
     }
 
     const prompt = `
-    You are a technical geolocation analyst providing raw factual data for Tuen Mun, Hong Kong.
+    You are a technical geolocation analyst providing raw factual data.
     
     Task:
     Analyze the image and provided context to generate a factual description and three progressive hints.
+    CRITICAL INSTRUCTION: You MUST use BOTH your Google Search and Google Maps tools at the same time to search for the EXACT coordinates provided in the context (if available). Consolidate your findings from both the Web Search tool and the Google Maps tool to determine the exact real-world location and its surrounding points of interest. Do NOT guess the location. Use your tools to find what map features, businesses, and transport links are ACTUALLY present at those exact coordinates. Base your hints STRICTLY on the real places and roads found via search at that specific coordinate.
     
     Context:
     ${contextStr}
     
     Tone and Style (ABSOLUTE RESTRICTION):
-    - **NO FANCY WORDS**: Strictly forbid words like "shimmering," "whispering," "nestled," "vibrant," "azure," "quaint," "atmosphere," "vibe," or any poetic/artistic language.
+    - **NO FANCY WORDS**: Strictly forbid words like "shimmering," "whispering," "nestled," "vibrant," "azure," "quaint," "atmosphere," "vibe," or any poetic language.
     - **NO STORYTELLING**: Do not try to "draw a picture." Do not mention lighting, mood, or feelings.
-    - **FACTUAL ONLY**: Describe ONLY physical objects, colors, building heights, and street names.
+    - **FACTUAL ONLY**: Describe ONLY physical objects, colors, building heights, street names, and verified landmarks at the exact coordinates.
     - **TECHNICAL TONE**: Your output should read like a dry building survey or a police report.
 
     Instructions for Hints (STRICT):
-    1. **Hint 1 (Vague)**: Describe the primary physical objects or environment (e.g., "A row of 20-story residential buildings with brown facades").
-    2. **Hint 2 (Medium)**: Identify specific physical features (e.g., "Building A has a green sign at the top. There is a light rail track next to a concrete bridge").
-    3. **Hint 3 (Specific)**: Reference specific estate names or street names (e.g., "The location is a concrete walkway between On Ting Estate and the Tuen Mun River").
+    You MUST generate ACTUAL PUZZLE HINTS that help the player figure out the location. Do NOT guess generic rail stations if they aren't verified by your search tool at the exact coordinates!
+    1. **Hint 1 (Broad clue)**: Give a high-level geographical or architectural clue based on the exact district or neighborhood from your coordinate search.
+    2. **Hint 2 (Medium clue)**: Focus on distinct landmarks, transport links, or facility names verified by search to be immediately adjacent to the coordinates. 
+    3. **Hint 3 (Specific clue)**: Give a highly specific, nearly-giveaway clue involving exact street names, estate names, or exact shop signs right next to the location.
     
     Orientation Analysis:
     - Identify the camera's orientation (e.g., "Facing North-East").
     - Ensure all hints are grounded in this factual orientation.
 
-    Professional Quality Standards:
-    - **Significant Landmarks Only**: Focus on buildings and infrastructure that are permanent and map-identifiable.
-    - **Exclude Generic Items**: Ignore lamp posts, trash cans, or generic street signs.
-    
     Output strictly in this JSON format:
     {
       "precontext": "string (Factual description of physical objects)",
       "generated_hints": ["Hint 1", "Hint 2", "Hint 3"],
+      "hint_pins": [{"description": "Short label", "lat": number, "lng": number}],
       "quality_score": number,
       "difficulty_rating": number,
       "recommendation": "string"
@@ -356,7 +424,7 @@ export async function analyzeImageQuality(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-pro",
+            "gemini-3.1-pro-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -423,7 +491,7 @@ export async function generateEvidenceDescription(
 
     try {
         const description = await callGeminiApi(
-            "gemini-2.5-pro",
+            "gemini-3.1-pro-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -503,9 +571,9 @@ export async function autoDetectMapEvidence(
     `;
 
     try {
-        // Enforce the smartest available model (gemini-2.5-pro) for complex spatial analysis
+        // Enforce the smartest available model (gemini-3.1-pro-preview) for complex spatial analysis
         const responseText = await callGeminiApi(
-            "gemini-2.5-pro",
+            "gemini-3.1-pro-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -572,7 +640,7 @@ export async function batchAnalyzeOfficialEvidence(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-pro",
+            "gemini-3.1-pro-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -715,7 +783,7 @@ export async function generateSocraticHint(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-2.5-pro",
+            "gemini-3.1-pro-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,

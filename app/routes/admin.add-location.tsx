@@ -197,6 +197,7 @@ export default function AddLocation() {
     );
     const [locationDescription, setLocationDescription] = useState<string>(existingLocation?.description ?? "");
     const [photographer, setPhotographer] = useState<string>(initialMetadata.photographer ?? "");
+    const [hintPins, setHintPins] = useState<{lat: number, lng: number, description: string}[]>([]);
 
     const [evidenceStep, setEvidenceStep] = useState(false);
     const [evidenceList, setEvidenceList] = useState<{ box: BoxCoordinates; description: string; id: string }[]>([]);
@@ -396,6 +397,9 @@ export default function AddLocation() {
             if (analysis.generated_hints && Array.isArray(analysis.generated_hints)) {
                 setHintsList(analysis.generated_hints);
             }
+            if (analysis.hint_pins && Array.isArray(analysis.hint_pins)) {
+                setHintPins(analysis.hint_pins);
+            }
             if (isChatting) {
                 setChatHistory(prev => [...prev, { role: "model", text: "✅ Successfully auto-generated hints and description." }]);
                 setIsChatting(false);
@@ -469,6 +473,9 @@ export default function AddLocation() {
     };
 
     const searchRef = useRef<HTMLInputElement>(null);
+    const mapInstanceRef = useRef<any>(null);
+    const hintMarkersRef = useRef<any[]>([]);
+    const [mapReady, setMapReady] = useState(false);
 
     useEffect(() => {
         if (!mapsApiKey) return;
@@ -490,6 +497,7 @@ export default function AddLocation() {
                     streetViewControl: false,
                 };
                 const map = new Map(mapRef.current, mapOptions);
+                mapInstanceRef.current = map;
 
                 if (marker) {
                     markerRef.current = new Marker({
@@ -536,18 +544,50 @@ export default function AddLocation() {
                             map.setCenter(place.geometry.location);
                             map.setZoom(17);
                         }
-                        // Explicitly NOT setting marker here, as requested by user.
                     });
                 }
+                setMapReady(true);
             }
         };
         // Re-run initMap when evidenceStep changes back to false (mounting map)
         if (!evidenceStep) {
             initMap();
+        } else {
+            setMapReady(false);
+            mapInstanceRef.current = null;
         }
     }, [mapsApiKey, evidenceStep]);
 
-    // Fullscreen escape key exit
+    // Hint Pins Renderer
+    useEffect(() => {
+        let active = true;
+        const renderPins = async () => {
+            if (!mapReady || !mapInstanceRef.current || evidenceStep) return;
+            const { Marker } = await importLibrary("marker") as google.maps.MarkerLibrary;
+            if (!active) return;
+
+            hintMarkersRef.current.forEach(m => m.setMap(null));
+            hintMarkersRef.current = [];
+
+            if (hintPins.length > 0) {
+                hintPins.forEach((pin, idx) => {
+                    const m = new Marker({
+                        position: { lat: pin.lat, lng: pin.lng },
+                        map: mapInstanceRef.current,
+                        title: pin.description,
+                        label: { text: "H" + (idx + 1), color: "black", fontWeight: "bold" },
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png'
+                    });
+                    hintMarkersRef.current.push(m);
+                });
+            }
+        };
+        renderPins();
+
+        return () => { active = false; };
+    }, [hintPins, mapReady, evidenceStep, mapsApiKey]);
+
+    // Fullscreen escape key exit and Body Scroll Lock
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && isEvidenceFullscreen) {
@@ -555,8 +595,22 @@ export default function AddLocation() {
             }
         };
         window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEvidenceFullscreen]);
+        
+        // Lock body scrolling when fullscreen or modal is active (prevents iPad pull-to-refresh / scrolling)
+        if (isEvidenceFullscreen || showDescModal) {
+            document.body.style.overflow = 'hidden';
+            document.body.style.overscrollBehavior = 'none';
+        } else {
+            document.body.style.overflow = '';
+            document.body.style.overscrollBehavior = '';
+        }
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = '';
+            document.body.style.overscrollBehavior = '';
+        };
+    }, [isEvidenceFullscreen, showDescModal]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-50 p-8">
@@ -634,6 +688,11 @@ export default function AddLocation() {
                                                             </span>
                                                             <span className="text-[10px] text-slate-500">{analysis.recommendation}</span>
                                                         </div>
+                                                        {analysis.hint_pins && analysis.hint_pins.length > 0 && (
+                                                            <p className="text-[10px] text-yellow-400 font-bold mt-2">
+                                                                🗺️ {analysis.hint_pins.length} hint pins plotted on the map!
+                                                            </p>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -820,7 +879,7 @@ export default function AddLocation() {
                             </button>
                         </Form>
                     ) : (
-                        <div className={`lg:col-span-2 bg-slate-900 p-8 rounded-3xl border border-slate-800 ${isEvidenceFullscreen ? 'fixed inset-0 z-[100] m-0 rounded-none bg-black flex flex-col p-4' : 'min-h-[600px] flex flex-col relative'}`}>
+                        <div className={`lg:col-span-2 bg-slate-900 p-8 rounded-3xl border border-slate-800 ${isEvidenceFullscreen ? 'fixed inset-0 z-[100] m-0 rounded-none bg-black flex flex-col p-4 overscroll-none' : 'min-h-[600px] flex flex-col relative'}`}>
                             <div className="mb-4 flex justify-between items-start">
                                 <div>
                                     <h3 className="text-xl font-bold">Mark Identification Area</h3>
@@ -886,8 +945,8 @@ export default function AddLocation() {
 
                                 {/* Description Prompt Modal */}
                                 {showDescModal && (
-                                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-                                        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 w-full max-w-sm space-y-4 shadow-2xl">
+                                    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[150] p-4 animate-in fade-in overflow-y-auto overscroll-none" onClick={() => setShowDescModal(false)}>
+                                        <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 w-full max-w-sm space-y-4 shadow-2xl my-auto" onClick={(e) => e.stopPropagation()}>
                                             <h4 className="text-lg font-bold text-white">Describe this Evidence</h4>
                                             <p className="text-xs text-slate-400">
                                                 How does this feature help identify the location? (e.g., "Unique red roof tiling", "Partial shop sign reading 'Cafe'")
@@ -958,7 +1017,8 @@ export default function AddLocation() {
                                         onChange={(e) => setChatModel(e.target.value)}
                                     >
                                         <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Legacy)</option>
+                                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
+                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                                         <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
                                     </select>
                                 </div>

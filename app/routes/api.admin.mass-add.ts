@@ -187,7 +187,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         try {
             const aiResponse = await chatWithGemini(
-                "gemini-2.5-pro", // modelName (Using 2.5 Pro as per user request)
+                "gemini-3.1-pro-preview", // modelName (Using 3.1 Pro Preview as per user request)
                 message,
                 history,
                 imageUrl || "", // Pass imageUrl if provided

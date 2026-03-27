@@ -156,6 +156,7 @@ export default function MassAdd() {
                                 hints: Array.isArray(data.aiData.generated_hints) ? data.aiData.generated_hints :
                                     Array.isArray(data.aiData.hints) ? data.aiData.hints :
                                         ["", "", ""],
+                                hint_pins: Array.isArray(data.aiData.hint_pins) ? data.aiData.hint_pins : [],
                                 status: f.lat ? 'reviewed' : 'needs_gps'
                             };
                         }
@@ -194,6 +195,7 @@ export default function MassAdd() {
             description: "",
             difficulty: 5,
             hints: ["", "", ""],
+            hint_pins: [],
             evidence: [],
             addToSet: "",
             status: 'extracting',
@@ -362,16 +364,8 @@ export default function MassAdd() {
     }, [files]);
 
     // Auto-Analyze when Location is pinned
-    useEffect(() => {
-        const needsAnalysis = files.find(f => f.lat && f.lng && f.status !== 'analyzed' && !analyzingIds.has(f.id));
-        if (!needsAnalysis) return;
-
-        console.log(`[Auto-Analyze] Triggering for ${needsAnalysis.photographer}`);
-        analyzeFile(needsAnalysis.id, needsAnalysis.file);
-        
-        // Mark as analyzed (or similar) to prevent loop
-        setFiles(prev => prev.map(f => f.id === needsAnalysis.id ? { ...f, status: 'analyzed' } : f));
-    }, [files, analyzingIds]);
+    // DISABLED: This was causing 429 Too Many Requests errors by triggering Gemini on every location edit.
+    // Users must now manually click the "AI Generate" or "✨ Auto-Generate Details" button.
 
     // Google Picker State & Logic
     const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -1031,12 +1025,13 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
             if (data.error) throw new Error(data.error);
 
             if (data.aiData) {
-                const { precontext, generated_hints, difficulty_rating } = data.aiData;
+                const { precontext, generated_hints, difficulty_rating, hint_pins } = data.aiData;
                 setFiles((prev: any[]) => {
                     const cp = [...prev];
                     cp[editingId].description = precontext;
                     cp[editingId].hints = generated_hints || [];
                     cp[editingId].difficulty = difficulty_rating;
+                    cp[editingId].hint_pins = hint_pins || [];
                     return cp;
                 });
                 setChatHistory(prev => [...prev, { role: "model", content: "✅ Successfully generated Tuen Mun-specific hints and atmospheric description." }]);
@@ -1374,6 +1369,15 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                             }}
                                         >
                                             {item.lat && <Marker position={{ lat: item.lat, lng: item.lng }} />}
+                                            {item.hint_pins && item.hint_pins.map((pin: any, idx: number) => (
+                                                <Marker
+                                                    key={idx}
+                                                    position={{ lat: pin.lat, lng: pin.lng }}
+                                                    title={pin.description}
+                                                    label={{ text: "H" + (idx + 1), color: "black", fontWeight: "bold" }}
+                                                    icon="http://maps.google.com/mapfiles/ms/icons/yellow-dot.png"
+                                                />
+                                            ))}
                                         </GoogleMap>
                                     )}
                                     <div className="flex gap-2 text-xs text-gray-500 font-mono">
