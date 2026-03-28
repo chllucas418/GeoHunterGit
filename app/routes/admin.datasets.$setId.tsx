@@ -14,7 +14,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
     // Fetch Set Items (Locations in this set)
     const { results: items } = await db.prepare(
-        `SELECT l.id, l.lat, l.lng, l.difficulty_rating, msi.order_index 
+        `SELECT l.id, l.lat, l.lng, l.difficulty_rating, l.photographer, msi.order_index 
          FROM map_set_items msi
          JOIN locations l ON msi.location_id = l.id
          WHERE msi.set_id = ?
@@ -24,7 +24,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     // Fetch All Locations (Available to add)
     // Optimization: Exclude ones already in set, or handle in UI
     const { results: allLocations } = await db.prepare(
-        "SELECT id, lat, lng, difficulty_rating FROM locations ORDER BY created_at DESC"
+        "SELECT id, lat, lng, difficulty_rating, photographer FROM locations ORDER BY created_at DESC"
     ).all<any>();
 
     return { set, items, allLocations };
@@ -98,7 +98,7 @@ export default function DatasetEditor() {
                                     </div>
                                     <img src={`/resources/image/${item.id}`} className="w-12 h-12 rounded-lg object-cover bg-slate-800" />
                                     <div className="flex-1">
-                                        <div className="font-mono text-xs text-slate-300">ID: {item.id.slice(0, 8)}</div>
+                                        <div className="font-mono text-xs text-slate-300">{item.photographer || item.id.slice(0, 8)}</div>
                                         <div className="text-[10px] text-slate-500">Diff: {item.difficulty_rating.toFixed(1)}</div>
                                     </div>
                                     <button
@@ -128,7 +128,7 @@ export default function DatasetEditor() {
                                 <div key={loc.id} className="glass-panel p-3 rounded-xl border border-white/5 flex items-center gap-4 opacity-60 hover:opacity-100 transition-opacity">
                                     <img src={`/resources/image/${loc.id}`} className="w-10 h-10 rounded-lg object-cover bg-slate-800" />
                                     <div className="flex-1">
-                                        <div className="font-mono text-xs text-slate-300">ID: {loc.id.slice(0, 8)}</div>
+                                        <div className="font-mono text-xs text-slate-300">{loc.photographer || loc.id.slice(0, 8)}</div>
                                         <div className="text-[10px] text-slate-500">Diff: {loc.difficulty_rating.toFixed(1)}</div>
                                     </div>
                                     <button

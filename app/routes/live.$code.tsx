@@ -1,5 +1,5 @@
 import { useLoaderData, useFetcher, Link } from "react-router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { requireUser } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
@@ -124,6 +124,91 @@ export async function loader({ request, params, context }: any) {
     return { code, userId, mapsApiKey: env.GOOGLE_MAPS_API_KEY, existingGuess, initialRoomState };
 }
 
+function HighPrecisionTimeAttackHUD({ currentRound, room, serverClockOffsetRef, submittedAtSeconds, result, hasScoreMultiplier }: any) {
+    const timeLimit = currentRound?.timeLimit || 120;
+    const taMax = room?.ta_max_multiplier ?? 2.0;
+    const taMin = room?.ta_min_multiplier ?? 0.5;
+    const graceSec = room?.ta_grace_period ?? 30;
+
+    const START_GRACE = Math.min(graceSec, Math.floor(timeLimit * 0.25));
+    const END_GRACE = Math.min(graceSec, Math.floor(timeLimit * 0.25));
+    const DECAY_WINDOW = Math.max(1, timeLimit - START_GRACE - END_GRACE);
+
+    const [displayMultiplier, setDisplayMultiplier] = useState(taMax);
+    const [progress, setProgress] = useState(100);
+    const [graceRemaining, setGraceRemaining] = useState(START_GRACE);
+
+    useEffect(() => {
+        let animationFrameId: number;
+
+        const updateMultiplier = () => {
+            const currentSeconds = Math.max(0, (Date.now() - serverClockOffsetRef.current - currentRound.startTime) / 1000);
+            const finalSeconds = submittedAtSeconds !== null ? submittedAtSeconds : currentSeconds;
+            
+            let active = taMax;
+            if (result?.baseTimeMultiplier !== undefined) {
+                active = result.baseTimeMultiplier;
+            } else if (finalSeconds > START_GRACE) {
+                if (finalSeconds >= timeLimit - END_GRACE) active = taMin;
+                else active = taMax - ((taMax - taMin) * ((finalSeconds - START_GRACE) / DECAY_WINDOW));
+            }
+            
+            setDisplayMultiplier(active);
+            setProgress(Math.max(0, ((active - taMin) / (taMax - taMin)) * 100));
+            setGraceRemaining(Math.max(0, START_GRACE - finalSeconds));
+
+            if (submittedAtSeconds === null && result === null) {
+                animationFrameId = requestAnimationFrame(updateMultiplier);
+            }
+        };
+
+        animationFrameId = requestAnimationFrame(updateMultiplier);
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [submittedAtSeconds, result, serverClockOffsetRef, currentRound.startTime, timeLimit, taMax, taMin, START_GRACE, END_GRACE, DECAY_WINDOW]);
+
+    const multiplierColor = displayMultiplier > 1.5 ? '#3b82f6' : displayMultiplier > 1.0 ? '#eab308' : '#ef4444';
+
+    return (
+        <div className="flex flex-col items-center pointer-events-none w-full w-full">
+            {graceRemaining > 0 && (
+                <div className="mb-2 bg-blue-500/20 border border-blue-400/50 text-blue-200 px-3 py-0.5 rounded-full text-[10px] uppercase font-black tracking-widest backdrop-blur-md animate-pulse">
+                    Multiplier Locked For: {graceRemaining.toFixed(1)}s
+                </div>
+            )}
+            
+            {/* Liquid Glass Dynamic Bar */}
+            <div className={`w-full bg-slate-900/60 backdrop-blur-xl rounded-full border border-slate-500/30 h-8 relative overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.8)] ${hasScoreMultiplier ? 'ring-2 ring-orange-500/50' : ''}`}>
+                
+                {/* Retracting Fluid Core */}
+                <div 
+                    className="absolute top-0 left-0 h-full rounded-full flex items-center pr-3 overflow-hidden shadow-[inset_0_-2px_8px_rgba(0,0,0,0.6)]"
+                    style={{
+                        width: `${progress}%`,
+                        background: hasScoreMultiplier 
+                            ? 'linear-gradient(90deg, rgba(234,88,12,0.8), rgba(251,146,60,0.9))' 
+                            : `linear-gradient(90deg, ${multiplierColor}60 0%, ${multiplierColor}cc 100%)`,
+                        boxShadow: `0 0 15px ${hasScoreMultiplier ? '#f97316' : multiplierColor}`
+                    }}
+                >
+                    <div className="ml-auto w-1 h-3/4 rounded-full bg-white animate-pulse shadow-[0_0_5px_white]" />
+                </div>
+
+                {/* Normal High-Precision Text Overlay */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 font-mono tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
+                    <div className="text-sm md:text-base font-black uppercase text-shadow">
+                        {displayMultiplier.toFixed(4)}x {hasScoreMultiplier && <span className="text-orange-400 ml-1 text-[10px] tracking-normal mb-1 inline-block drop-shadow-md">(OVERCLOCKED)</span>}
+                    </div>
+                </div>
+            </div>
+            
+            <div className="mt-1 flex justify-between w-full px-2 font-mono">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Min: {taMin.toFixed(1)}x</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Max: {taMax.toFixed(1)}x</span>
+            </div>
+        </div>
+    );
+}
+
 export default function StudentLiveGame() {
     const { code, userId, mapsApiKey, existingGuess, initialRoomState } = useLoaderData() as any;
     const fetcher = useFetcher();
@@ -134,6 +219,7 @@ export default function StudentLiveGame() {
     const [marker, setMarker] = useState<google.maps.Marker | null>(null);
     const [guess, setGuess] = useState<{ lat: number, lng: number } | null>(null);
     const [submitted, setSubmitted] = useState(false);
+    const [submittedAtSeconds, setSubmittedAtSeconds] = useState<number | null>(null);
     const [result, setResult] = useState<any>(null);
     const lastRoundIndex = useRef<number>(-1);
     const serverClockOffsetRef = useRef<number>(0);
@@ -147,6 +233,7 @@ export default function StudentLiveGame() {
     const [hasZoomed, setHasZoomed] = useState(false);
     const [splitRatio, setSplitRatio] = useState(50);
     const [isResizing, setIsResizing] = useState(false);
+    const [hasAcknowledgedRules, setHasAcknowledgedRules] = useState(false);
 
     // Tutorial Flow State
     const [tutorialStep, setTutorialStep] = useState(0);
@@ -162,6 +249,10 @@ export default function StudentLiveGame() {
     const currentRound = roomState?.currentRound;
     const location = currentRound?.location;
 
+    const isTimeUp = currentRound?.startTime ? ((currentRound.timeLimit || 120) - secondsElapsed <= 0) : false;
+    const isLockedRef = useRef(false);
+    isLockedRef.current = submitted || room?.status !== 'PLAYING' || isTimeUp;
+
     // --- POWER-UP STATES ---
     const me = roomState?.participants?.find((p: any) => p.user_id === userId);
     const myTeam = me?.team_id;
@@ -169,6 +260,82 @@ export default function StudentLiveGame() {
     const [isBlurred, setIsBlurred] = useState(false);
     const [activePowerups, setActivePowerups] = useState<string[]>([]);
     const [pointMultiplier, setPointMultiplier] = useState(1);
+
+    const [spentEnergy, setSpentEnergy] = useState(0);
+    const localEnergy = Math.max(0, powerupEnergy - spentEnergy);
+    const [hasScoreMultiplier, setHasScoreMultiplier] = useState(false);
+    const [showCompass, setShowCompass] = useState(false);
+
+    // NEW PHASE 2 SUPERPOWER STATES
+    const [isEmpBlackout, setIsEmpBlackout] = useState(false);
+    const [isIntelCorrupted, setIsIntelCorrupted] = useState(false);
+    const [isMapScrambled, setIsMapScrambled] = useState(false);
+    const [isLeeched, setIsLeeched] = useState(false); // Victim
+    const [hasMultiplierLeech, setHasMultiplierLeech] = useState(false); // Attacker
+    const [hasAegis, setHasAegis] = useState(false);
+    const [hasChronoFreeze, setHasChronoFreeze] = useState(false);
+    const [hasIroncladLockdown, setHasIroncladLockdown] = useState(false);
+    const [quantumCircle, setQuantumCircle] = useState<google.maps.Circle | null>(null);
+
+    const [previewPowerId, setPreviewPowerId] = useState<string | null>(null);
+    useEffect(() => {
+        if (previewPowerId) {
+            const t = setTimeout(() => setPreviewPowerId(null), 5000);
+            return () => clearTimeout(t);
+        }
+    }, [previewPowerId]);
+
+    const handlePowerTap = (id: string, cost: number, actionFn: Function) => {
+        if (previewPowerId === id) {
+            actionFn(id, cost);
+            setPreviewPowerId(null);
+        } else {
+            setPreviewPowerId(id);
+        }
+    };
+
+    const SUPERPOWER_DESCRIPTIONS: Record<string, string> = {
+        'gps_scrambler': 'Inverts opponent map controls. Tap again to cast!',
+        'intel_corruptor': 'Scrambles opponent evidence. Tap again to cast!',
+        'emp_blackout': 'Full-screen blindness. Tap again to cast!',
+        'multiplier_leech': 'Steals multiplier from top player. Tap again to cast!',
+        'aegis_reflection': 'Reflects the next attack back. Tap again to cast!',
+        'chrono_freeze': 'Pauses your score multiplier decay. Tap again to cast!',
+        'quantum_triangulation': 'Reveals a 500m target zone. Tap again to cast!',
+        'ironclad_lockdown': 'Max multiplier on next submit. Tap again to cast!'
+    };
+
+    const hasAegisRef = useRef(hasAegis);
+    useEffect(() => { hasAegisRef.current = hasAegis; }, [hasAegis]);
+
+    const availablePowers = useMemo(() => {
+        const off = ['gps_scrambler', 'intel_corruptor', 'emp_blackout', 'multiplier_leech'];
+        const def = ['aegis_reflection', 'chrono_freeze', 'quantum_triangulation', 'ironclad_lockdown'];
+        
+        // Simple deterministic seed based on user + round index so it persists through React re-renders!
+        const seedStr = `${userId}-${currentRound?.index || 0}`;
+        let seed = 0;
+        for (let i = 0; i < seedStr.length; i++) seed = (Math.imul(31, seed) + seedStr.charCodeAt(i)) | 0;
+        
+        const random = () => {
+            const x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        };
+        
+        const shuffle = (array: string[]) => {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        return {
+            offensive: shuffle(off).slice(0, 2),
+            defensive: shuffle(def).slice(0, 2)
+        };
+    }, [userId, currentRound?.index]);
 
     // --- AUDIO HOOKS ---
     // Tiny base64 blips for quick audio feedback without needing external assets
@@ -243,6 +410,13 @@ export default function StudentLiveGame() {
                 cursorMarkerRef.current.setMap(null);
                 cursorMarkerRef.current = null;
             }
+            
+            // Temporary Powerup Reversals
+            setActivePowerups([]);
+            setHasScoreMultiplier(false);
+            setPointMultiplier(1);
+            setSpentEnergy(0);
+            setShowCompass(false);
             setMarker(null);
             setGuess(null);
             setSubmitted(false);
@@ -296,13 +470,16 @@ export default function StudentLiveGame() {
 
         const poll = async () => {
             try {
+                const fetchStart = Date.now();
                 const res = await fetch(`/api/room/${code}/status`);
+                const fetchEnd = Date.now();
                 if (!res.ok || !alive) return;
                 const data: any = await res.json();
                 if (!alive) return;
 
                 if (data.serverTime) {
-                    serverClockOffsetRef.current = Date.now() - data.serverTime;
+                    const rtt = fetchEnd - fetchStart;
+                    serverClockOffsetRef.current = fetchEnd - (data.serverTime + rtt / 2);
                 }
 
                 const newIndex = data.room?.current_index;
@@ -319,10 +496,27 @@ export default function StudentLiveGame() {
                 if (lastRoundIndex.current !== -1 && lastRoundIndex.current !== newIndex) {
                     setGuess(null);
                     setSubmitted(false);
+                    setSubmittedAtSeconds(null);
                     setResult(null);
                     setEvidenceList([]);
                     setVisibleHints([]);
                     setHasZoomed(false);
+                    setSpentEnergy(0);
+                    setHasScoreMultiplier(false);
+                    setShowCompass(false);
+                    
+                    setIsEmpBlackout(false);
+                    setIsIntelCorrupted(false);
+                    setIsMapScrambled(false);
+                    setIsLeeched(false);
+                    setHasMultiplierLeech(false);
+                    setHasAegis(false);
+                    setHasChronoFreeze(false);
+                    setHasIroncladLockdown(false);
+                    setQuantumCircle(prev => {
+                        if (prev) prev.setMap(null);
+                        return null;
+                    });
 
                     // Clear AI States
                     setHasAskedAi(false);
@@ -359,7 +553,7 @@ export default function StudentLiveGame() {
         };
 
         poll();
-        const interval = setInterval(poll, 1000);
+        const interval = setInterval(poll, 3000);
         return () => { alive = false; clearInterval(interval); };
     }, [code]);
 
@@ -469,8 +663,39 @@ export default function StudentLiveGame() {
                                 ctx.lineCap = 'round';
                                 ctx.stroke();
                                 ctx.closePath();
+
+                                // Auto-fade drawings after 4 seconds of inactivity
+                                clearTimeout((window as any).drawClearTimer);
+                                (window as any).drawClearTimer = setTimeout(() => {
+                                    [imageCanvasRef.current, mapCanvasRef.current].forEach(canvas => {
+                                        if (canvas) {
+                                            const ctx2 = canvas.getContext('2d');
+                                            if (ctx2) ctx2.clearRect(0, 0, canvas.width, canvas.height);
+                                        }
+                                    });
+                                }, 4000);
                             }
                         }
+                    } else if (data.type === "draw_map" && mapInstance) {
+                        let poly = (window as any).incomingMapPolys?.[data.polyId];
+                        if (!poly) {
+                            if (!(window as any).incomingMapPolys) {
+                                (window as any).incomingMapPolys = {};
+                            }
+                            poly = new google.maps.Polyline({
+                                strokeColor: "#ef4444",
+                                strokeOpacity: 1.0,
+                                strokeWeight: 4,
+                                map: mapInstance
+                            });
+                            (window as any).incomingMapPolys[data.polyId] = poly;
+                            
+                            setTimeout(() => {
+                                poly.setMap(null);
+                                delete (window as any).incomingMapPolys[data.polyId];
+                            }, 5000);
+                        }
+                        poly.setPath(data.path);
                     } else if (data.type === "draw_clear") {
                         [imageCanvasRef.current, mapCanvasRef.current].forEach(canvas => {
                             if (canvas) {
@@ -478,17 +703,71 @@ export default function StudentLiveGame() {
                                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
                             }
                         });
+                        clearTimeout((window as any).drawClearTimer);
                     } else if (data.type === "pause_toggle") {
                         fetcher.load(`/api/room/${code}/status`);
                     } else if (data.type === "powerup") {
-                        // Handle Power-Up Events
-                        if (data.effect === "blur" && data.targetTeam !== myTeam) {
-                            setIsBlurred(true);
-                            setActivePowerups(prev => [...prev, "Enemy Sabotage: Vision Blurred!"]);
-                            setTimeout(() => {
-                                setIsBlurred(false);
-                                setActivePowerups(prev => prev.filter(p => p !== "Enemy Sabotage: Vision Blurred!"));
-                            }, 5000); // 5 seconds of blur
+                        // REMOVE LEECH BROADCAST
+                        if (data.effect === "remove_leech" && data.targetTeam !== myTeam) {
+                            setIsLeeched(false);
+                            setHasMultiplierLeech(false);
+                            setActivePowerups(prev => prev.filter(p => !p.includes("Vampire") && !p.includes("Leech")));
+                        } 
+                        // INCOMING ATTACK
+                        else if (data.targetTeam !== myTeam && !data.isReflectedTo) {
+                            if (hasAegisRef.current) {
+                                // DEFLECT IT!
+                                setHasAegis(false);
+                                setSpentEnergy(prev => Math.max(0, prev - 250)); // +250 energy bonus!
+                                setActivePowerups(prev => [...prev.filter(p => !p.includes("Aegis")), "🛡️ Aegis Activated! Deflected Attack"]);
+                                
+                                wsRef.current?.send(JSON.stringify({
+                                    type: "powerup", 
+                                    effect: data.effect, 
+                                    targetTeam: myTeam, // We are the new source
+                                    isReflectedTo: data.targetTeam // The original sender
+                                }));
+                                return; // Nullify attack locally
+                            }
+
+                            // I am hit!
+                            if (data.effect === "emp_blackout") {
+                                setIsEmpBlackout(true);
+                                setActivePowerups(prev => [...prev, "⚡ Sabotage: EMP Blackout!"]);
+                                setTimeout(() => { setIsEmpBlackout(false); setActivePowerups(prev => prev.filter(p => !p.includes("EMP"))); }, 8000);
+                            } else if (data.effect === "intel_corruptor") {
+                                setIsIntelCorrupted(true);
+                                setActivePowerups(prev => [...prev, "👾 Sabotage: Intel Corrupted!"]);
+                                setTimeout(() => { setIsIntelCorrupted(false); setActivePowerups(prev => prev.filter(p => !p.includes("Intel"))); }, 10000);
+                            } else if (data.effect === "multiplier_leech") {
+                                setIsLeeched(true);
+                                setActivePowerups(prev => [...prev, "🧛 Sabotage: The Vampire!"]);
+                                setTimeout(() => { setIsLeeched(false); setActivePowerups(prev => prev.filter(p => !p.includes("Vampire"))); }, 10000);
+                            } else if (data.effect === "gps_scrambler") {
+                                setIsMapScrambled(true);
+                                setActivePowerups(prev => [...prev, "🗺️ Sabotage: Map Scrambled!"]);
+                                setTimeout(() => { setIsMapScrambled(false); setActivePowerups(prev => prev.filter(p => !p.includes("Map"))); }, 10000);
+                            }
+                        } 
+                        // I GOT HIT BY MY OWN REFLECTED ATTACK
+                        else if (data.isReflectedTo === myTeam) {
+                            if (data.effect === "emp_blackout") {
+                                setIsEmpBlackout(true);
+                                setActivePowerups(prev => [...prev, "⚡ Reflected EMP Blackout"]);
+                                setTimeout(() => { setIsEmpBlackout(false); setActivePowerups(prev => prev.filter(p => !p.includes("EMP"))); }, 8000);
+                            } else if (data.effect === "intel_corruptor") {
+                                setIsIntelCorrupted(true);
+                                setActivePowerups(prev => [...prev, "👾 Reflected Intel Corrupt"]);
+                                setTimeout(() => { setIsIntelCorrupted(false); setActivePowerups(prev => prev.filter(p => !p.includes("Intel"))); }, 10000);
+                            } else if (data.effect === "multiplier_leech") {
+                                setIsLeeched(true);
+                                setActivePowerups(prev => [...prev, "🧛 Reflected Vampire Leech"]);
+                                setTimeout(() => { setIsLeeched(false); setActivePowerups(prev => prev.filter(p => !p.includes("Vampire"))); }, 10000);
+                            } else if (data.effect === "gps_scrambler") {
+                                setIsMapScrambled(true);
+                                setActivePowerups(prev => [...prev, "🗺️ Reflected Map Scramble"]);
+                                setTimeout(() => { setIsMapScrambled(false); setActivePowerups(prev => prev.filter(p => !p.includes("Map"))); }, 10000);
+                            }
                         }
                     }
                 } catch (e) { }
@@ -533,7 +812,7 @@ export default function StudentLiveGame() {
                 });
 
                 map.addListener("click", (e: google.maps.MapMouseEvent) => {
-                    if (submitted) return;
+                    if (isLockedRef.current) return;
                     const lat = e.latLng!.lat();
                     const lng = e.latLng!.lng();
                     setGuess({ lat, lng });
@@ -572,7 +851,7 @@ export default function StudentLiveGame() {
     // 3. Hint Logic
     const HINT_INTERVAL = room?.hint_interval || 30; // Default to 30s if not set
     const timeUntilNext = Math.max(0, HINT_INTERVAL - (secondsElapsed % HINT_INTERVAL));
-    const isVicinityScanAvailable = secondsElapsed >= (hintList.length + 1) * HINT_INTERVAL;
+    const isVicinityScanAvailable = secondsElapsed >= Math.max(0, (currentRound?.timeLimit || 120) - 30);
 
     const [isTargetInRange, setIsTargetInRange] = useState(false);
 
@@ -615,26 +894,46 @@ export default function StudentLiveGame() {
         if (!mapInstance || !location || !location.lat || !location.lng) return;
 
         const currentCenter = mapInstance.getCenter();
-        const distLat = Math.abs(currentCenter!.lat() - location.lat);
-        const distLng = Math.abs(currentCenter!.lng() - location.lng);
-        // 0.003 degrees is approx 300m
-        const isClose = (distLat < 0.003 && distLng < 0.003);
+        if (!currentCenter) return;
+        
+        // Distance check from pin or map center to prevent spoiling if they are already super close
+        const originLat = guess ? guess.lat : currentCenter.lat();
+        const originLng = guess ? guess.lng : currentCenter.lng();
+        const originName = guess ? "your dropped pin" : "your screen's map center";
 
-        if (isClose) {
-            // Already close
-            alert("SAT-NAV: Target signal strong in current sector. No scan needed.");
+        const dLat = location.lat - originLat;
+        const dLng = location.lng - originLng;
+        
+        const R = 6371; // km
+        const dLatRad = dLat * (Math.PI / 180);
+        const dLngRad = dLng * (Math.PI / 180);
+        const a = Math.sin(dLatRad / 2) * Math.sin(dLatRad / 2) +
+                  Math.cos(originLat * (Math.PI / 180)) * Math.cos(location.lat * (Math.PI / 180)) *
+                  Math.sin(dLngRad / 2) * Math.sin(dLngRad / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distanceKm = R * c;
+
+        if (distanceKm < 0.2) {
+            alert(`SAT-NAV: Target signal strong in current sector. It is very close to ${originName}!`);
             return;
         }
 
-        setHasZoomed(true);
-        const offsetLat = (Math.random() - 0.5) * 0.006;
-        const offsetLng = (Math.random() - 0.5) * 0.006;
-        mapInstance.panTo({
-            lat: location.lat + offsetLat,
-            lng: location.lng + offsetLng
-        });
-        mapInstance.setZoom(17);
-        setVisibleHints(prev => [...prev, "Satellite Scan: Vicinity Locked."]);
+        // Visual Mechanic: Pan to an approx 1km bounding box containing the exact target, 
+        // with the target randomly offset from the center (so it's not exactly in the middle).
+        const offsetLat = (Math.random() - 0.5) * 0.012; // +/- ~1.3km
+        const offsetLng = (Math.random() - 0.5) * 0.012;
+        
+        const bounds = new google.maps.LatLngBounds();
+        // Create an approximate 1km radius bounding box around the offset center
+        bounds.extend({ lat: location.lat + offsetLat - 0.009, lng: location.lng + offsetLng - 0.009 });
+        bounds.extend({ lat: location.lat + offsetLat + 0.009, lng: location.lng + offsetLng + 0.009 });
+        // Ensure the actual target is in bounds just in case offset is too large
+        bounds.extend({ lat: location.lat, lng: location.lng });
+        
+        mapInstance.fitBounds(bounds);
+
+        setHasZoomed(true); // Disable further scans intuitively
+        setVisibleHints(prev => [...prev, `📡 Vicinity Scan Active: Target is located somewhere within your current map view bounds.`]);
     };
 
     // --- HANDLERS ---
@@ -659,6 +958,67 @@ export default function StudentLiveGame() {
         }
     };
 
+    const activatePower = (effect: string, cost: number) => {
+        if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+        wsRef.current.send(JSON.stringify({
+            type: "powerup", effect, targetTeam: myTeam, from: userId
+        }));
+        setSpentEnergy(prev => prev + cost);
+
+        if (effect === 'multiplier_leech') {
+            setHasMultiplierLeech(true);
+            setActivePowerups(prev => [...prev, "🧛 Vitality Leech Active! Stealing Multiplier..."]);
+            setTimeout(() => {
+                setHasMultiplierLeech(false);
+                setActivePowerups(prev => prev.filter(p => !p.includes("Vampire") && !p.includes("Leech")));
+            }, 10000);
+        }
+    };
+
+    const activateSelfBuff = (buff: string, cost: number) => {
+        if (buff === 'aegis_reflection') {
+            setHasAegis(true);
+            setActivePowerups(prev => [...prev, "🛡️ Aegis Reflection Active"]);
+        } else if (buff === 'chrono_freeze') {
+            setHasChronoFreeze(true);
+            setActivePowerups(prev => [...prev, "❄️ Chrono Freeze Active (15s)"]);
+            setTimeout(() => {
+                setHasChronoFreeze(false);
+                setActivePowerups(prev => prev.filter(p => !p.includes("Chrono Freeze")));
+            }, 15000);
+        } else if (buff === 'quantum_triangulation') {
+            if (mapInstance && location?.lat && location?.lng) {
+                // Generate a random center within 300m so the target is inside the 500m circle
+                const r = 300 / 111300; 
+                const dx = (Math.random() - 0.5) * r;
+                const dy = (Math.random() - 0.5) * r;
+                const customCenter = { lat: location.lat + dy, lng: location.lng + dx };
+                
+                const circle = new google.maps.Circle({
+                    strokeColor: "#10b981",
+                    strokeOpacity: 0.8,
+                    strokeWeight: 2,
+                    fillColor: "#10b981",
+                    fillOpacity: 0.15,
+                    map: mapInstance,
+                    center: customCenter,
+                    radius: 500, // User requested exactly 500m radius
+                });
+                setQuantumCircle(circle);
+                mapInstance.panTo(customCenter);
+                mapInstance.setZoom(14);
+                setActivePowerups(prev => [...prev, "🎯 Quantum Triangulation Deployed"]);
+            }
+        } else if (buff === 'ironclad_lockdown') {
+            setHasIroncladLockdown(true);
+            setActivePowerups(prev => [...prev, "🔒 Ironclad Lockdown: Multiplier Saved"]);
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: "powerup", effect: "remove_leech", targetTeam: myTeam, from: userId }));
+            }
+        }
+        setSpentEnergy(prev => prev + cost);
+    };
+
     const handleBoxDrawn = (box: BoxCoordinates | null) => {
         if (box) {
             setEvidenceList(prev => [...prev, { box, id: Math.random().toString(36).substr(2, 9) }]);
@@ -668,13 +1028,29 @@ export default function StudentLiveGame() {
     const handleSubmit = () => {
         if (!guess) return;
         setSubmitted(true);
+        setSubmittedAtSeconds(secondsElapsed);
         playSuccess(); // Audio feedback
+
+        // Capture the exact floating point fraction of time they locked in at to guarantee perfect UI sync
+        let exactElapsedSeconds = currentRound?.startTime ? Math.max(0, (Date.now() - serverClockOffsetRef.current - currentRound.startTime) / 1000) : secondsElapsed;
+        
+        // If Chrono Freeze is active, the submit time is officially locked at whichever is smaller (15s minimum penalty or whatever it was when they froze)
+        // Since we don't have the exact frozen timestamp globally without refactoring, we rely on the server validation or pass a localized flag.
+        
         const formData = new FormData();
         formData.append("lat", guess.lat.toString());
         formData.append("lng", guess.lng.toString());
+        formData.append("submittedAtSeconds", exactElapsedSeconds.toString());
+        
         if (evidenceList.length > 0) {
             formData.append("evidenceList", JSON.stringify(evidenceList));
         }
+        if (hasScoreMultiplier) formData.append("scoreMultiplier", "true");
+        if (isLeeched) formData.append("isLeeched", "true");
+        if (hasMultiplierLeech) formData.append("hasMultiplierLeech", "true");
+        if (hasChronoFreeze) formData.append("hasChronoFreeze", "true"); // Server will parse this and calculate
+        if (hasIroncladLockdown) formData.append("hasIroncladLockdown", "true");
+
         actionFetcher.submit(formData, { method: "post", action: `/api/room/${code}/submit` });
     };
 
@@ -722,9 +1098,9 @@ export default function StudentLiveGame() {
         }
     }, [room?.status, code, result?.officialEvidence]);
 
-    // Draw Official Pin & Line in REVIEW mode
+    // Draw Official Pin & Line IMMEDIATELY once received (anti-cheat wait time bypassed)
     useEffect(() => {
-        if (room?.status === 'REVIEW' && result?.officialLocation && mapInstance) {
+        if (result?.officialLocation && mapInstance) {
             importLibrary("marker").then(async () => {
                 const { AdvancedMarkerElement, PinElement } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
 
@@ -791,7 +1167,7 @@ export default function StudentLiveGame() {
 
     if (room.status === 'WAITING') {
         return (
-            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center animate-in fade-in">
+            <div className="min-h-[100dvh] bg-slate-950 flex flex-col items-center justify-center p-6 text-center animate-in fade-in pb-[env(safe-area-inset-bottom)]">
                 <div className="loader mb-8 w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
                 <h1 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Stand By</h1>
                 <p className="text-slate-400 max-w-xs mx-auto">Waiting for Command...</p>
@@ -818,7 +1194,84 @@ export default function StudentLiveGame() {
     const layoutMode = room.status === 'REVIEW' ? "result" : "game";
 
     return (
-        <div className={`h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row shadow-2xl ${isBlurred ? 'blur-md pointer-events-none transition-all duration-1000' : 'transition-none'}`}>
+        <div className={`h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row shadow-2xl pb-[env(safe-area-inset-bottom)] transition-none`}>
+
+            {/* RADAR JAMMER: TV STATIC OVERLAY */}
+            {isBlurred && (
+                <div className="absolute inset-0 z-[9997] pointer-events-auto cursor-not-allowed" style={{ isolation: 'isolate' }}>
+                    {/* Animated noise layer */}
+                    <div className="absolute inset-0" style={{
+                        background: `repeating-linear-gradient(
+                            0deg,
+                            transparent,
+                            transparent 2px,
+                            rgba(0,0,0,0.3) 2px,
+                            rgba(0,0,0,0.3) 4px
+                        )`,
+                        animation: 'staticScroll 0.1s steps(4) infinite',
+                    }} />
+                    {/* Noise grain */}
+                    <div className="absolute inset-0 opacity-80" style={{
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.5'/%3E%3C/svg%3E")`,
+                        backgroundSize: '128px 128px',
+                        animation: 'staticGrain 0.05s steps(8) infinite',
+                        mixBlendMode: 'overlay',
+                    }} />
+                    {/* Color aberration flicker */}
+                    <div className="absolute inset-0" style={{
+                        background: 'linear-gradient(180deg, rgba(255,0,0,0.03) 33%, rgba(0,255,0,0.03) 33%, rgba(0,255,0,0.03) 66%, rgba(0,0,255,0.03) 66%)',
+                        backgroundSize: '100% 3px',
+                        animation: 'staticFlicker 0.15s steps(3) infinite',
+                    }} />
+                    {/* Central warning text */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center" style={{ animation: 'staticGlitch 0.3s steps(2) infinite' }}>
+                            <div className="text-6xl md:text-8xl font-black text-red-500 uppercase tracking-tighter mb-2" style={{ textShadow: '3px 0 #0ff, -3px 0 #f0f' }}>JAMMED</div>
+                            <div className="text-sm font-mono text-white/60 tracking-[0.5em] uppercase">Signal Compromised</div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Radar Jammer CSS Animations */}
+            <style dangerouslySetInnerHTML={{ __html: `
+                @keyframes staticScroll {
+                    0% { transform: translateY(0); }
+                    100% { transform: translateY(8px); }
+                }
+                @keyframes staticGrain {
+                    0%, 100% { transform: translate(0, 0); }
+                    10% { transform: translate(-2%, -3%); }
+                    20% { transform: translate(3%, 1%); }
+                    30% { transform: translate(-1%, 2%); }
+                    40% { transform: translate(2%, -1%); }
+                    50% { transform: translate(-3%, 3%); }
+                    60% { transform: translate(1%, -2%); }
+                    70% { transform: translate(-2%, 1%); }
+                    80% { transform: translate(3%, -3%); }
+                    90% { transform: translate(-1%, 2%); }
+                }
+                @keyframes staticFlicker {
+                    0% { opacity: 0.8; }
+                    50% { opacity: 0.4; }
+                    100% { opacity: 0.9; }
+                }
+                @keyframes staticGlitch {
+                    0% { transform: translate(0, 0) skewX(0deg); }
+                    25% { transform: translate(-2px, 1px) skewX(-1deg); }
+                    50% { transform: translate(2px, -1px) skewX(1deg); }
+                    75% { transform: translate(-1px, 2px) skewX(0.5deg); }
+                    100% { transform: translate(0, 0) skewX(0deg); }
+                }
+                @keyframes compassSweep {
+                    0% { transform: rotate(0deg); opacity: 0.6; }
+                    100% { transform: rotate(360deg); opacity: 0.6; }
+                }
+                @keyframes compassPulse {
+                    0%, 100% { box-shadow: 0 0 15px rgba(52, 211, 153, 0.4), inset 0 0 15px rgba(52, 211, 153, 0.1); }
+                    50% { box-shadow: 0 0 30px rgba(52, 211, 153, 0.8), inset 0 0 30px rgba(52, 211, 153, 0.2); }
+                }
+            ` }} />
 
             {/* FREEZE RAY OVERLAY */}
             {room.is_paused === 1 && (
@@ -882,25 +1335,6 @@ export default function StudentLiveGame() {
                             </div>
                         )}
 
-                        {/* [UI] TIME ATTACK BURN BAR */}
-                        {room.game_mode === 'time_attack' && (
-                            <div className="absolute top-[80px] inset-x-8 md:inset-x-32 flex flex-col items-center pointer-events-none">
-                                <div className="w-full max-w-2xl bg-black/50 backdrop-blur-md rounded-full border border-white/20 h-4 relative overflow-hidden shadow-[0_0_15px_rgba(0,0,0,0.5)]">
-                                    <div 
-                                        className="absolute top-0 left-0 h-full transition-all duration-1000 ease-linear rounded-full"
-                                        style={{
-                                            width: `${Math.max(0, 100 - (secondsElapsed / 25) * 100)}%`,
-                                            backgroundColor: secondsElapsed < 10 ? '#22c55e' : secondsElapsed < 20 ? '#eab308' : '#ef4444',
-                                            boxShadow: `0 0 10px ${secondsElapsed < 10 ? '#22c55e' : secondsElapsed < 20 ? '#eab308' : '#ef4444'}`
-                                        }}
-                                    />
-                                </div>
-                                <div className="mt-1 flex justify-between w-full max-w-2xl px-2">
-                                    <span className="text-[10px] font-bold text-green-400 uppercase tracking-widest">1.8x Bonus</span>
-                                    <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest text-right">0.8x Penalty</span>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
 
@@ -925,22 +1359,61 @@ export default function StudentLiveGame() {
                     </div>
                 )}
 
+                {/* STRICT GAME MODE ACKNOWLEDGMENT (Only on Round 1) */}
+                {room.status === 'PLAYING' && currentRound?.index === 0 && !hasAcknowledgedRules && (
+                    <div className="absolute inset-0 z-[100] bg-slate-900/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center animate-in slide-in-from-bottom-10 pointer-events-auto">
+                        <div className="max-w-2xl w-full bg-black border border-white/20 rounded-3xl p-8 md:p-12 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+                            <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">MISSION BRIEFING</h2>
+                            <div className="w-16 h-2 bg-blue-500 mx-auto mb-8 rounded-full" />
+                            
+                            {room.game_mode === 'time_attack' && (
+                                <div className="space-y-4">
+                                    <h3 className="text-2xl font-black text-blue-400 uppercase tracking-widest flex justify-center items-center gap-2"><span>⏰</span> Time Attack Mode</h3>
+                                    <p className="text-lg text-slate-300 leading-relaxed font-medium">Speed is your greatest asset. Confirm coordinates within the first 30 seconds for a <span className="text-green-400 font-bold">2.0x score multiplier</span>. Delaying your submission will linearly incur penalties down to <span className="text-red-500 font-bold">0.5x</span>.</p>
+                                </div>
+                            )}
+                            {room.game_mode === 'teams' && (
+                                <div className="space-y-4">
+                                    <h3 className="text-2xl font-black text-green-400 uppercase tracking-widest flex justify-center items-center gap-2"><span>🛡️</span> Squad Battle</h3>
+                                    <p className="text-lg text-slate-300 leading-relaxed font-medium">Your individual performance fuels your Squad's total score. Communicate verbally with your team, use your sabotage powers strategically, and outscore rival factions.</p>
+                                </div>
+                            )}
+                            {(room.game_mode === 'standard' || !room.game_mode) && (
+                                <div className="space-y-4">
+                                    <h3 className="text-2xl font-black text-white uppercase tracking-widest flex justify-center items-center gap-2"><span>🎯</span> Classic Solo</h3>
+                                    <p className="text-lg text-slate-300 leading-relaxed font-medium">Score high by accurately placing pins on the map and identifying critical intel from the image. Only one agent will stand on the final podium.</p>
+                                </div>
+                            )}
+
+                            <button 
+                                onClick={() => setHasAcknowledgedRules(true)}
+                                className="mt-12 w-full py-6 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xl uppercase tracking-widest shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 active:scale-95"
+                            >
+                                I ACKNOWLEDGE GAME MODE
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* --- TUTORIAL OVERLAY --- */}
-                {room.has_guided_playthrough === 1 && currentRound.index === 0 && tutorialStep > 0 && tutorialStep < 5 && (
+                {room.has_guided_playthrough === 1 && currentRound.index === 0 && tutorialStep > 0 && tutorialStep < 8 && (
                     <div className="absolute inset-0 z-[70] pointer-events-none flex flex-col items-center justify-end pb-12">
                         <div className="bg-blue-600/90 backdrop-blur-xl border-2 border-blue-400 p-6 rounded-2xl max-w-md shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-10">
                             <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2 flex items-center gap-2">
                                 <span>🎓</span> Simulation Guide
                             </h3>
                             <p className="text-blue-100 text-sm mb-6 leading-relaxed font-medium">
-                                {tutorialStep === 1 && "Welcome Agent. Before we begin, let's review the tools. Your objective is to lock onto the geographical coordinates that match this image."}
-                                {tutorialStep === 2 && "First, analyze the image. Click 'Enable Scanner' (top right) and draw a box over a distinct clue you see (e.g. an architectural feature or street sign)."}
-                                {tutorialStep === 3 && "Excellent. The AI will evaluate this evidence later. Now, click on the satellite map on the right to place your coordinate pin."}
-                                {tutorialStep === 4 && "Finally, click CONFIRM COORDINATES to lock in your submission. High scores are awarded for accuracy within a 100m radius."}
+                                {tutorialStep === 1 && "Welcome Agent. Before we begin, let's review our Intelligence Tools. Your objective is to lock onto the precise GPS coordinates of this image."}
+                                {tutorialStep === 2 && "First, analyze the image. Click 'Enable Scanner' (top right) and draw a box over a distinct clue you see (e.g., an architectural feature or street sign)."}
+                                {tutorialStep === 3 && "Excellent. Marking evidence gives you an Evidence Bonus when HQ reviews your report. The more accurate, the higher the bonus."}
+                                {tutorialStep === 4 && "Keep an eye on the Hints deployed periodically at the top left. Also, use the Energy Bar at the bottom to deploy abilities like 'Jammer' against other agents!"}
+                                {tutorialStep === 5 && "If you're lost, you can use the 'Vicinity Scan' below to detect if the target is within your current map bounds."}
+                                {tutorialStep === 6 && "Now, click on the satellite map on the right to place your coordinate pin. Try to be as precise as possible."}
+                                {tutorialStep === 7 && "Finally, click CONFIRM COORDINATES to lock in your submission. High scores are awarded for accuracy within a 100m radius."}
                             </p>
                             <div className="flex justify-between items-center">
                                 <div className="flex gap-1">
-                                    {[1, 2, 3, 4].map(s => (
+                                    {[1, 2, 3, 4, 5, 6, 7].map(s => (
                                         <div key={s} className={`w-2 h-2 rounded-full ${s === tutorialStep ? 'bg-white' : 'bg-white/30'}`} />
                                     ))}
                                 </div>
@@ -948,14 +1421,14 @@ export default function StudentLiveGame() {
                                     onClick={() => setTutorialStep(prev => prev + 1)}
                                     disabled={
                                         (tutorialStep === 2 && evidenceList.length === 0) ||
-                                        (tutorialStep === 3 && guess === null)
+                                        (tutorialStep === 6 && guess === null)
                                     }
-                                    className={`px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest transition-colors ${((tutorialStep === 2 && evidenceList.length === 0) || (tutorialStep === 3 && guess === null))
+                                    className={`px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest transition-colors ${((tutorialStep === 2 && evidenceList.length === 0) || (tutorialStep === 6 && guess === null))
                                         ? 'opacity-50 cursor-not-allowed'
                                         : 'hover:bg-blue-50'
                                         }`}
                                 >
-                                    {tutorialStep === 4 ? "Begin Operaton" : "Next ➔"}
+                                    {tutorialStep === 7 ? "Begin Operation" : "Next ➔"}
                                 </button>
                             </div>
                         </div>
@@ -966,50 +1439,24 @@ export default function StudentLiveGame() {
                 {!submitted && visibleHints.length > 0 && (
                     <div className="absolute bottom-28 left-4 md:bottom-32 md:left-6 z-30 w-[calc(100%-2rem)] max-w-sm space-y-2 pointer-events-none">
                         {visibleHints.map((hint, i) => (
-                            <div key={i} className="bg-black/40 backdrop-blur-xl border-l-4 border-yellow-400 p-3 rounded text-xs text-white animate-in slide-in-from-left-10 shadow-lg">
-                                {hint}
+                            <div key={i} className={`bg-black/40 backdrop-blur-xl border-l-4 ${isIntelCorrupted ? 'border-purple-600 bg-purple-900/60 animate-pulse' : 'border-yellow-400'} p-3 rounded text-xs text-white animate-in slide-in-from-left-10 shadow-lg`}>
+                                {isIntelCorrupted ? (
+                                    <span className="font-mono text-purple-300 font-bold tracking-widest line-through decoration-wavy opacity-90 blur-[0.5px]">
+                                        👾 ████ ENCRYPTED: PAYLOAD CORRUPTED ████
+                                    </span>
+                                ) : (
+                                    hint
+                                )}
                             </div>
                         ))}
                     </div>
                 )}
 
-                {/* AI Hint UI */}
-                {!submitted && !isEvidenceMode && introStage >= 3 && (tutorialStep === 0 || tutorialStep >= 5) && (
-                    <div className="absolute bottom-4 left-4 md:bottom-6 md:left-6 z-30 w-[calc(100%-2rem)] max-w-[16rem] pointer-events-auto bg-black/60 backdrop-blur-xl border border-blue-500/30 rounded-xl p-4 shadow-2xl">
-                        <h3 className="text-[10px] font-black text-blue-300 uppercase tracking-widest mb-2 flex justify-between">
-                            <span>Socratic AI Link</span>
-                            <span className="text-slate-500">{hasAskedAi ? '0/1' : '1/1'}</span>
-                        </h3>
-                        {aiHintResponse ? (
-                            <div className="text-xs text-blue-100 italic leading-relaxed">"{aiHintResponse}"</div>
-                        ) : hasAskedAi ? (
-                            <div className="text-[10px] text-slate-400 uppercase tracking-widest">Connection to AI severed for this sector.</div>
-                        ) : (
-                            <form onSubmit={handleAskAi} className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={aiQuestion}
-                                    onChange={e => setAiQuestion(e.target.value)}
-                                    placeholder="Ask for a clue..."
-                                    className="flex-1 bg-black/50 border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 placeholder-slate-500"
-                                    disabled={isAskingAi}
-                                    maxLength={100}
-                                />
-                                <button
-                                    type="submit"
-                                    disabled={isAskingAi || !aiQuestion.trim()}
-                                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-[10px] uppercase font-bold transition-colors"
-                                >
-                                    {isAskingAi ? "..." : "SEND"}
-                                </button>
-                            </form>
-                        )}
-                    </div>
-                )}
+
 
                 {/* [UI] Persistent Intel Signal Banner */}
                 {currentRound?.evidenceCount !== undefined && introStage >= 3 && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-max animate-in slide-in-from-top-10 duration-700">
+                    <div className="absolute top-20 md:top-24 left-1/2 -translate-x-1/2 z-40 w-max animate-in slide-in-from-top-10 duration-700">
                         <div className="bg-black/60 backdrop-blur-xl border border-blue-500/40 px-6 py-2 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.3)] flex flex-col items-center">
                             <div className="flex items-center gap-3">
                                 <div className="relative">
@@ -1202,13 +1649,13 @@ export default function StudentLiveGame() {
 
             {/* COLUMN 2: MAP */}
             <div
-                className={`relative h-full md:h-full bg-slate-900 border-r border-white/10
+                className={`relative h-full md:h-full bg-slate-900 border-r border-white/10 ${isMapScrambled ? 'saturate-200 invert hue-rotate-180 blur-[2px] scale-y-[-1]' : ''}
                     ${layoutMode === "result" ? "hidden md:block md:w-[40%]" : "w-full"}`}
                 style={layoutMode !== "result" ? { flexBasis: `${100 - splitRatio}%` } : {}}
             >    <div ref={mapRef} className="w-full h-full relative z-0" />
 
                 {/* Tutorial Column 2 Blur Overlay */}
-                {!submitted && currentRound?.isGuidedRound && (tutorialStep === 1 || tutorialStep === 2) && (
+                {!submitted && currentRound?.isGuidedRound && (tutorialStep >= 1 && tutorialStep <= 5) && (
                     <div className="absolute inset-0 z-[65] bg-black/60 backdrop-blur-md transition-all duration-500" />
                 )}
 
@@ -1219,11 +1666,11 @@ export default function StudentLiveGame() {
                 />
 
                 {
-                    !submitted ? (
+                    !submitted && !isTimeUp ? (
                         <>
                             {/* Vicinity Scan Button */}
                             {!submitted && isVicinityScanAvailable && !hasZoomed && (
-                                <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-20">
+                                <div className="absolute bottom-[280px] md:bottom-[220px] left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-20">
                                     {isTargetInRange ? (
                                         <div className="w-full py-3 bg-red-500/20 text-red-300 border border-red-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 animate-in fade-in transition-all">
                                             <span className="text-lg">📶</span>
@@ -1241,20 +1688,69 @@ export default function StudentLiveGame() {
                                 </div>
                             )}
 
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-                                <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'} ${currentRound?.isGuidedRound && tutorialStep === 4 ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}>
+                            {/* [UI] TIME ATTACK BURN BAR */}
+                            {room.game_mode === 'time_attack' && (
+                                <div className="absolute bottom-[210px] md:bottom-[170px] left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[9990] pointer-events-none">
+                                    <HighPrecisionTimeAttackHUD 
+                                        currentRound={currentRound} 
+                                        room={room}
+                                        serverClockOffsetRef={serverClockOffsetRef} 
+                                        submittedAtSeconds={submittedAtSeconds} 
+                                        result={result} 
+                                        hasScoreMultiplier={hasScoreMultiplier} 
+                                    />
+                                </div>
+                            )}
+
+                            <div className="absolute bottom-[130px] md:bottom-[100px] left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+                                <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'} ${currentRound?.isGuidedRound && tutorialStep === 7 ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}>
                                     CONFIRM COORDINATES
                                 </button>
                             </div>
                         </>
                     ) : (
                         room.status === 'PLAYING' && (
-                            <div className="absolute bottom-6 left-6 right-6 z-10">
-                                <div className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5">
-                                    <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
-                                    <div className="text-lg font-black">LOCKED IN</div>
-                                    <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Awaiting Mission Control Reveal...</div>
-                                </div>
+                            <div className="absolute bottom-10 md:bottom-6 left-6 right-6 z-10">
+                                {actionFetcher.state !== "idle" ? (
+                                    <div className="border font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5 bg-yellow-500/20 text-yellow-400 border-yellow-500/50">
+                                        <div className="text-xs uppercase tracking-widest mb-1 text-yellow-300">Target Acquired</div>
+                                        <div className="text-lg font-black animate-pulse">SENDING AI TO HQ...</div>
+                                        <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">AI is generating your map analysis...</div>
+                                    </div>
+                                ) : actionFetcher.data?.aiFeedback ? (
+                                    <div className="border font-bold p-4 rounded-xl shadow-lg backdrop-blur-3xl animate-in slide-in-from-bottom-5 bg-slate-900/95 text-slate-200 border-blue-500/50 max-h-[40vh] overflow-y-auto pointer-events-auto">
+                                        <div className="text-[10px] font-black uppercase tracking-widest mb-3 text-blue-400 border-b border-white/10 pb-2 flex justify-between items-center">
+                                            <span>HQ AI Preliminary Report</span>
+                                            <span className="text-emerald-400">AWAITING REVIEW</span>
+                                        </div>
+                                        {actionFetcher.data.aiFeedback.results?.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {actionFetcher.data.aiFeedback.results.map((r: any, idx: number) => (
+                                                    <div key={idx} className="bg-black/40 p-3 rounded-lg border border-white/5 relative overflow-hidden">
+                                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${r.validity >= 0.7 ? "bg-green-500" : (r.validity >= 0.4 ? "bg-yellow-500" : "bg-red-500")}`} />
+                                                        <div className="text-white text-xs font-bold pl-2">{r.description || "Unknown Intel"}</div>
+                                                        <div className="text-slate-400 text-[10px] mt-1 pl-2 leading-relaxed font-normal">{r.explanation}</div>
+                                                        <div className="mt-2 pl-2 text-[10px] font-black uppercase flex items-center gap-2">
+                                                            <span className={r.validity >= 0.7 ? "text-green-400" : (r.validity >= 0.4 ? "text-yellow-400" : "text-red-400")}>
+                                                                CONFIDENCE: {Math.round(r.validity * 100)}%
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-sm p-4 text-center text-slate-400 font-normal">
+                                                No recognizable intel items detected in your scan.
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="border font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5 bg-emerald-500/20 text-emerald-400 border-emerald-500/50">
+                                        <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
+                                        <div className="text-lg font-black">LOCKED IN</div>
+                                        <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Transmission Secure. Awaiting Mission Control...</div>
+                                    </div>
+                                )}
                             </div>
                         )
                     )
@@ -1263,28 +1759,146 @@ export default function StudentLiveGame() {
 
             {/* ACTION BAR (Bottom Center Global) */}
             {room.status === 'PLAYING' && !submitted && (
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-4 bg-slate-900/80 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-full shadow-2xl">
-                    <div className="flex flex-col items-center border-r border-white/20 pr-4">
-                        <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest">Energy</span>
-                        <span className="text-xl font-black font-mono text-yellow-400">{powerupEnergy}/100</span>
+                <div className="absolute bottom-10 md:bottom-6 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center gap-2 w-[95%] sm:w-auto">
+                    {/* Tooltip for Double Tap */}
+                    {previewPowerId && (
+                        <div className="bg-slate-900/95 backdrop-blur-xl border border-yellow-500/50 text-white text-[10px] sm:text-xs font-bold px-4 py-2 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.4)] animate-bounce relative uppercase tracking-widest text-center">
+                            {SUPERPOWER_DESCRIPTIONS[previewPowerId]}
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-solid border-t-slate-900/95 border-t-6 border-x-transparent border-x-6 border-b-0"></div>
+                        </div>
+                    )}
+
+                    <div className="flex w-full sm:w-auto items-center gap-4 bg-slate-950/90 backdrop-blur-2xl border border-white/10 px-6 py-3 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.8)] border-b-4 border-b-slate-800">
+                        <div className="flex flex-col items-center border-r border-white/20 pr-4">
+                            <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest drop-shadow-[0_0_10px_rgba(234,179,8,0.8)]">Energy</span>
+                            <span className="text-xl font-black font-mono text-yellow-400">{localEnergy}/200</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-4 sm:flex sm:flex-wrap md:flex-nowrap gap-1 md:gap-2 justify-center max-h-[140px] overflow-y-auto pr-1">
+                            {/* OFFENSIVE */}
+                            {availablePowers.offensive.includes('gps_scrambler') && (
+                                <button 
+                                    disabled={localEnergy < 30} title="Scramble Map"
+                                    onClick={() => handlePowerTap('gps_scrambler', 30, activatePower)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 30 ? (previewPowerId === 'gps_scrambler' ? 'bg-indigo-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'bg-indigo-600/80 hover:bg-indigo-500 text-white border-indigo-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">🗺️</span> Scramble(30)
+                                </button>
+                            )}
+                            {availablePowers.offensive.includes('intel_corruptor') && (
+                                <button 
+                                    disabled={localEnergy < 50} title="Intel Corruptor"
+                                    onClick={() => handlePowerTap('intel_corruptor', 50, activatePower)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 50 ? (previewPowerId === 'intel_corruptor' ? 'bg-purple-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(168,85,247,0.8)]' : 'bg-purple-600/80 hover:bg-purple-500 text-white border-purple-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">👾</span> Corrupt(50)
+                                </button>
+                            )}
+                            {availablePowers.offensive.includes('emp_blackout') && (
+                                <button 
+                                    disabled={localEnergy < 80} title="EMP Blackout"
+                                    onClick={() => handlePowerTap('emp_blackout', 80, activatePower)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 80 ? (previewPowerId === 'emp_blackout' ? 'bg-slate-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(100,116,139,0.8)]' : 'bg-slate-700/80 hover:bg-slate-600 text-white border-slate-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">⚡</span> EMP(80)
+                                </button>
+                            )}
+                            {availablePowers.offensive.includes('multiplier_leech') && (
+                                <button 
+                                    disabled={localEnergy < 100} title="Multiplier Leech"
+                                    onClick={() => handlePowerTap('multiplier_leech', 100, activatePower)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 100 ? (previewPowerId === 'multiplier_leech' ? 'bg-rose-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(244,63,94,0.8)]' : 'bg-rose-600/80 hover:bg-rose-500 text-white border-rose-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">🧛</span> Leech(100)
+                                </button>
+                            )}
+                            
+                            {/* DEFENSIVE */}
+                            {availablePowers.defensive.includes('aegis_reflection') && (
+                                <button 
+                                    disabled={localEnergy < 60 || hasAegis} title="Aegis Reflection"
+                                    onClick={() => handlePowerTap('aegis_reflection', 60, activateSelfBuff)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 60 && !hasAegis ? (previewPowerId === 'aegis_reflection' ? 'bg-cyan-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(6,182,212,0.8)]' : 'bg-cyan-600/80 hover:bg-cyan-500 text-white border-cyan-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">🛡️</span> Aegis(60)
+                                </button>
+                            )}
+                            {availablePowers.defensive.includes('chrono_freeze') && (
+                                <button 
+                                    disabled={localEnergy < 120 || hasChronoFreeze} title="Chrono Freeze"
+                                    onClick={() => handlePowerTap('chrono_freeze', 120, activateSelfBuff)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 120 && !hasChronoFreeze ? (previewPowerId === 'chrono_freeze' ? 'bg-blue-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(59,130,246,0.8)]' : 'bg-blue-600/80 hover:bg-blue-500 text-white border-blue-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">❄️</span> Freeze(120)
+                                </button>
+                            )}
+                            {availablePowers.defensive.includes('quantum_triangulation') && (
+                                <button 
+                                    disabled={localEnergy < 160 || !!quantumCircle} title="Quantum Triangulation"
+                                    onClick={() => handlePowerTap('quantum_triangulation', 160, activateSelfBuff)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 160 && !quantumCircle ? (previewPowerId === 'quantum_triangulation' ? 'bg-emerald-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-emerald-600/80 hover:bg-emerald-500 text-white border-emerald-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">🎯</span> Triang.(160)
+                                </button>
+                            )}
+                            {availablePowers.defensive.includes('ironclad_lockdown') && (
+                                <button 
+                                    disabled={localEnergy < 200 || hasIroncladLockdown} title="Ironclad Lockdown"
+                                    onClick={() => handlePowerTap('ironclad_lockdown', 200, activateSelfBuff)}
+                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 200 && !hasIroncladLockdown ? (previewPowerId === 'ironclad_lockdown' ? 'bg-yellow-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(234,179,8,0.8)]' : 'bg-yellow-600/80 hover:bg-yellow-500 text-white border-yellow-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
+                                >
+                                    <span className="text-base md:text-xl mb-0.5">🔒</span> Ironclad(200)
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button 
-                            disabled={powerupEnergy < 50}
-                            onClick={() => {
-                                if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-                                wsRef.current.send(JSON.stringify({
-                                    type: "powerup",
-                                    effect: "blur",
-                                    targetTeam: myTeam, // We want to target enemies, server/clients handle inverse
-                                    from: userId
-                                }));
-                                // Optimistically deduct energy
-                            }}
-                            className={`px-4 py-2 rounded-full font-bold text-xs uppercase tracking-widest transition-all shadow-lg border ${powerupEnergy >= 50 ? 'bg-red-600/80 hover:bg-red-500 text-white border-red-400 hover:scale-105' : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                        >
-                            <span className="mr-1">👁️‍🗨️</span> Sabotage: Blur (50)
-                        </button>
+                </div>
+            )}
+
+            {/* COMPASS RADAR UI */}
+            {showCompass && location && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] pointer-events-none">
+                    <div className="w-52 h-52 md:w-64 md:h-64 rounded-full border-2 border-emerald-500/60 bg-black/70 backdrop-blur-xl relative flex items-center justify-center"
+                         style={{ animation: 'compassPulse 1.5s ease-in-out infinite' }}>
+                        {/* Concentric Rings */}
+                        <div className="absolute w-3/4 h-3/4 rounded-full border border-emerald-500/20" />
+                        <div className="absolute w-1/2 h-1/2 rounded-full border border-emerald-500/20" />
+                        <div className="absolute w-1/4 h-1/4 rounded-full border border-emerald-500/20" />
+                        {/* Cross-hairs */}
+                        <div className="absolute w-full h-[1px] bg-emerald-500/15" />
+                        <div className="absolute w-[1px] h-full bg-emerald-500/15" />
+                        {/* Sweeping Radar Arm */}
+                        <div className="absolute w-1/2 h-[2px] bg-gradient-to-r from-emerald-400/60 to-transparent origin-left"
+                             style={{ animation: 'compassSweep 2s linear infinite' }} />
+                        {/* Directional Needle — originates from center, points toward target */}
+                        <div className="absolute w-1.5 h-1/2 origin-bottom rounded-t-full"
+                             style={{
+                                 background: 'linear-gradient(to top, #34d399, #10b981)',
+                                 boxShadow: '0 0 15px #34d399, 0 0 30px rgba(52,211,153,0.4)',
+                                 bottom: '50%',
+                                 left: 'calc(50% - 3px)',
+                                 transform: `rotate(${(() => {
+                                     if (!mapInstance) return 0;
+                                     const center = mapInstance.getCenter();
+                                     if (!center) return 0;
+                                     const dy = location.lat - center.lat();
+                                     const dx = location.lng - center.lng();
+                                     return Math.atan2(dx, dy) * (180 / Math.PI);
+                                 })()}deg)`
+                             }}
+                        />
+                        {/* Cardinal Labels */}
+                        <span className="absolute top-2 text-[9px] font-bold text-emerald-300/60 tracking-widest">N</span>
+                        <span className="absolute bottom-2 text-[9px] font-bold text-emerald-300/40 tracking-widest">S</span>
+                        <span className="absolute right-3 text-[9px] font-bold text-emerald-300/40 tracking-widest">E</span>
+                        <span className="absolute left-3 text-[9px] font-bold text-emerald-300/40 tracking-widest">W</span>
+                        {/* Center Dot */}
+                        <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399,0_0_20px_rgba(52,211,153,0.5)] z-10 relative" />
+                    </div>
+                    {/* Label */}
+                    <div className="text-center mt-3">
+                        <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em]">Target Compass</div>
+                        <div className="text-[9px] text-emerald-300/50 font-mono">3s Active</div>
                     </div>
                 </div>
             )}
@@ -1360,15 +1974,54 @@ export default function StudentLiveGame() {
                         {result.score !== undefined ? (
                             <div className="p-6">
                                 <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
-                                <p className="text-xs text-green-400 uppercase">Score</p>
-                                <hr className="border-white/10 my-4" />
+                                <p className="text-xs text-green-400 uppercase tracking-widest">Total Score</p>
+                                
+                                <div className="mt-4 bg-black/20 rounded-lg p-3 border border-white/5 space-y-2 text-[10px] md:text-xs">
+                                    <div className="flex justify-between items-center text-slate-300">
+                                        <span className="uppercase tracking-wider">📍 Base Alignment</span>
+                                        <span className="font-mono font-bold text-white">{result.baseDistanceScore || 0}</span>
+                                    </div>
+                                    {(result.baseTimeMultiplier !== undefined && room.game_mode === 'time_attack') && (
+                                        <div className="flex justify-between items-center text-orange-300">
+                                            <span className="uppercase tracking-wider">⏱️ Sub Time Multiplier</span>
+                                            <span className="font-mono font-bold text-white">x{Number(result.baseTimeMultiplier).toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                    {result.powerupActive && (
+                                        <div className="flex justify-between items-center text-pink-400">
+                                            <span className="uppercase tracking-wider">🔥 Overclock Bonus</span>
+                                            <span className="font-mono font-bold text-white">x1.5</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between items-center text-green-300 border-t border-white/10 pt-2 mt-2">
+                                        <span className="uppercase tracking-wider">🎯 Final Alignment Score</span>
+                                        <span className="font-mono font-bold text-white">+{result.distanceScore || 0}</span>
+                                    </div>
 
-                                <div className="text-xl font-bold">
+                                    <div className="flex justify-between items-center text-blue-300 pt-2">
+                                        <span className="uppercase tracking-wider">🔍 Evidence Bonus</span>
+                                        <span className="font-mono font-bold text-white">+{result.evidenceScore || 0}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-indigo-300">
+                                        <span className="uppercase tracking-wider">⚡ Speed Flat Bonus</span>
+                                        <span className="font-mono font-bold text-white">+{result.timeScore || 0}</span>
+                                    </div>
+                                    {result.difficultyMulti > 1 && (
+                                        <div className="flex justify-between items-center text-yellow-400 border-t border-white/10 pt-2 mt-2">
+                                            <span className="uppercase tracking-wider">⭐ Hard Mode Ext.</span>
+                                            <span className="font-mono font-black text-white">x{result.difficultyMulti}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <hr className="border-white/10 my-6" />
+
+                                <div className="text-xl font-black text-slate-200">
                                     {result.distance !== undefined && !isNaN(result.distance)
                                         ? `${Math.round(result.distance)}m`
                                         : "-- m"}
                                 </div>
-                                <p className="text-xs text-slate-500 uppercase">Deviation</p>
+                                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Deviation</p>
 
                                 <div className="mt-8 space-y-4">
                                     <h3 className="text-xs uppercase text-slate-400 mb-2">Evidence Analysis</h3>
@@ -1529,6 +2182,14 @@ export default function StudentLiveGame() {
                     </div>
                 )
             }
+
+            {isEmpBlackout && (
+                <div className="fixed inset-0 z-[9999] bg-black bg-opacity-95 pointer-events-none flex flex-col items-center justify-center animate-pulse backdrop-blur-3xl">
+                    <div className="text-red-500 font-mono text-4xl md:text-6xl font-black mb-2 animate-bounce uppercase tracking-tighter drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]">⚡ SYSTEM FAILURE ⚡</div>
+                    <div className="text-red-400 font-mono text-xl md:text-2xl tracking-widest text-center uppercase">Critical EMP Overload Detected</div>
+                    <div className="text-red-500/50 text-[10px] uppercase font-bold tracking-[0.5em] mt-8 opacity-50">NO SIGNAL DETECTED</div>
+                </div>
+            )}
         </div >
     );
 }

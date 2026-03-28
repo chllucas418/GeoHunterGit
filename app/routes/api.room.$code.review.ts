@@ -38,9 +38,10 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
     // Fetch Guesses with User Names
     const guesses = await db.prepare(`
-        SELECT rg.lat, rg.lng, rg.score, rg.distance, rg.evidence_score, rg.distance_score, u.display_name, u.profile_picture_url, rg.timestamp, rg.evidence_found
+        SELECT rg.lat, rg.lng, rg.score, rg.distance, rg.evidence_score, rg.distance_score, u.display_name, u.profile_picture_url, rg.timestamp, rg.evidence_found, rp.team_id
         FROM room_guesses rg
         JOIN users u ON rg.user_id = u.id
+        LEFT JOIN room_participants rp ON rg.user_id = rp.user_id AND rg.room_code = rp.room_code
         WHERE rg.room_code = ? AND rg.location_id = ?
     `).bind(code, targetLocationId).all<any>();
 

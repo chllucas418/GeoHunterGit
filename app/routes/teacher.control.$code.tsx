@@ -46,7 +46,7 @@ export default function TeacherControlPanel() {
             if (revalidator.state === "idle") {
                 revalidator.revalidate();
             }
-        }, 1000);
+        }, 3000);
         return () => clearInterval(interval);
     }, [revalidator]);
 
@@ -58,6 +58,10 @@ export default function TeacherControlPanel() {
     const targetMarkerRef = useRef<google.maps.Marker | null>(null);
     const cursorsRef = useRef<Record<string, google.maps.Marker>>({});
     const [drawMode, setDrawMode] = useState(false);
+    const drawModeRef = useRef(false);
+    useEffect(() => { drawModeRef.current = drawMode; }, [drawMode]);
+    const activePolylinesRef = useRef<google.maps.Polyline[]>([]);
+    const currentPathRef = useRef<{lat: number, lng: number}[]>([]);
 
     // Setup WebSocket
     useEffect(() => {
@@ -148,12 +152,81 @@ export default function TeacherControlPanel() {
                     });
                 }
 
+                // --- MAP DRAWING LOGIC ---
+                let isDrawingOnMap = false;
+                let drawTimeoutId: NodeJS.Timeout | null = null;
+                
+                map.addListener("mousedown", (e: google.maps.MapMouseEvent) => {
+                    if (!drawModeRef.current || !e.latLng) return;
+                    
+                    const startPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                    
+                    drawTimeoutId = setTimeout(() => {
+                        isDrawingOnMap = true;
+                        map.setOptions({ draggable: false, gestureHandling: 'none' });
+
+                        const newPoly = new google.maps.Polyline({
+                            strokeColor: "#ef4444",
+                            strokeOpacity: 1.0,
+                            strokeWeight: 4,
+                            map: map
+                        });
+                        activePolylinesRef.current.push(newPoly);
+                        currentPathRef.current = [startPos];
+                        newPoly.setPath(currentPathRef.current);
+                    }, 250); // 250ms long press
+                });
+
+                map.addListener("mousemove", (e: google.maps.MapMouseEvent) => {
+                    if (!drawModeRef.current || !e.latLng) return;
+                    if (!isDrawingOnMap) {
+                        // Cancel long press if the user just clicked and dragged immediately
+                        if (drawTimeoutId) {
+                            clearTimeout(drawTimeoutId);
+                            drawTimeoutId = null;
+                        }
+                        return;
+                    }
+                    
+                    currentPathRef.current.push({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                    
+                    const currentPoly = activePolylinesRef.current[activePolylinesRef.current.length - 1];
+                    currentPoly.setPath(currentPathRef.current);
+
+                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                            type: "draw_map",
+                            path: currentPathRef.current,
+                            polyId: activePolylinesRef.current.length
+                        }));
+                    }
+                });
+
+                map.addListener("mouseup", () => {
+                    if (drawTimeoutId) {
+                        clearTimeout(drawTimeoutId);
+                        drawTimeoutId = null;
+                    }
+                    if (!drawModeRef.current) return;
+                    
+                    if (isDrawingOnMap) {
+                        isDrawingOnMap = false;
+                        map.setOptions({ draggable: true, gestureHandling: 'greedy' }); // FIxed map stalling here
+                        
+                        const poly = activePolylinesRef.current[activePolylinesRef.current.length - 1];
+                        setTimeout(() => {
+                            if (poly) poly.setMap(null);
+                        }, 4000);
+                    }
+                });
+
                 map.addListener("click", (e: google.maps.MapMouseEvent) => {
+                    if (drawModeRef.current) return;
                     const lat = e.latLng!.lat();
                     const lng = e.latLng!.lng();
 
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: "laser", lat, lng }));
+                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: "laser", lat, lng }));
                     }
 
                     if (laserMarkerRef.current) {
@@ -173,7 +246,6 @@ export default function TeacherControlPanel() {
                         });
                     }
 
-                    // Auto hide laser after 2s
                     setTimeout(() => {
                         if (laserMarkerRef.current) {
                             laserMarkerRef.current.setMap(null);
@@ -216,9 +288,8 @@ export default function TeacherControlPanel() {
         }
     };
 
-    // --- DRAWING LOGIC ---
+    // --- IMAGE DRAWING LOGIC ---
     const imageCanvasRef = useRef<HTMLCanvasElement>(null);
-    const mapCanvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPosRef = useRef<{ x: number, y: number } | null>(null);
     const inkTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -242,9 +313,9 @@ export default function TeacherControlPanel() {
         ctx.closePath();
     };
 
-    const handleTimestampedDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
+    const handleTimestampedDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
         if (!isDrawing) return;
-        const canvas = canvasType === 'image' ? imageCanvasRef.current : mapCanvasRef.current;
+        const canvas = imageCanvasRef.current;
         if (!canvas) return;
 
         let clientX: number, clientY: number;
@@ -266,7 +337,7 @@ export default function TeacherControlPanel() {
             if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                 wsRef.current.send(JSON.stringify({
                     type: "draw",
-                    canvasTarget: canvasType,
+                    canvasTarget: 'image',
                     x0: lastPosRef.current.x,
                     y0: lastPosRef.current.y,
                     x1: pos.x,
@@ -283,9 +354,9 @@ export default function TeacherControlPanel() {
         }, 3000);
     };
 
-    const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>, canvasType: 'image' | 'map') => {
+    const startDraw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
         setIsDrawing(true);
-        const canvas = canvasType === 'image' ? imageCanvasRef.current : mapCanvasRef.current;
+        const canvas = imageCanvasRef.current;
         if (canvas) {
             let clientX: number, clientY: number;
             if ('touches' in e) {
@@ -306,12 +377,12 @@ export default function TeacherControlPanel() {
     };
 
     const clearDrawingBox = () => {
-        [imageCanvasRef.current, mapCanvasRef.current].forEach(canvas => {
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-            }
-        });
+        if (imageCanvasRef.current) {
+            const ctx = imageCanvasRef.current.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, imageCanvasRef.current.width, imageCanvasRef.current.height);
+        }
+        activePolylinesRef.current.forEach(p => p.setMap(null));
+        activePolylinesRef.current = [];
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({ type: "draw_clear" }));
         }
@@ -323,10 +394,6 @@ export default function TeacherControlPanel() {
             if (imageCanvasRef.current) {
                 imageCanvasRef.current.width = imageCanvasRef.current.offsetWidth;
                 imageCanvasRef.current.height = imageCanvasRef.current.offsetHeight;
-            }
-            if (mapCanvasRef.current) {
-                mapCanvasRef.current.width = mapCanvasRef.current.offsetWidth;
-                mapCanvasRef.current.height = mapCanvasRef.current.offsetHeight;
             }
         };
         window.addEventListener('resize', resizeCanvas);
@@ -390,12 +457,12 @@ export default function TeacherControlPanel() {
                                     ref={imageCanvasRef}
                                     className="absolute inset-0 w-full h-full cursor-crosshair z-20 mix-blend-screen"
                                     style={{ pointerEvents: drawMode ? 'auto' : 'none' }}
-                                    onMouseDown={(e) => startDraw(e, 'image')}
-                                    onMouseMove={(e) => handleTimestampedDraw(e, 'image')}
+                                    onMouseDown={(e) => startDraw(e)}
+                                    onMouseMove={(e) => handleTimestampedDraw(e)}
                                     onMouseUp={stopDraw}
                                     onMouseLeave={stopDraw}
-                                    onTouchStart={(e) => { e.preventDefault(); startDraw(e, 'image'); }}
-                                    onTouchMove={(e) => { e.preventDefault(); handleTimestampedDraw(e, 'image'); }}
+                                    onTouchStart={(e) => { e.preventDefault(); startDraw(e); }}
+                                    onTouchMove={(e) => { e.preventDefault(); handleTimestampedDraw(e); }}
                                     onTouchEnd={stopDraw}
                                 />
                             </>
@@ -414,19 +481,7 @@ export default function TeacherControlPanel() {
                     <div className="relative flex-1">
                         <div ref={mapRef} className="absolute inset-0 z-0" />
 
-                        {/* DRAWING LAYER */}
-                        <canvas
-                            ref={mapCanvasRef}
-                            className="absolute inset-0 w-full h-full cursor-crosshair z-20"
-                            style={{ pointerEvents: drawMode ? 'auto' : 'none' }}
-                            onMouseDown={(e) => startDraw(e, 'map')}
-                            onMouseMove={(e) => handleTimestampedDraw(e, 'map')}
-                            onMouseUp={stopDraw}
-                            onMouseLeave={stopDraw}
-                            onTouchStart={(e) => { e.preventDefault(); startDraw(e, 'map'); }}
-                            onTouchMove={(e) => { e.preventDefault(); handleTimestampedDraw(e, 'map'); }}
-                            onTouchEnd={stopDraw}
-                        />
+                        {/* DRAWING LAYER IS NOW HANDLED BY MAP INSTANCE */}
                     </div>
                     <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-md px-4 py-2 rounded shadow border border-white/10 text-[10px] font-mono pointer-events-none z-30">
                         <span className="text-red-400 font-bold block mb-1">Toggle DRAW MODE</span> to draw on screen. Normal click fires Laser.

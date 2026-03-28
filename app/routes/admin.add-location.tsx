@@ -642,7 +642,7 @@ export default function AddLocation() {
                 <div className={`grid grid-cols-1 ${evidenceStep ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-8`}>
                     {!evidenceStep ? (
                         <Form method="post" className="space-y-6 bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-xl">
-                            <input type="hidden" name="base64Image" value={base64} />
+                            <input type="hidden" name="base64Image" defaultValue={base64} key={base64 ? 'has-img' : 'no-img'} />
                             <input type="hidden" name="lat" value={marker?.lat ?? ""} />
                             <input type="hidden" name="lng" value={marker?.lng ?? ""} />
                             {/* Send flattened evidence list */}

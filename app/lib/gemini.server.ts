@@ -1,12 +1,8 @@
+import { Buffer } from "node:buffer";
+
 // Helper to convert ArrayBuffer to Base64
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+    return Buffer.from(buffer).toString('base64');
 }
 
 // Helper for raw fetch to Gemini API via Cloudflare AI Gateway
@@ -61,8 +57,7 @@ async function callGeminiApi(
     
     if (useGrounding) {
         payload.tools = [
-            { googleSearch: {} },
-            { googleMaps: {} }
+            { googleSearch: {} }
         ];
     }
 
@@ -175,8 +170,7 @@ async function callGeminiChatApi(
         },
         contents: contents,
         tools: [
-            { googleSearch: {} },
-            { googleMaps: {} }
+            { googleSearch: {} }
         ]
     };
 
@@ -271,14 +265,15 @@ export async function checkEvidenceListWithGemini(
     ).join("\n");
 
     const prompt = `
-    Analyze the image and the following USER marked evidence regions.
-    Location: "${locationName}".
+    You are an encouraging, expert intelligence instructor evaluating a remote field analyst (the USER). 
+    CRITICAL PERSONA NOTE: The USER is an agent trying to deduce the location based on visual evidence. They are NOT the photographer who took the picture.
+    The USER is examining a reconnaissance image provided by HQ of the following true location: "${locationName}".
     ${lat && lng ? `Coordinates: ${lat}, ${lng}. EXPLICITLY USE YOUR GOOGLE MAPS AND GOOGLE SEARCH GROUNDING TOOLS to verify these coordinates and the surrounding area before generating insight.` : ''}
 
-    GROUND TRUTH (Official Evidence for this location):
+    GROUND TRUTH (Official Intel provided by HQ for this location):
     ${adminContextStr}
 
-    USER'S EVIDENCE LIST (Boxes marked by player):
+    USER'S INTELLIGENCE REPORT (Features marked by the remote analyst):
     ${JSON.stringify(evidenceList.map(e => ({ box: e.box })), null, 2)}
 
     For each USER item:
@@ -317,7 +312,7 @@ export async function checkEvidenceListWithGemini(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3.0-flash-preview",
+            "gemini-3.1-flash-lite-preview",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -390,7 +385,7 @@ export async function analyzeImageQuality(
     
     Task:
     Analyze the image and provided context to generate a factual description and three progressive hints.
-    CRITICAL INSTRUCTION: You MUST use BOTH your Google Search and Google Maps tools at the same time to search for the EXACT coordinates provided in the context (if available). Consolidate your findings from both the Web Search tool and the Google Maps tool to determine the exact real-world location and its surrounding points of interest. Do NOT guess the location. Use your tools to find what map features, businesses, and transport links are ACTUALLY present at those exact coordinates. Base your hints STRICTLY on the real places and roads found via search at that specific coordinate.
+    CRITICAL INSTRUCTION: You MUST use your Google Search tool to look up BOTH web results and map points-of-interest for the EXACT coordinates provided in the context (if available). Consolidate your findings from the Web Search tool to determine the exact real-world location and its surrounding businesses/transport links on the map. Do NOT guess the location. Use your search tool to find what map features and roads are ACTUALLY present at those exact coordinates. Base your hints STRICTLY on the real places and roads found via search at that specific coordinate.
     
     Context:
     ${contextStr}

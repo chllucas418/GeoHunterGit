@@ -37,7 +37,7 @@ export default function MassAdd() {
     const { mapsApiKey, googleDriveApiKey, googleDriveClientId, mapSets, draft } = useLoaderData<typeof loader>();
     const [files, setFiles] = useState<any[]>(draft || []);
     const [analyzingIds, setAnalyzingIds] = useState<Set<number>>(new Set());
-    const [editingId, setEditingId] = useState<number | null>(null); // Index of file being edited
+    const [editingId, setEditingId] = useState<number | 'all' | null>(null); // Index of file being edited
     const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>(draft ? 'synced' : 'idle');
     const [extractionQueue, setExtractionQueue] = useState<{name: string, items: {blob: Blob, url: string, name: string}[]}[]>([]);
 
@@ -688,12 +688,38 @@ export default function MassAdd() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+            <div className="flex justify-between items-center mt-12 mb-4">
+                <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-blue-500 bg-clip-text text-transparent">Manage Pending Locations</h2>
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={() => setEditingId('all')}
+                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-lg shadow-[0_4px_15px_rgba(79,70,229,0.4)] transition-all flex items-center gap-2 tracking-widest uppercase active:scale-95"
+                        disabled={files.length === 0}
+                    >
+                        🚀 Edit All Locations
+                    </button>
+                    {files.some(f => f.status === 'saved') && (
+                        <button 
+                            onClick={() => setFiles(prev => prev.filter(f => f.status !== 'saved'))}
+                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 hover:text-red-400 rounded-lg text-sm text-gray-300 flex items-center gap-2 border border-gray-700 transition-colors uppercase font-bold tracking-widest"
+                        >
+                            Trash Completed
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {files.map((file, idx) => (
-                    <div key={file.id} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex flex-col">
+                    <div key={file.id} className={`bg-gray-900 border rounded-lg overflow-hidden flex flex-col transition-all ${file.status === 'saved' ? 'border-indigo-500 scale-[0.98] opacity-80 shadow-[0_0_15px_rgba(79,70,229,0.3)]' : 'border-gray-800'}`}>
                         <div className="relative h-48 bg-gray-800">
                             <img src={file.preview} className="w-full h-full object-cover opacity-80" />
                             <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                                {file.status === 'saved' && (
+                                    <span className="bg-indigo-600 text-white font-black text-xs px-2 py-1 rounded shadow-lg uppercase tracking-widest border border-indigo-400 mb-1 animate-pulse">
+                                        ✅ DEPLOYED
+                                    </span>
+                                )}
                                 {file.lat ? (
                                     <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded whitespace-nowrap">GPS Found</span>
                                 ) : (
@@ -751,9 +777,9 @@ export default function MassAdd() {
                             ) : (
                                 <button
                                     onClick={() => saveLocation(idx)}
-                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-sm text-white"
+                                    className={`px-4 py-1.5 rounded text-sm font-bold transition-colors shadow-md ${file.status === 'saved' ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
                                 >
-                                    Save
+                                    {file.status === 'saved' ? 'Re-Save' : 'Save'}
                                 </button>
                             )}
                             <button onClick={() => removeFile(idx)} className="px-2 text-gray-500 hover:text-red-400">×</button>
@@ -864,9 +890,18 @@ export function ExtractionModal({ document, onConfirm, onCancel }: { document: {
     );
 }
 
-export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets, onSave }: any) {
-    if (editingId === null) return null;
-    const item = files[editingId];
+function SingleLocationEditor({ item, editingIdx, files, setFiles, isLoaded, mapSets, onSave, isMulti }: {
+    item: any;
+    editingIdx: number;
+    files: any[];
+    setFiles: any;
+    isLoaded: boolean;
+    mapSets: any[];
+    onSave: any;
+    isMulti: boolean;
+}) {
+    if (!item) return null;
+    const editingId = editingIdx;
 
     // Local state for evidence description editing inside modal
     const [tempEvidenceBox, setTempEvidenceBox] = useState<BoxCoordinates | null>(null);
@@ -1123,46 +1158,26 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center overflow-hidden">
-            <div className="bg-gray-900 rounded-2xl w-full h-[95vh] mx-4 max-w-[98vw] flex flex-col border border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+        <div className={isMulti ? 'w-full shrink-0' : 'w-full h-full'}>
+            <div className={isMulti ? 'bg-gray-900 rounded-2xl w-full h-[85vh] flex flex-col border border-gray-700 shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden' : 'bg-gray-900 rounded-2xl w-full h-full flex flex-col border border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden'}>
                 {/* Header */}
-                <div className="flex justify-between items-center p-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
-                    <div className="flex items-center gap-6">
-                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                            <span className="p-1.5 bg-blue-600/20 rounded-lg text-blue-400">📍</span>
-                            Edit Location: <span className="text-blue-400 font-mono ml-2">{item.file?.name || item.photographer || "Unnamed"}</span>
+                <div className="flex justify-between items-center p-3 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                            <span className="p-1 bg-blue-600/20 rounded-lg text-blue-400 text-sm">#{editingId + 1}</span>
+                            <span className="text-blue-400 font-mono text-sm">{item.file?.name || item.photographer || "Unnamed"}</span>
                         </h2>
-                        {/* Navigation */}
-                        <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                            <button
-                                onClick={() => setEditingId(Math.max(0, editingId - 1))}
-                                disabled={editingId === 0}
-                                className="px-3 py-1.5 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold border-r border-gray-700 transition-colors"
-                            >
-                                ← PREV
-                            </button>
-                            <span className="px-3 py-1.5 text-[10px] font-mono text-gray-400">
-                                {editingId + 1} / {files.length}
-                            </span>
-                            <button
-                                onClick={() => setEditingId(Math.min(files.length - 1, editingId + 1))}
-                                disabled={editingId === files.length - 1}
-                                className="px-3 py-1.5 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold transition-colors"
-                            >
-                                NEXT →
-                            </button>
-                        </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={() => setIsEvidenceFullscreen(!isEvidenceFullscreen)}
-                            className={`px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all border flex items-center gap-2 ${isEvidenceFullscreen
+                            className={`px-3 py-1.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all border flex items-center gap-2 ${isEvidenceFullscreen
                                     ? "bg-amber-600/20 border-amber-500/50 text-amber-400 hover:bg-amber-600/30"
                                     : "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white"
                                 }`}
                         >
-                            {isEvidenceFullscreen ? "⏹ Exit Fullscreen" : "⛶ Fullscreen Editor"}
+                            {isEvidenceFullscreen ? "⏹ Exit FS" : "⛶ Fullscreen"}
                         </button>
                         <button
                             disabled={isSaving}
@@ -1171,12 +1186,9 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                                 await onSave(editingId, true);
                                 setIsSaving(false);
                             }}
-                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2"
+                            className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2"
                         >
                             {isSaving ? "SAVING..." : "💾 Save"}
-                        </button>
-                        <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white font-bold border border-gray-700 text-xs uppercase tracking-widest">
-                            Exit
                         </button>
                     </div>
                 </div>
@@ -1708,6 +1720,85 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                         </div>
                     )}
                 </div>
+            </div>
+        </div>
+    );
+}
+
+export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets, onSave }: any) {
+    if (editingId === null) return null;
+
+    const renderMode = editingId === 'all' ? 'all' : 'single';
+    const activeItems = renderMode === 'all'
+        ? files.map((f: any, i: number) => ({ item: f, idx: i }))
+        : [{ item: files[editingId], idx: editingId as number }];
+
+    return (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col overflow-hidden">
+            {/* Sticky top bar */}
+            <div className="shrink-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-[60] px-6 py-3 flex justify-between items-center shadow-2xl">
+                <div className="flex items-center gap-6">
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <span className="p-1.5 bg-blue-600/20 rounded-lg text-blue-400">🚀</span>
+                        {renderMode === 'all'
+                            ? `Editing ${files.length} Locations Concurrently`
+                            : `Edit Location: ${activeItems[0]?.item?.file?.name || activeItems[0]?.item?.photographer || "Unnamed"}`}
+                    </h2>
+                    {renderMode !== 'all' && (
+                        <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-inner">
+                            <button
+                                onClick={() => setEditingId(Math.max(0, (editingId as number) - 1))}
+                                disabled={editingId === 0}
+                                className="px-4 py-2 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold border-r border-gray-700 transition-colors"
+                            >
+                                ← PREV
+                            </button>
+                            <span className="px-4 py-2 text-xs font-mono text-gray-400 bg-black/20">
+                                {(editingId as number) + 1} / {files.length}
+                            </span>
+                            <button
+                                onClick={() => setEditingId(Math.min(files.length - 1, (editingId as number) + 1))}
+                                disabled={editingId === files.length - 1}
+                                className="px-4 py-2 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold transition-colors"
+                            >
+                                NEXT →
+                            </button>
+                        </div>
+                    )}
+                </div>
+                <div className="flex items-center gap-4">
+                    {renderMode === 'all' && (
+                        <span className="text-xs text-gray-400 font-mono bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
+                            Scroll ↕ to switch between locations
+                        </span>
+                    )}
+                    <button
+                        onClick={() => setEditingId(null)}
+                        className="px-6 py-2 bg-red-600/20 hover:bg-red-600 hover:text-white rounded-lg text-red-400 font-black border border-red-500/50 text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95 flex items-center gap-2"
+                    >
+                        <span>×</span> Exit Editor
+                    </button>
+                </div>
+            </div>
+
+            {/* Main content area — scrollable list of editors */}
+            <div className={renderMode === 'all'
+                ? 'flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-10 p-6'
+                : 'flex-1 overflow-hidden p-4'
+            }>
+                {activeItems.map((entry: { item: any; idx: number }) => (
+                    <SingleLocationEditor
+                        key={entry.item.id}
+                        item={entry.item}
+                        editingIdx={entry.idx}
+                        files={files}
+                        setFiles={setFiles}
+                        isLoaded={isLoaded}
+                        mapSets={mapSets}
+                        onSave={onSave}
+                        isMulti={renderMode === 'all'}
+                    />
+                ))}
             </div>
         </div>
     );

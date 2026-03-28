@@ -50,15 +50,30 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
         if (defaultSim) {
             const totalResult = total || { count: 0 };
-            const [location, allEvidence, submissionCountResult] = await Promise.all([
+            const [location, allEvidence, submissionCountResult, allGuessesResult] = await Promise.all([
                 db.prepare("SELECT * FROM locations WHERE id = ?").bind(defaultSim.id).first<any>(),
                 db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(defaultSim.id).all<any>(),
                 db.prepare(
                     "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
-                ).bind(code, defaultSim.id).first<any>()
+                ).bind(code, defaultSim.id).first<any>(),
+                db.prepare("SELECT evidence_found FROM room_guesses WHERE room_code = ? AND location_id = ?").bind(code, defaultSim.id).all<any>()
             ]);
             let evidence: any[] = [];
-            if (room.status === 'REVIEW' || isGuidedRound) evidence = allEvidence.results || [];
+            if (room.status === 'REVIEW' || isGuidedRound) {
+                const discoveryMap: Record<string, number> = {};
+                (allGuessesResult.results || []).forEach(guess => {
+                    try {
+                        const ids = JSON.parse(guess.evidence_found);
+                        if (Array.isArray(ids)) {
+                            ids.forEach(id => discoveryMap[id] = (discoveryMap[id] || 0) + 1);
+                        }
+                    } catch (e) {}
+                });
+                evidence = (allEvidence.results || []).map(ev => ({
+                    ...ev,
+                    discovery_count: discoveryMap[ev.id] || 0
+                }));
+            }
             const evidenceCount = allEvidence.results?.length || 0;
             currentRound = {
                 index: room.current_index,
@@ -80,17 +95,30 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
         if (realItem) {
             const targetLocationId = realItem.location_id;
-            const [location, allEvidence, submissionCountResult] = await Promise.all([
+            const [location, allEvidence, submissionCountResult, allGuessesResult] = await Promise.all([
                 db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
                 db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>(),
                 db.prepare(
                     "SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?"
-                ).bind(code, targetLocationId).first<any>()
+                ).bind(code, targetLocationId).first<any>(),
+                db.prepare("SELECT evidence_found FROM room_guesses WHERE room_code = ? AND location_id = ?").bind(code, targetLocationId).all<any>()
             ]);
 
             let evidence: any[] = [];
             if (room.status === 'REVIEW') {
-                evidence = allEvidence.results || [];
+                const discoveryMap: Record<string, number> = {};
+                (allGuessesResult.results || []).forEach(guess => {
+                    try {
+                        const ids = JSON.parse(guess.evidence_found);
+                        if (Array.isArray(ids)) {
+                            ids.forEach(id => discoveryMap[id] = (discoveryMap[id] || 0) + 1);
+                        }
+                    } catch (e) {}
+                });
+                evidence = (allEvidence.results || []).map(ev => ({
+                    ...ev,
+                    discovery_count: discoveryMap[ev.id] || 0
+                }));
             }
 
             const evidenceCount = allEvidence.results?.length || 0;
@@ -116,6 +144,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     return Response.json(safeJson({
         room,
         participants,
-        currentRound
+        currentRound,
+        serverTime: Date.now()
     }));
 }

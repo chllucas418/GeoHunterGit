@@ -1,6 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { requireUser } from "~/lib/auth.server";
-import { checkEvidenceListWithGemini, batchAnalyzeOfficialEvidence } from "~/lib/gemini.server";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
     const userId = await requireUser(request);
@@ -57,56 +56,15 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
         const evidenceResult = await db.prepare("SELECT * FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(targetLocationId).all<any>();
         const officialEvidence = evidenceResult.results || [];
 
-        // --- REAL-TIME AI ANALYSIS (NO DB STORAGE) ---
-        // 1. Prepare Inputs
-        const adminBoxes = officialEvidence.map((ae: any) => ({
-            id: ae.id,
-            box: typeof ae.bounding_box === 'string' ? JSON.parse(ae.bounding_box) : ae.bounding_box,
-            description: ae.description
-        }));
-
-        const studentEvidence = guess.ai_feedback ? JSON.parse(guess.ai_feedback) : [];
-
+        // Skip massive 10s Gemini re-roll — just use the data generated at submission time
         let liveAiFeedback = null;
-        let finalOfficialEvidence = [...officialEvidence];
-
         try {
-            // Standardizing to static imports to fix build transformation issues
-            // Resolved at top level now.
-
-            // 2. Resolve Student Analysis Live
-            if (studentEvidence.length >= 0) {
-                liveAiFeedback = await checkEvidenceListWithGemini(
-                    location.image_url,
-                    studentEvidence,
-                    location.name,
-                    adminBoxes,
-                    env.GEMINI_BASE_URL,
-                    env.GEMINI_GATEWAY_TOKEN,
-                    env.GEMINI_API_KEY
-                );
-            }
-
-            // 3. Resolve Official Analysis Live (e.g. for Missed Intel)
-            // We can just analyze ALL official evidence live as requested
-            const officialAnalysis = await batchAnalyzeOfficialEvidence(
-                location.image_url,
-                adminBoxes,
-                env.GEMINI_BASE_URL,
-                env.GEMINI_GATEWAY_TOKEN,
-                env.GEMINI_API_KEY
-            );
-
-            // Merge live analysis back to official items for return
-            finalOfficialEvidence = officialEvidence.map(oe => {
-                const analysis = officialAnalysis.find((a: any) => a.id === oe.id);
-                return { ...oe, ai_analysis: analysis?.ai_analysis || "Analysis unavailable." };
-            });
-
+            liveAiFeedback = guess.ai_feedback ? JSON.parse(guess.ai_feedback) : null;
         } catch (e) {
-            console.error("[RoundResult] Real-time Analysis Failed:", e);
-            liveAiFeedback = { error: "Live analysis failed", results: [] };
+            console.error("Failed to parse saved AI feedback", e);
         }
+        
+        const finalOfficialEvidence = [...officialEvidence];
 
         // Parse matched IDs
         let evidenceFound = [];
@@ -114,11 +72,27 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
             evidenceFound = guess.evidence_found ? JSON.parse(guess.evidence_found) : [];
         } catch (e) { }
 
+        // Re-derive Time Score and Difficulty from DB values
+        const TIME_LIMIT = room.time_limit || 120;
+        let elapsedSeconds = 0;
+        if (room.round_start_time && guess.timestamp) {
+            elapsedSeconds = Math.max(0, (guess.timestamp - room.round_start_time) / 1000);
+        }
+        let derivedTimeScore = 0;
+        if (elapsedSeconds < TIME_LIMIT) {
+            derivedTimeScore = Math.round(1000 * (1 - elapsedSeconds / TIME_LIMIT));
+        }
+
+        const isDifficultyHard = (location.difficulty_rating || 0) >= 8;
+        const difficultyMulti = isDifficultyHard ? 2 : 1;
+
         return Response.json({
             score: guess.score,
             distance: guess.distance * 1000,
             distanceScore: guess.distance_score || 0,
             evidenceScore: guess.evidence_score || 0,
+            timeScore: derivedTimeScore,
+            difficultyMulti,
             aiFeedback: liveAiFeedback,
             evidenceFound,
             officialLocation: location,

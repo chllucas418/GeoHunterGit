@@ -70,15 +70,62 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             elapsedSeconds = Math.max(0, (Date.now() - room.round_start_time) / 1000);
         }
         
-        // Multiplier: 1.8x for the first 25 seconds, then decaying to 0.8x at end
-        // This gives players time to mark evidence before the speed penalty starts.
-        const DELAY = 25;
-        let timeMultiplier = 1.8;
-        if (elapsedSeconds > DELAY) {
-            const effectiveElapsed = elapsedSeconds - DELAY;
-            const effectiveLimit = Math.max(1, TIME_LIMIT - DELAY);
-            const fraction = Math.min(1, effectiveElapsed / effectiveLimit);
-            timeMultiplier = 0.8 + 1.0 * Math.cos((Math.PI / 2) * fraction);
+        // --- 100% Precision UI Sychronization ---
+        // Accept the exact floating-point second the student locked in at from the client payload.
+        // Anti-Cheat: Validate it against the server timestamp with a leniency buffer of 5 seconds for network latency/clock drift.
+        const clientSubmittedAt = formData.get("submittedAtSeconds");
+        if (clientSubmittedAt) {
+            const parsedClient = parseFloat(clientSubmittedAt.toString());
+            if (!isNaN(parsedClient) && parsedClient >= 0 && parsedClient <= elapsedSeconds + 5) {
+                elapsedSeconds = parsedClient; // Use the client's perfect millisecond
+            }
+        }
+        
+        const scoreMultiplier = formData.get("scoreMultiplier") === "true";
+        const isLeeched = formData.get("isLeeched") === "true";
+        const hasMultiplierLeech = formData.get("hasMultiplierLeech") === "true";
+        const hasChronoFreeze = formData.get("hasChronoFreeze") === "true";
+        const hasIroncladLockdown = formData.get("hasIroncladLockdown") === "true";
+
+        // Dynamic Scaling Formula (Matching Client EXACTLY to prevent divergence)
+        const taMax = room.ta_max_multiplier ?? 2.0;
+        const taMin = room.ta_min_multiplier ?? 0.5;
+        const graceSec = room.ta_grace_period ?? 30;
+
+        const START_GRACE = Math.min(graceSec, Math.floor(TIME_LIMIT * 0.25));
+        const END_GRACE = Math.min(graceSec, Math.floor(TIME_LIMIT * 0.25));
+        const DECAY_WINDOW = Math.max(1, TIME_LIMIT - START_GRACE - END_GRACE);
+
+        let baseTimeMultiplier = taMax;
+
+        if (hasIroncladLockdown) {
+            baseTimeMultiplier = taMax;
+        } else {
+            let effectiveSeconds = elapsedSeconds;
+            if (hasChronoFreeze) {
+                effectiveSeconds = Math.max(0, elapsedSeconds - 15);
+            }
+
+            if (effectiveSeconds > START_GRACE) {
+                if (effectiveSeconds >= TIME_LIMIT - END_GRACE) {
+                    baseTimeMultiplier = taMin;
+                } else {
+                    const fraction = (effectiveSeconds - START_GRACE) / DECAY_WINDOW;
+                    baseTimeMultiplier = taMax - ((taMax - taMin) * fraction);
+                }
+            }
+        }
+
+        if (isLeeched) {
+            baseTimeMultiplier = Math.max(taMin, baseTimeMultiplier - 0.5);
+        }
+        if (hasMultiplierLeech) {
+            baseTimeMultiplier = baseTimeMultiplier + 0.5;
+        }
+
+        let timeMultiplier = baseTimeMultiplier;
+        if (scoreMultiplier) {
+            timeMultiplier = baseTimeMultiplier * 1.5;
         }
 
         // 2. Distance Score: Stricter Curved Scale for Tuen Mun area
@@ -303,21 +350,20 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
 
         // Save Guess (Update: Added distance_score and evidence_score columns)
-        // [BYOK/REAL-TIME] We store the RAW evidence list (boxes) instead of AI feedback.
-        // This allows generating analysis in real-time during review without DB persistence.
+        // [BYOK/REAL-TIME] We store the RAW evidence list (boxes) temporarily but we DO store AI feedback.
         await db.prepare(
             "INSERT INTO room_guesses (room_code, location_id, user_id, lat, lng, score, distance, timestamp, evidence_found, ai_feedback, distance_score, evidence_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(userEvidenceList), distanceScore, evidenceScore).run();
+        ).bind(code, trueLoc.id, userId, lat, lng, finalScore, distance, Date.now(), JSON.stringify(matchedEvidenceIds), JSON.stringify(aiFeedback), distanceScore, evidenceScore).run();
 
         // Update Participant Totals (skip for guided round)
         if (!isGuidedRound) {
-            // Powerup Energy: roughly 1 energy per 100 score, capped at 100 max capacity.
-            const energyEarned = Math.min(50, Math.floor(finalScore / 100));
+            // Powerup Energy: Reduced scaling, capped at 30
+            const energyEarned = Math.min(30, Math.floor(finalScore / 150) + 5);
 
             await db.prepare(
                 `UPDATE room_participants 
                  SET score = score + ?,
-                     powerup_energy = MIN(100, powerup_energy + ?)
+                     powerup_energy = MIN(200, powerup_energy + ?)
                  WHERE room_code = ? AND user_id = ?`
             ).bind(finalScore, energyEarned, code, userId).run();
         }
@@ -329,13 +375,39 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             ).bind(eloChange, userId).run();
         }
 
-        // RETURN SUCCESS BUT NO DATA to prevent client from showing result immediately
+        // Broadcast a real-time intel event using DO to Teacher
+        try {
+            const userRec = await db.prepare("SELECT display_name FROM users WHERE id = ?").bind(userId).first<any>();
+            const id = env.GEOHUNTER_ROOM_DO.idFromName(code);
+            const obj = env.GEOHUNTER_ROOM_DO.get(id);
+            await obj.fetch(new Request("http://internal/broadcast", {
+                method: "POST",
+                body: JSON.stringify({
+                    type: "live_ai_report",
+                    payload: {
+                        userId: userId,
+                        displayName: userRec ? userRec.display_name : "Agent",
+                        aiFeedback: aiFeedback
+                    }
+                })
+            }));
+        } catch (e) {
+            console.error("Failed to broadcast AI report to teacher:", e);
+        }
+
         return Response.json({
             success: true,
-            message: "Submission Received. Determining Analysis...",
-            // Do NOT return score/distance/feedback here.
-            // Client should show "Waiting for Teacher" state.
-            // Step 3: Don't show result yet.
+            message: "Submission Received.",
+            aiFeedback: aiFeedback,
+            score: finalScore,
+            distance: distance * 1000,
+            baseDistanceScore: baseDistanceScore,
+            distanceScore: distanceScore,
+            evidenceScore: evidenceScore,
+            timeScore: timeScore,
+            baseTimeMultiplier: baseTimeMultiplier,
+            timeMultiplier: timeMultiplier,
+            powerupActive: scoreMultiplier
         });
 
     } catch (error) {

@@ -106,6 +106,78 @@ export async function loader({ request, params, context }: any) {
     };
 }
 
+function TeacherHighPrecisionHUD({ currentRound, room, serverClockOffsetRef }: any) {
+    const timeLimit = currentRound?.timeLimit || 120;
+    const taMax = room?.ta_max_multiplier ?? 2.0;
+    const taMin = room?.ta_min_multiplier ?? 0.5;
+    const graceSec = room?.ta_grace_period ?? 30;
+
+    const START_GRACE = Math.min(graceSec, Math.floor(timeLimit * 0.25));
+    const END_GRACE = Math.min(graceSec, Math.floor(timeLimit * 0.25));
+    const DECAY_WINDOW = Math.max(1, timeLimit - START_GRACE - END_GRACE);
+
+    const [displayMultiplier, setDisplayMultiplier] = useState(taMax);
+    const [progress, setProgress] = useState(100);
+
+    useEffect(() => {
+        let animationFrameId: number;
+
+        const updateMultiplier = () => {
+            if (!currentRound?.startTime) return;
+            const currentSeconds = Math.max(0, (Date.now() - serverClockOffsetRef.current - currentRound.startTime) / 1000);
+            
+            let active = taMax;
+            if (currentSeconds > START_GRACE) {
+                if (currentSeconds >= timeLimit - END_GRACE) active = taMin;
+                else active = taMax - ((taMax - taMin) * ((currentSeconds - START_GRACE) / DECAY_WINDOW));
+            }
+            
+            setDisplayMultiplier(active);
+            setProgress(Math.max(0, ((active - taMin) / (taMax - taMin)) * 100));
+
+            animationFrameId = requestAnimationFrame(updateMultiplier);
+        };
+
+        animationFrameId = requestAnimationFrame(updateMultiplier);
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [serverClockOffsetRef, currentRound?.startTime, timeLimit, taMax, taMin, START_GRACE, END_GRACE, DECAY_WINDOW]);
+
+    return (
+        <div className="flex flex-col items-center pointer-events-none z-20 w-full mb-3 mt-1">
+            <span className="text-[10px] font-black uppercase text-blue-200 tracking-[0.2em] bg-blue-900/60 px-3 py-1 rounded-t-lg backdrop-blur-md border-x border-t border-blue-500/30">
+                Score Multiplier
+            </span>
+            {/* Liquid Glass Dynamic Bar */}
+            <div className={`w-full max-w-xs bg-slate-900/80 backdrop-blur-xl rounded-b-xl rounded-t-none border border-blue-500/30 h-7 relative overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.8)]`}>
+                
+                {/* Retracting Fluid Core */}
+                <div 
+                    className="absolute top-0 left-0 h-full flex items-center pr-3 overflow-hidden shadow-[inset_0_-2px_8px_rgba(0,0,0,0.6)]"
+                    style={{
+                        width: `${progress}%`,
+                        background: `linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%)`,
+                        boxShadow: `0 0 15px #3b82f6`
+                    }}
+                >
+                    <div className="ml-auto w-1 h-3/4 rounded-full bg-white/80 animate-pulse shadow-[0_0_5px_white]" />
+                </div>
+
+                {/* Normal High-Precision Text Overlay */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 font-mono tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
+                    <div className="text-sm font-black uppercase text-shadow">
+                        GLOBAL: {displayMultiplier.toFixed(4)}x
+                    </div>
+                </div>
+            </div>
+            
+            <div className="mt-1 flex justify-between w-full max-w-xs px-2 font-mono">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Min: {taMin.toFixed(1)}x</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Max: {taMax.toFixed(1)}x</span>
+            </div>
+        </div>
+    );
+}
+
 export default function TeacherRoom() {
     const { code, mapsApiKey, initialRoomState } = useLoaderData() as any;
     const fetcher = useFetcher();
@@ -116,6 +188,7 @@ export default function TeacherRoom() {
     const [timeLeft, setTimeLeft] = useState(300);
     const [reviewSplitRatio, setReviewSplitRatio] = useState(35);
     const [isResizing, setIsResizing] = useState(false);
+    const [teamCount, setTeamCount] = useState(2);
 
     // --- ANIMATED COUNTER COMPONENT ---
     const AnimatedCounter = ({ value }: { value: number }) => {
@@ -137,11 +210,70 @@ export default function TeacherRoom() {
                 const box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box;
                 return { ...ev, box };
             } catch (e) { return null; }
-        }).filter(Boolean) || [];
+        }).filter(Boolean);
     }, [roomState?.currentRound?.evidence]);
+
+    // --- WEBSOCKET LIVE REPORTS ---
+    const [liveReports, setLiveReports] = useState<any[]>([]);
+
+    useEffect(() => {
+        let socket: any = null;
+        let reconnectTimer: any;
+
+        const connect = () => {
+            if (socket) return;
+            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            socket = new WebSocket(`${protocol}//${window.location.host}/api/room/${code}/ws`);
+            
+            socket.onmessage = (event: any) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === "live_ai_report") {
+                        setLiveReports((prev: any[]) => [data.payload, ...prev].slice(0, 15));
+                    }
+                } catch (e) {}
+            };
+            
+            socket.onclose = () => {
+                reconnectTimer = setTimeout(connect, 3000);
+            };
+        };
+        
+        if (roomState?.room?.status === 'PLAYING') {
+            connect();
+        } else if (roomState?.room?.status === 'WAITING') {
+            setLiveReports([]); // Clear reports on new round start essentially
+        }
+        
+        return () => {
+             clearTimeout(reconnectTimer);
+             if (socket) socket.close();
+        };
+    }, [code, roomState?.room?.status]);
 
     // --- ANIMATION STATE ---
     const [introStage, setIntroStage] = useState(0);
+
+    // --- DRAG AND DROP HANDLERS ---
+    const handleDragStart = (e: React.DragEvent, userId: string) => {
+        e.dataTransfer.setData("userId", userId);
+    };
+
+    const handleDrop = (e: React.DragEvent, teamId: string | null) => {
+        e.preventDefault();
+        const userId = e.dataTransfer.getData("userId");
+        if (userId) {
+            const fd = new FormData();
+            fd.append("action", "ASSIGN_USER_TEAM");
+            fd.append("userId", userId);
+            fd.append("teamId", teamId || "NONE");
+            actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+    };
 
     useEffect(() => {
         if (roomState?.currentRound?.location?.id) {
@@ -253,7 +385,14 @@ export default function TeacherRoom() {
                             div.style.cssText = "display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; transform: translateY(-50%);";
 
                             const innerCircle = document.createElement("div");
-                            innerCircle.style.cssText = "width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); overflow: hidden; background: #3b82f6; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 16px; margin: 0 auto;";
+                            let bgCol = "#3b82f6"; // Default Blue
+                            if (g.team_id) {
+                                if (g.team_id.toLowerCase().includes('red')) bgCol = "#ef4444";
+                                else if (g.team_id.toLowerCase().includes('green')) bgCol = "#22c55e";
+                                else if (g.team_id.toLowerCase().includes('yellow')) bgCol = "#eab308";
+                                else if (g.team_id.toLowerCase().includes('purple')) bgCol = "#a855f7";
+                            }
+                            innerCircle.style.cssText = `width: 40px; height: 40px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); overflow: hidden; background: ${bgCol}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 16px; margin: 0 auto;`;
 
                             // Avatar or Initials
                             if (g.profile_picture_url) {
@@ -334,13 +473,16 @@ export default function TeacherRoom() {
 
         const poll = async () => {
             try {
+                const fetchStart = Date.now();
                 const res = await fetch(`/api/room/${code}/status`);
+                const fetchEnd = Date.now();
                 if (!res.ok || !alive) return;
                 const data: any = await res.json();
                 if (!alive) return;
 
                 if (data.serverTime) {
-                    serverClockOffsetRef.current = Date.now() - data.serverTime;
+                    const rtt = fetchEnd - fetchStart;
+                    serverClockOffsetRef.current = fetchEnd - (data.serverTime + rtt / 2);
                 }
 
                 // Detect Round Change for Animation
@@ -355,14 +497,12 @@ export default function TeacherRoom() {
 
                 setRoomState(data);
 
-                // Sync Timer if playing
+                // Sync Timer if playing (Handled by robust local interval now)
                 if (data.room?.status === 'PLAYING' && data.currentRound) {
                     const synchronizedNow = Date.now() - serverClockOffsetRef.current;
                     const elapsedSec = Math.floor((synchronizedNow - data.currentRound.startTime) / 1000);
                     const limit = data.currentRound.timeLimit || 120;
                     const remaining = Math.max(0, limit - elapsedSec);
-                    setTimeLeft(remaining);
-
                     if (remaining === 0 && !hasAutoSkipped.current) {
                         hasAutoSkipped.current = true;
                         actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` });
@@ -375,9 +515,27 @@ export default function TeacherRoom() {
 
         // Initial poll
         poll();
-        const interval = setInterval(poll, 1000);
+        const interval = setInterval(poll, 3000);
         return () => { alive = false; clearInterval(interval); };
     }, [code]);
+
+    useEffect(() => {
+        const timerObj = setInterval(() => {
+            if (roomState?.room?.status === 'PLAYING' && roomState?.currentRound?.startTime) {
+                const synchronizedNow = Date.now() - serverClockOffsetRef.current;
+                const elapsedSec = Math.floor((synchronizedNow - roomState.currentRound.startTime) / 1000);
+                const limit = roomState.currentRound.timeLimit || 120;
+                const remaining = Math.max(0, limit - elapsedSec);
+                setTimeLeft(remaining);
+                
+                if (remaining === 0 && !hasAutoSkipped.current) {
+                    hasAutoSkipped.current = true;
+                    actionFetcher.submit({ action: "SKIP_TIMER" }, { method: "post", action: `/api/room/${code}/action` });
+                }
+            }
+        }, 1000);
+        return () => clearInterval(timerObj);
+    }, [roomState?.currentRound?.startTime, roomState?.room?.status]);
 
     if (!roomState) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Connecting to HQ...</div>;
 
@@ -389,8 +547,8 @@ export default function TeacherRoom() {
     // --- RENDERERS ---
 
     const renderLobby = () => (
-        <div className="flex flex-col items-center justify-center h-full space-y-12 animate-in fade-in">
-            <div className="text-center space-y-4">
+        <div className="flex flex-col items-center justify-center h-full space-y-12 animate-in fade-in pb-24 overflow-y-auto">
+            <div className="text-center space-y-4 pt-12">
                 <p className="text-2xl uppercase font-bold text-blue-400 tracking-widest">Join at hkgeohunter.com/join</p>
                 <h1 className="text-9xl font-black text-white tracking-tighter bg-white/10 px-12 py-6 rounded-3xl border-4 border-dashed border-white/20">
                     {code}
@@ -403,18 +561,21 @@ export default function TeacherRoom() {
                 </Link>
             </div>
 
-            <div className="w-full max-w-5xl">
-                <h2 className="text-xl text-center uppercase font-bold text-slate-500 mb-6 tracking-widest">
-                    {participants.length} Agents Ready
-                </h2>
-                <div className="flex flex-wrap justify-center gap-4">
-                    {participants.map((p: any) => (
-                        <div key={p.display_name} className="px-6 py-3 bg-white/10 rounded-full border border-white/10 text-xl font-bold text-white animate-in zoom-in-50">
-                            {p.display_name}
-                        </div>
-                    ))}
+            {/* Standard "Unassigned" Agents List */}
+            {room.game_mode !== 'teams' && (
+                <div className="w-full max-w-5xl">
+                    <h2 className="text-xl text-center uppercase font-bold text-slate-500 mb-6 tracking-widest">
+                        {participants.length} Agents Ready
+                    </h2>
+                    <div className="flex flex-wrap justify-center gap-4">
+                        {participants.map((p: any) => (
+                            <div key={p.display_name} className="px-6 py-3 bg-white/10 rounded-full border border-white/10 text-xl font-bold text-white animate-in zoom-in-50">
+                                {p.display_name}
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Settings Config */}
             <div className="bg-slate-900 border border-white/10 p-6 rounded-xl flex gap-8 items-center flex-wrap justify-center">
@@ -462,53 +623,189 @@ export default function TeacherRoom() {
                     </div>
                 </div>
                 
+                {room.game_mode === 'time_attack' && (
+                    <>
+                        <div className="w-px h-12 bg-white/10 hidden md:block" />
+                        <div className="flex flex-col">
+                           <label className="text-[10px] uppercase font-bold text-yellow-400 mb-2 whitespace-nowrap">Max Multiplier</label>
+                           <div className="flex items-center gap-1">
+                               <input
+                                   type="number"
+                                   step="0.1"
+                                   defaultValue={room.ta_max_multiplier || 2.0}
+                                   className="bg-black/50 border border-white/20 rounded px-2 py-1 text-white font-mono w-16 text-center focus:outline-none focus:border-yellow-500"
+                                   onBlur={(e) => {
+                                       const val = parseFloat(e.target.value);
+                                       if (!isNaN(val)) {
+                                           const fd = new FormData();
+                                           fd.append("action", "UPDATE_SETTINGS");
+                                           fd.append("taMax", val.toString());
+                                           actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
+                                       }
+                                   }}
+                               />
+                               <span className="text-xs text-slate-400">x</span>
+                           </div>
+                        </div>
+
+                        <div className="flex flex-col">
+                           <label className="text-[10px] uppercase font-bold text-blue-400 mb-2 whitespace-nowrap">Min Multiplier</label>
+                           <div className="flex items-center gap-1">
+                               <input
+                                   type="number"
+                                   step="0.1"
+                                   defaultValue={room.ta_min_multiplier || 0.5}
+                                   className="bg-black/50 border border-white/20 rounded px-2 py-1 text-white font-mono w-16 text-center focus:outline-none focus:border-blue-500"
+                                   onBlur={(e) => {
+                                       const val = parseFloat(e.target.value);
+                                       if (!isNaN(val)) {
+                                           const fd = new FormData();
+                                           fd.append("action", "UPDATE_SETTINGS");
+                                           fd.append("taMin", val.toString());
+                                           actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
+                                       }
+                                   }}
+                               />
+                               <span className="text-xs text-slate-400">x</span>
+                           </div>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                           <label className="text-[10px] uppercase font-bold text-red-400 mb-2 whitespace-nowrap">Grace Wait</label>
+                           <div className="flex items-center gap-1">
+                               <input
+                                   type="number"
+                                   defaultValue={room.ta_grace_period ?? 30}
+                                   className="bg-black/50 border border-white/20 rounded px-2 py-1 text-white font-mono w-16 text-center focus:outline-none focus:border-red-500"
+                                   onBlur={(e) => {
+                                       const val = parseInt(e.target.value);
+                                       if (!isNaN(val)) {
+                                           const fd = new FormData();
+                                           fd.append("action", "UPDATE_SETTINGS");
+                                           fd.append("taGrace", val.toString());
+                                           actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
+                                       }
+                                   }}
+                               />
+                               <span className="text-xs text-slate-400">sec</span>
+                           </div>
+                        </div>
+                    </>
+                )}
+                
                 {room.game_mode === 'teams' && (
                     <>
+                        <div className="w-px h-12 bg-white/10 hidden md:block" />
+                        <div className="flex flex-col">
+                            <label className="text-xs uppercase font-bold text-slate-400 mb-2">Number of Teams</label>
+                            <select
+                                value={teamCount}
+                                onChange={(e) => setTeamCount(parseInt(e.target.value))}
+                                className="bg-black/50 border border-white/20 rounded px-3 py-2 text-white font-mono w-40 focus:outline-none focus:border-blue-500"
+                            >
+                                <option value={2}>2 Teams</option>
+                                <option value={3}>3 Teams</option>
+                                <option value={4}>4 Teams</option>
+                            </select>
+                        </div>
                         <div className="w-px h-12 bg-white/10 hidden md:block" />
                         <div className="flex items-center">
                              <button
                                 onClick={() => {
                                     const fd = new FormData();
                                     fd.append("action", "ASSIGN_TEAMS");
-                                    fd.append("teamCount", "2");
+                                    fd.append("teamCount", teamCount.toString());
                                     actionFetcher.submit(fd, { method: "post", action: `/api/room/${code}/action` });
                                 }}
                                 className="px-4 py-2 bg-purple-600/50 hover:bg-purple-500 text-white rounded-lg font-bold text-xs uppercase tracking-widest border border-purple-400 transition-all flex items-center gap-2"
                             >
-                                👥 Auto-Assign Teams (2)
+                                👥 Auto-Assign Teams ({teamCount})
                             </button>
                         </div>
                     </>
                 )}
             </div>
 
-            {/* Team Distribution Preview */}
-            {room.game_mode === 'teams' && participants.some((p: any) => p.team_id) && (
-                <div className="w-full max-w-5xl mt-8">
-                     <h3 className="text-xs text-center uppercase font-bold text-slate-500 mb-4 tracking-widest">Squad Assignments</h3>
-                     <div className="flex flex-wrap justify-center gap-8">
-                         {Array.from(new Set(participants.map((p: any) => p.team_id).filter(Boolean))).map((teamId: any) => (
-                             <div key={teamId} className="flex flex-col items-center bg-white/5 p-4 rounded-xl border border-white/10 min-w-[200px]">
-                                 <div className={`text-lg font-black uppercase mb-3 ${teamId.includes('Red') ? 'text-red-400' : teamId.includes('Blue') ? 'text-blue-400' : teamId.includes('Green') ? 'text-green-400' : 'text-yellow-400'}`}>
-                                     {teamId}
-                                 </div>
-                                 <div className="flex flex-col gap-2 w-full">
-                                     {participants.filter((p: any) => p.team_id === teamId).map((p: any) => (
-                                         <div key={p.display_name} className="text-sm font-bold text-slate-300 text-center bg-black/30 rounded py-1">
-                                             {p.display_name}
-                                         </div>
-                                     ))}
-                                 </div>
-                             </div>
-                         ))}
-                     </div>
+            {/* Team Distribution Drag and Drop */}
+            {room.game_mode === 'teams' && (
+                <div className="w-full max-w-6xl mt-8 px-4">
+                    <h3 className="text-xs text-center uppercase font-bold text-slate-500 mb-4 tracking-widest">Squad Drag & Drop Management</h3>
+                    
+                    <div className="flex flex-col md:flex-row gap-8 items-start justify-center">
+                        {/* Unassigned Area */}
+                        <div 
+                            className="flex-1 w-full bg-slate-900 border-2 border-dashed border-slate-700 p-6 rounded-2xl min-h-[200px]"
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, null)}
+                        >
+                            <h4 className="text-center font-black uppercase text-slate-500 mb-4 tracking-widest">Unassigned Agents ({participants.filter((p: any) => !p.team_id).length})</h4>
+                            <div className="flex flex-wrap gap-3">
+                                {participants.filter((p: any) => !p.team_id).map((p: any) => (
+                                    <div 
+                                        key={p.user_id} 
+                                        draggable
+                                        onDragStart={(e) => handleDragStart(e, p.user_id)}
+                                        className="px-4 py-2 bg-slate-800 rounded-full border border-slate-600 text-sm font-bold text-white cursor-grab active:cursor-grabbing hover:bg-slate-700 hover:border-blue-400 transition-colors"
+                                    >
+                                        {p.display_name}
+                                    </div>
+                                ))}
+                                {participants.filter((p: any) => !p.team_id).length === 0 && (
+                                    <p className="text-center w-full text-slate-600 italic text-sm mt-8">All agents assigned.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Team Boxes */}
+                        <div className="flex-[2] w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {["Red Team", "Blue Team", "Green Team", "Yellow Team"].slice(0, teamCount).map((teamId) => (
+                                <div 
+                                    key={teamId} 
+                                    className={`flex flex-col items-center bg-white/5 p-4 rounded-xl border-2 transition-all min-h-[200px] ${
+                                        teamId.includes('Red') ? 'border-red-900/50 hover:border-red-500' :
+                                        teamId.includes('Blue') ? 'border-blue-900/50 hover:border-blue-500' :
+                                        teamId.includes('Green') ? 'border-green-900/50 hover:border-green-500' :
+                                        'border-yellow-900/50 hover:border-yellow-500'
+                                    }`}
+                                    onDragOver={handleDragOver}
+                                    onDrop={(e) => handleDrop(e, teamId)}
+                                >
+                                    <div className={`text-sm font-black uppercase tracking-widest mb-4 inline-block px-3 py-1 rounded-full ${
+                                        teamId.includes('Red') ? 'bg-red-500/20 text-red-400' :
+                                        teamId.includes('Blue') ? 'bg-blue-500/20 text-blue-400' :
+                                        teamId.includes('Green') ? 'bg-green-500/20 text-green-400' :
+                                        'bg-yellow-500/20 text-yellow-400'
+                                    }`}>
+                                        {teamId}
+                                    </div>
+                                    <div className="flex flex-col gap-2 w-full">
+                                        {participants.filter((p: any) => p.team_id === teamId).map((p: any) => (
+                                            <div 
+                                                key={p.user_id} 
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, p.user_id)}
+                                                className={`text-sm font-bold text-slate-200 text-center bg-black/40 rounded-lg py-2 border shadow-sm cursor-grab active:cursor-grabbing hover:brightness-125 transition-all ${
+                                                    teamId.includes('Red') ? 'border-red-500/30' :
+                                                    teamId.includes('Blue') ? 'border-blue-500/30' :
+                                                    teamId.includes('Green') ? 'border-green-500/30' :
+                                                    'border-yellow-500/30'
+                                                }`}
+                                            >
+                                                {p.display_name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
 
-            <div className="fixed bottom-12 inset-x-0 flex justify-center">
+            <div className="fixed bottom-12 inset-x-0 flex justify-center z-50">
                 <button
                     onClick={() => actionFetcher.submit({ action: "START_GAME" }, { method: "post", action: `/api/room/${code}/action` })}
-                    className="px-16 py-6 bg-blue-600 hover:bg-blue-500 text-white text-3xl font-black uppercase tracking-widest rounded-full shadow-2xl hover:scale-105 transition-all"
+                    className="px-16 py-6 bg-blue-600 hover:bg-blue-500 text-white text-3xl font-black uppercase tracking-widest rounded-full shadow-[0_0_30px_rgba(37,99,235,0.6)] hover:scale-105 transition-all outline outline-offset-2 outline-4 outline-black"
                 >
                     Start Mission
                 </button>
@@ -575,7 +872,7 @@ export default function TeacherRoom() {
 
                 {/* [UI] Persistent Intel Signal Banner */}
                 {currentRound?.evidenceCount !== undefined && introStage >= 3 && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 w-max animate-in slide-in-from-top-10 duration-700">
+                    <div className="absolute top-32 left-1/2 -translate-x-1/2 z-40 w-max animate-in slide-in-from-top-10 duration-700">
                         <div className="bg-black/60 backdrop-blur-xl border border-blue-500/40 px-6 py-2 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.3)] flex flex-col items-center">
                             <div className="flex items-center gap-3">
                                 <div className="relative">
@@ -623,6 +920,46 @@ export default function TeacherRoom() {
                     </div>
                 )}
 
+                {/* [UI] Time Attack HUD */}
+                {room?.game_mode === 'time_attack' && (
+                    <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-[45] pointer-events-none w-full max-w-sm">
+                        <TeacherHighPrecisionHUD currentRound={currentRound} room={room} serverClockOffsetRef={serverClockOffsetRef} />
+                    </div>
+                )}
+
+                {/* Live AI Report Feed */}
+                <div className="absolute top-32 left-12 bottom-12 w-80 z-[45] pointer-events-none flex flex-col justify-end">
+                    <div className="space-y-3 flex flex-col-reverse overflow-hidden max-h-full">
+                        {liveReports.map((report, i) => (
+                            <div key={i} className={`bg-slate-900/90 backdrop-blur-md border ${report.aiFeedback?.results?.some((r: any) => r.validity >= 0.7) ? 'border-green-500/50' : 'border-blue-500/30'} p-3 rounded-xl shadow-2xl animate-in fade-in slide-in-from-left-8 duration-500 pointer-events-auto filter drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]`}>
+                                <div className="text-[10px] font-black uppercase text-slate-400 mb-1 tracking-widest flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                                    {report.displayName} Submitted
+                                </div>
+                                {report.aiFeedback?.results?.length > 0 ? (
+                                    <div className="space-y-2 mt-2">
+                                        {report.aiFeedback.results.slice(0, 2).map((r: any, idx: number) => (
+                                            <div key={idx} className="bg-black/50 p-2 rounded border border-white/5">
+                                                <div className="text-white text-xs font-bold leading-tight">{r.description}</div>
+                                                <div className="mt-1 flex items-center justify-between">
+                                                    <span className={`text-[9px] font-black uppercase ${r.validity >= 0.7 ? "text-green-400" : (r.validity >= 0.4 ? "text-yellow-400" : "text-red-400")}`}>
+                                                        {Math.round(r.validity * 100)}% Match
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {report.aiFeedback.results.length > 2 && (
+                                            <div className="text-[9px] text-slate-500 italic font-medium px-1">+{report.aiFeedback.results.length - 2} more discoveries</div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="text-[10px] text-slate-400 italic mt-1">No intel detected.</div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
                 {/* Teacher Control */}
                 <div className="absolute bottom-12 right-12 z-50 flex flex-col items-end gap-4 pointer-events-auto">
                     <Link to={`/teacher/control/${code}`} target="_blank" rel="noreferrer" className="px-4 py-2 bg-blue-600/90 backdrop-blur hover:bg-blue-500 text-white rounded-full font-bold text-[10px] uppercase tracking-widest border border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.5)] transition-all flex items-center gap-2 hover:scale-105">
@@ -634,9 +971,16 @@ export default function TeacherRoom() {
                         className="px-8 py-4 bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/20 rounded-2xl text-white font-bold uppercase tracking-widest hover:scale-105 transition-all flex flex-col items-center shadow-2xl"
                     >
                         <span>Reveal Intel →</span>
-                        <span className="text-[10px] text-blue-300 mt-1">
-                            {roomState.currentRound?.submissionCount || 0} / {participants.length} Reported
-                        </span>
+                        <div className="flex flex-col items-center mt-1">
+                            <span className="text-[10px] text-blue-300">
+                                {roomState.currentRound?.submissionCount || 0} / {participants.length} Reported
+                            </span>
+                            {(roomState.currentRound?.submissionCount || 0) > 0 && (
+                                <span className="text-[9px] text-green-400 mt-0.5 animate-pulse uppercase tracking-[0.2em] font-mono font-bold">
+                                    {roomState.currentRound?.submissionCount || 0} AI Analyzed
+                                </span>
+                            )}
+                        </div>
                     </button>
                 </div>
             </div>
@@ -691,12 +1035,35 @@ export default function TeacherRoom() {
                                     >
                                         {/* Tooltip on Hover */}
                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] bg-slate-900/90 backdrop-blur-md border border-yellow-500 text-white text-[10px] font-bold px-3 py-2 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[200px] pointer-events-none">
-                                            {ev.ai_analysis ? (
-                                                <>
-                                                    <span className="text-yellow-400 font-black block mb-1 uppercase tracking-wider text-[9px]">🤖 AI Analysis</span>
-                                                    <span className="text-slate-200 font-medium leading-relaxed">{ev.ai_analysis}</span>
-                                                </>
-                                            ) : ev.description}
+                                            {(() => {
+                                                let dynamicAI = ev.ai_analysis;
+                                                if (!dynamicAI) {
+                                                    for (const r of liveReports) {
+                                                        const match = r.aiFeedback?.results?.find((x: any) => x.description === ev.description);
+                                                        if (match && match.explanation) {
+                                                            dynamicAI = match.explanation;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                return dynamicAI ? (
+                                                    <>
+                                                        <span className="text-yellow-400 font-black block mb-1 uppercase tracking-wider text-[9px]">🤖 Live AI Analysis</span>
+                                                        <span className="text-slate-200 font-medium leading-relaxed block mb-2">{dynamicAI}</span>
+                                                        <span className="text-blue-300 font-bold block border-t border-white/10 pt-2 mt-1 uppercase tracking-wider text-[9px]">
+                                                            🕵️ Found by {ev.discovery_count || 0} Agent{(ev.discovery_count || 0) === 1 ? '' : 's'}
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="block mb-2">{ev.description}</span>
+                                                        <span className="text-blue-300 font-bold block border-t border-white/10 pt-2 mt-1 uppercase tracking-wider text-[9px]">
+                                                            🕵️ Found by {ev.discovery_count || 0} Agent{(ev.discovery_count || 0) === 1 ? '' : 's'}
+                                                        </span>
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
 
                                         {/* Click Hint */}
@@ -842,11 +1209,33 @@ export default function TeacherRoom() {
                                             <h2 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter">
                                                 {focusedItem.description}
                                             </h2>
+                                            
+                                            <div className="flex items-center gap-2 mb-4 bg-blue-500/10 border border-blue-500/20 px-3 py-2 rounded-lg w-fit">
+                                                <span className="text-xl">🕵️</span>
+                                                <span className="text-blue-300 font-bold text-sm uppercase tracking-widest">
+                                                    Discovered by {focusedItem.discovery_count || 0} Agent{(focusedItem.discovery_count || 0) === 1 ? '' : 's'}
+                                                </span>
+                                            </div>
+
                                             <div className="bg-white/5 border border-white/10 rounded-xl p-4">
                                                 <h3 className="text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-2">AI Analysis</h3>
-                                                <p className="text-slate-300 text-sm leading-relaxed">
-                                                    {focusedItem.ai_analysis || "No analysis data."}
-                                                </p>
+                                            {(() => {
+                                                let dynamicAI = focusedItem.ai_analysis;
+                                                if (!dynamicAI) {
+                                                    for (const r of liveReports) {
+                                                        const match = r.aiFeedback?.results?.find((x: any) => x.description === focusedItem.description);
+                                                        if (match && match.explanation) {
+                                                            dynamicAI = match.explanation;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                return (
+                                                    <p className="text-slate-300 text-sm leading-relaxed">
+                                                        {dynamicAI || "No agents have submitted clear scans of this intelligence yet."}
+                                                    </p>
+                                                );
+                                            })()}
                                             </div>
                                         </div>
                                     </div>

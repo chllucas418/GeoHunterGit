@@ -20,16 +20,31 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         await db.prepare(
             "UPDATE rooms SET status = 'PLAYING', current_index = 0, round_start_time = ? WHERE code = ?"
         ).bind(Date.now(), code).run();
+        
+        try {
+            const id = env.GEOHUNTER_ROOM_DO.idFromName(code);
+            const obj = env.GEOHUNTER_ROOM_DO.get(id);
+            await obj.fetch(new Request("http://internal/broadcast", {
+                method: "POST",
+                body: JSON.stringify({ type: "pause_toggle" }) // Triggers client state reload
+            }));
+        } catch (e) { console.error("Broadcast failed", e); }
     }
 
     if (action === "SKIP_TIMER") {
-        // [BYOK/REAL-TIME] We no longer pre-generate AI analysis here.
-        // Analysis is generated in real-time when participants load the review page.
-        
         // 1. Move to review
         await db.prepare(
             "UPDATE rooms SET status = 'REVIEW' WHERE code = ?"
         ).bind(code).run();
+        
+        try {
+            const id = env.GEOHUNTER_ROOM_DO.idFromName(code);
+            const obj = env.GEOHUNTER_ROOM_DO.get(id);
+            await obj.fetch(new Request("http://internal/broadcast", {
+                method: "POST",
+                body: JSON.stringify({ type: "pause_toggle" }) 
+            }));
+        } catch (e) { console.error("Broadcast failed", e); }
     }
 
     if (action === "NEXT_ROUND") {
@@ -54,6 +69,15 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                 "UPDATE rooms SET status = 'PLAYING', current_index = ?, round_start_time = ? WHERE code = ?"
             ).bind(nextIndex, Date.now(), code).run();
         }
+
+        try {
+            const id = env.GEOHUNTER_ROOM_DO.idFromName(code);
+            const obj = env.GEOHUNTER_ROOM_DO.get(id);
+            await obj.fetch(new Request("http://internal/broadcast", {
+                method: "POST",
+                body: JSON.stringify({ type: "pause_toggle" }) 
+            }));
+        } catch (e) { console.error("Broadcast failed", e); }
     }
 
     if (action === "UPDATE_SETTINGS") {
@@ -69,6 +93,21 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             await db.prepare(
                 "UPDATE rooms SET game_mode = ? WHERE code = ?"
             ).bind(gameMode, code).run();
+        }
+
+        const taMax = parseFloat(formData.get("taMax") as string);
+        if (!isNaN(taMax)) {
+            await db.prepare("UPDATE rooms SET ta_max_multiplier = ? WHERE code = ?").bind(taMax, code).run();
+        }
+
+        const taMin = parseFloat(formData.get("taMin") as string);
+        if (!isNaN(taMin)) {
+            await db.prepare("UPDATE rooms SET ta_min_multiplier = ? WHERE code = ?").bind(taMin, code).run();
+        }
+
+        const taGrace = parseInt(formData.get("taGrace") as string);
+        if (!isNaN(taGrace)) {
+            await db.prepare("UPDATE rooms SET ta_grace_period = ? WHERE code = ?").bind(taGrace, code).run();
         }
     }
 
@@ -101,6 +140,17 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         await db.prepare(
             "UPDATE rooms SET is_paused = ? WHERE code = ?"
         ).bind(isPaused, code).run();
+    }
+
+    if (action === "ASSIGN_USER_TEAM") {
+        const targetUserId = formData.get("userId") as string;
+        const teamId = formData.get("teamId") as string | null;
+        if (targetUserId) {
+            const resolvedTeam = teamId === "NONE" ? null : (teamId || null);
+            await db.prepare(
+                "UPDATE room_participants SET team_id = ? WHERE room_code = ? AND user_id = ?"
+            ).bind(resolvedTeam, code, targetUserId).run();
+        }
     }
 
     return Response.json({ success: true });
