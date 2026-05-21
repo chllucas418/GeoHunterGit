@@ -142,8 +142,8 @@ test.describe('Teacher-Student Game Flow', () => {
         await expect(teacherPage.locator('text=Official Intel')).toBeVisible({ timeout: 15000 });
 
         // Student Results
-        await expect(studentPage.locator('text=Score')).toBeVisible({ timeout: 15000 });
-        await expect(studentPage.locator('text=Deviation')).toBeVisible({ timeout: 15000 });
+        await expect(studentPage.locator('text=Total Score').first()).toBeVisible({ timeout: 15000 });
+        await expect(studentPage.locator('text=Deviation').first()).toBeVisible({ timeout: 15000 });
     });
 });
 

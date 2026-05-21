@@ -128,7 +128,7 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                                         {item.official.description || item.aiItem?.description || `Evidence #${item.userIndex + 1}`}
                                                     </span>
                                                     <p className="opacity-80 leading-snug text-green-200/80">
-                                                        {item.aiItem?.explanation || item.official.ai_analysis || "Correctly identified this landmark feature."}
+                                                        {item.aiItem?.explanation || (item.official.ai_analysis && item.official.ai_analysis !== "Real-time analysis active." ? item.official.ai_analysis : "Correctly identified this landmark feature.")}
                                                     </p>
                                                 </div>
                                             ))}
@@ -169,9 +169,14 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                                 return (
                                                     <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
                                                         <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
-                                                        {(personalizedExplanation || ev.ai_analysis) && (
-                                                            <p className="opacity-70 leading-snug">{personalizedExplanation || ev.ai_analysis}</p>
-                                                        )}
+                                                        {(() => {
+                                                            const displayExpl = (personalizedExplanation && personalizedExplanation !== "Real-time analysis active.") 
+                                                                ? personalizedExplanation 
+                                                                : (ev.ai_analysis && ev.ai_analysis !== "Real-time analysis active." ? ev.ai_analysis : null);
+                                                            return displayExpl ? (
+                                                                <p className="opacity-70 leading-snug">{displayExpl}</p>
+                                                            ) : null;
+                                                        })()}
                                                     </div>
                                                 );
                                             })}

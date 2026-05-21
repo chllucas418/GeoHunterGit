@@ -322,7 +322,7 @@ export async function checkEvidenceListWithGemini(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3.1-flash-lite-preview",
+            "gemini-3.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -439,7 +439,7 @@ export async function analyzeImageQuality(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3.1-pro-preview",
+            "gemini-3.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -516,7 +516,7 @@ export async function generateEvidenceDescription(
 
     try {
         const description = await callGeminiApi(
-            "gemini-3.1-pro-preview",
+            "gemini-3.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -598,7 +598,7 @@ export async function autoDetectMapEvidence(
     try {
         // Enforce the smartest available model (gemini-3.1-pro-preview) for complex spatial analysis
         const responseText = await callGeminiApi(
-            "gemini-3.1-pro-preview",
+            "gemini-3.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -665,7 +665,7 @@ export async function batchAnalyzeOfficialEvidence(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3.1-pro-preview",
+            "gemini-3.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,
@@ -712,8 +712,8 @@ export async function classifyBatchImages(
 
     const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     const url = apiKey
-        ? `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-        : `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent`;
+        ? `${cleanBaseUrl}/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`
+        : `${cleanBaseUrl}/v1beta/models/gemini-3.5-flash:generateContent`;
 
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -785,8 +785,8 @@ export async function findRealLocationPhoto(
     const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     // We can use 1.5 Flash for basic image filtering as it's very fast and cheaper.
     const url = apiKey
-        ? `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-        : `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent`;
+        ? `${cleanBaseUrl}/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`
+        : `${cleanBaseUrl}/v1beta/models/gemini-3.5-flash:generateContent`;
 
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -884,7 +884,7 @@ export async function generateSocraticHint(
 
     try {
         const responseText = await callGeminiApi(
-            "gemini-3.1-pro-preview",
+            "gemini-3.5-flash",
             prompt,
             { mimeType, data: base64Data },
             baseUrl,

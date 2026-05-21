@@ -1041,7 +1041,8 @@ export default function TeacherRoom() {
                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] bg-slate-900/90 backdrop-blur-md border border-yellow-500 text-white text-[10px] font-bold px-3 py-2 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[200px] pointer-events-none">
                                             {(() => {
                                                 let dynamicAI = ev.ai_analysis;
-                                                if (!dynamicAI) {
+                                                if (!dynamicAI || dynamicAI === "Real-time analysis active.") {
+                                                    dynamicAI = undefined;
                                                     for (const r of liveReports) {
                                                         const match = r.aiFeedback?.results?.find((x: any) => x.description === ev.description);
                                                         if (match && match.explanation) {
@@ -1141,7 +1142,8 @@ export default function TeacherRoom() {
                                                 <h3 className="text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-2">AI Analysis</h3>
                                             {(() => {
                                                 let dynamicAI = focusedItem.ai_analysis;
-                                                if (!dynamicAI) {
+                                                if (!dynamicAI || dynamicAI === "Real-time analysis active.") {
+                                                    dynamicAI = undefined;
                                                     for (const r of liveReports) {
                                                         const match = r.aiFeedback?.results?.find((x: any) => x.description === focusedItem.description);
                                                         if (match && match.explanation) {

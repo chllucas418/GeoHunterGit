@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from 'react-router';
-import { analyzeImageQuality, chatWithGemini, classifyBatchImages, findRealLocationPhoto } from '~/lib/gemini.server';
+import { analyzeImageQuality, chatWithGemini, classifyBatchImages, findRealLocationPhoto, batchAnalyzeOfficialEvidence } from '~/lib/gemini.server';
 
 // Server-side Action for Mass Add
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -207,7 +207,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
         try {
             const aiResponse = await chatWithGemini(
-                "gemini-3.1-pro-preview", // modelName (Using 3.1 Pro Preview as per user request)
+                "gemini-3.5-flash", // modelName (Using 3.5 Flash)
                 message,
                 history,
                 imageUrl || "", // Pass imageUrl if provided
@@ -293,16 +293,38 @@ export async function action({ request, context }: ActionFunctionArgs) {
             // [FIX] Also insert into the map_evidence table so the game logic can find it!
             if (metadata.evidence && metadata.evidence.length > 0) {
                 console.log("[MassAdd API] Inserting evidence items:", metadata.evidence.length);
+
+                // Generate actual AI analyses for each official evidence item
+                let analyses: any[] = [];
+                try {
+                    console.log("[MassAdd API] Generating AI analyses for evidence...", publicUrl);
+                    analyses = await batchAnalyzeOfficialEvidence(
+                        publicUrl,
+                        metadata.evidence.map((ev: any, idx: number) => ({
+                            id: String(idx),
+                            box: ev.box,
+                            description: ev.description
+                        })),
+                        env.GEMINI_BASE_URL,
+                        env.GEMINI_GATEWAY_TOKEN,
+                        env.GEMINI_API_KEY
+                    );
+                } catch (e) {
+                    console.error("[MassAdd API] Failed to generate AI analysis:", e);
+                }
+
                 const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
-                const batch = metadata.evidence.map((ev: any) =>
-                    stmt.bind(
+                const batch = metadata.evidence.map((ev: any, idx: number) => {
+                    const matchedAnalysis = analyses.find((a: any) => a.id === String(idx));
+                    const aiText = matchedAnalysis?.ai_analysis || `Factual target landmark: ${ev.description}. Key geographic identifier in this sector.`;
+                    return stmt.bind(
                         `ev_${Math.random().toString(36).substring(2, 9)}`,
                         locationId,
                         JSON.stringify(ev.box),
                         ev.description,
-                        "Real-time analysis active."
-                    )
-                );
+                        aiText
+                    );
+                });
                 await db.batch(batch);
             }
 

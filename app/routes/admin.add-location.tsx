@@ -5,7 +5,7 @@ import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import type { BoxCoordinates } from "~/types/shared";
 import { requireTeacher } from "~/lib/auth.server";
-import { analyzeImageQuality } from "~/lib/gemini.server";
+import { analyzeImageQuality, batchAnalyzeOfficialEvidence } from "~/lib/gemini.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
     await requireTeacher(request);
@@ -123,24 +123,40 @@ export async function action({ request, context }: ActionFunctionArgs) {
             // Safe-guard: delete old evidence for this location
             await db.prepare("DELETE FROM map_evidence WHERE location_id = ? AND created_by_user_id IS NULL").bind(locationId).run();
 
+            // Generate actual AI analyses for each official evidence item
+            let analyses: any[] = [];
+            if (evidenceList.length > 0) {
+                try {
+                    console.log("[AddLocation API] Generating AI analyses for evidence...", finalImageUrl);
+                    analyses = await batchAnalyzeOfficialEvidence(
+                        finalImageUrl,
+                        evidenceList.map((ev: any, idx: number) => ({
+                            id: String(idx),
+                            box: ev.box,
+                            description: ev.description
+                        })),
+                        env.GEMINI_BASE_URL,
+                        env.GEMINI_GATEWAY_TOKEN,
+                        env.GEMINI_API_KEY
+                    );
+                } catch (e) {
+                    console.error("[AddLocation API] Failed to generate AI analysis:", e);
+                }
+            }
+
             const stmt = db.prepare("INSERT INTO map_evidence (id, location_id, bounding_box, description, is_verified, ai_analysis) VALUES (?, ?, ?, ?, 1, ?)");
 
-            // Process sequentially
-            const processedEvidence = evidenceList.map((ev: any) => {
-                // [BYOK/REAL-TIME] We no longer generate or store AI analysis in the DB at this stage.
-                // Analysis is generated in real-time when viewed.
-                return { ...ev, analysis: "Real-time analysis active." };
-            });
-
-            const batch = processedEvidence.map((ev: any) =>
-                stmt.bind(
+            const batch = evidenceList.map((ev: any, idx: number) => {
+                const matchedAnalysis = analyses.find((a: any) => a.id === String(idx));
+                const aiText = matchedAnalysis?.ai_analysis || `Factual target landmark: ${ev.description}. Key geographic identifier in this sector.`;
+                return stmt.bind(
                     `ev_${Math.random().toString(36).substring(2, 9)}`,
                     locationId,
                     JSON.stringify(ev.box),
                     ev.description,
-                    ev.analysis
-                )
-            );
+                    aiText
+                );
+            });
             if (batch.length > 0) await db.batch(batch);
         }
 
@@ -210,7 +226,7 @@ export default function AddLocation() {
     const [chatHistory, setChatHistory] = useState<{role: string, text: string, isAction?: boolean, actionType?: string, actionData?: string}[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [isChatting, setIsChatting] = useState(false);
-    const [chatModel, setChatModel] = useState("gemini-2.5-pro");
+    const [chatModel, setChatModel] = useState("gemini-3.5-flash");
     const chatScrollRef = useRef<HTMLDivElement>(null);
 
     // Auto-scroll chat
@@ -1016,6 +1032,7 @@ export default function AddLocation() {
                                         value={chatModel}
                                         onChange={(e) => setChatModel(e.target.value)}
                                     >
+                                        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
                                         <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                                         <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview</option>
                                         <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>

@@ -181,30 +181,31 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         let evidenceScore = 0;
         let aiBonus = 0;
         let matchedEvidenceIds: string[] = [];
-        let aiFeedback: any = { status: "processing" };
+        let aiFeedback: any = null;
 
-        // Run Gemini Analysis
-        try {
-            const GEMINI_BASE_URL = context.cloudflare.env.GEMINI_BASE_URL;
-            const GEMINI_GATEWAY_TOKEN = context.cloudflare.env.GEMINI_GATEWAY_TOKEN;
-            const GEMINI_API_KEY = context.cloudflare.env.GEMINI_API_KEY;
+        // Run Gemini Analysis only if student actually scanned and submitted visual evidence
+        if (userEvidenceList.length > 0) {
+            try {
+                const GEMINI_BASE_URL = context.cloudflare.env.GEMINI_BASE_URL;
+                const GEMINI_GATEWAY_TOKEN = context.cloudflare.env.GEMINI_GATEWAY_TOKEN;
+                const GEMINI_API_KEY = context.cloudflare.env.GEMINI_API_KEY;
 
-            const fullFeedback = await checkEvidenceListWithGemini(
-                trueLoc.image_url,
-                userEvidenceList,
-                trueLoc.name,
-                adminBoxes,
-                GEMINI_BASE_URL,
-                GEMINI_GATEWAY_TOKEN,
-                GEMINI_API_KEY,
-                undefined,
-                trueLoc.lat,
-                trueLoc.lng
-            );
+                const fullFeedback = await checkEvidenceListWithGemini(
+                    trueLoc.image_url,
+                    userEvidenceList,
+                    trueLoc.name,
+                    adminBoxes,
+                    GEMINI_BASE_URL,
+                    GEMINI_GATEWAY_TOKEN,
+                    GEMINI_API_KEY,
+                    undefined,
+                    trueLoc.lat,
+                    trueLoc.lng
+                );
 
-            aiFeedback = fullFeedback;
+                aiFeedback = fullFeedback;
 
-            if (fullFeedback.results) {
+                if (fullFeedback.results) {
                 for (const item of fullFeedback.results) {
                     const userBox = userEvidenceList[item.index]?.box;
                     if (!userBox) continue;
@@ -311,6 +312,7 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
             console.error("Gemini Error:", e);
             aiFeedback = { error: "AI verification failed", results: [] };
         }
+    }
 
         // Cap Evidence Score to prevent overflow?
         // Let's say max 5 evidence items = 5000pts.

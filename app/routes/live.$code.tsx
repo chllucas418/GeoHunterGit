@@ -1345,7 +1345,7 @@ export default function StudentLiveGame() {
                                         style={{ left: `${box.x / 10}%`, top: `${box.y / 10}%`, width: `${box.w / 10}%`, height: `${box.h / 10}%` }}
                                     >
                                         <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-[9999] ${wasFound ? 'bg-green-600' : 'bg-red-600'} text-white text-[9px] font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap min-w-[150px]`}>
-                                            {ev.ai_analysis ? (
+                                            {ev.ai_analysis && ev.ai_analysis !== "Real-time analysis active." ? (
                                                 <>
                                                     <span className={`block mb-1 ${wasFound ? 'text-green-200' : 'text-red-200'}`}>
                                                         {wasFound ? "✅ Verified Intel:" : "❌ Missed Intel:"}
@@ -1468,7 +1468,7 @@ export default function StudentLiveGame() {
                                             <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
                                             <h3 className="text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-3">AI Analysis</h3>
                                             <p className="text-slate-300 text-sm md:text-base leading-relaxed font-medium">
-                                                {focusedItem.ai_analysis || "No analysis data available."}
+                                                {focusedItem.ai_analysis && focusedItem.ai_analysis !== "Real-time analysis active." ? focusedItem.ai_analysis : "No analysis data available."}
                                             </p>
                                         </div>
                                     </div>

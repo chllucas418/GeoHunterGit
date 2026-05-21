@@ -23,7 +23,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
             return Response.json({ error: "Message is required" }, { status: 400 });
         }
 
-        const model = modelName || "gemini-3.1-pro-preview"; // Default to 3.1 pro preview
+        const model = modelName || "gemini-3.5-flash"; // Default to 3.5 flash
 
         const responseText = await chatWithGemini(
             model,
