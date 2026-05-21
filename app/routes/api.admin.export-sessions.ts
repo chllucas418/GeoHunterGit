@@ -1,8 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { requireDeveloper } from "~/lib/auth.server";
+import { requireTeacher } from "~/lib/auth.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
-    await requireDeveloper(request);
+    await requireTeacher(request);
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 

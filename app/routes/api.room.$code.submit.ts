@@ -294,15 +294,11 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
                             evidenceScore += 750;
                             matchedEvidenceIds.push(matchedAdminId);
 
-                            const adminItem = adminBoxes.find(a => a.id === matchedAdminId);
+                            const adminItem = adminBoxes.find((a: any) => a.id === matchedAdminId);
                             if (adminItem) {
-                                if (!aiFeedback.results) aiFeedback.results = [];
-                                aiFeedback.results.push({
-                                    index: item.index,
-                                    description: adminItem.description,
-                                    explanation: "Visual confirmation via scanner alignment.",
-                                    validity: 0.8
-                                });
+                                item.description = adminItem.description;
+                                item.explanation = "Visual confirmation via scanner alignment.";
+                                item.validity = 0.8;
                             }
                         }
                     }

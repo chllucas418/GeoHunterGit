@@ -4,11 +4,11 @@ import { Form, useActionData, useNavigation, useLoaderData, Link, useFetcher } f
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import type { BoxCoordinates } from "~/types/shared";
-import { requireDeveloper } from "~/lib/auth.server";
+import { requireTeacher } from "~/lib/auth.server";
 import { analyzeImageQuality } from "~/lib/gemini.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
-    await requireDeveloper(request);
+    await requireTeacher(request);
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 
@@ -29,7 +29,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
-    await requireDeveloper(request);
+    await requireTeacher(request);
     const formData = await request.formData();
     const intent = formData.get("intent");
 
@@ -617,9 +617,9 @@ export default function AddLocation() {
             <div className="max-w-6xl mx-auto space-y-8">
                 <header className="flex items-center justify-between">
                     <div>
-                        <Link to="/" className="text-blue-400 hover:underline text-sm mb-2 inline-block">← Back to Discovery</Link>
+                        <Link to="/teacher/dashboard" className="text-blue-400 hover:underline text-sm mb-2 inline-block">← Back to Dashboard</Link>
                         <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-                            Developer Protocol: Add Location
+                            Instructor Protocol: Add Location
                         </h1>
                     </div>
                     <div className="flex items-center gap-4">

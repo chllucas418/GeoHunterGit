@@ -727,6 +727,82 @@ export async function classifyBatchImages(
     }
 }
 
+export async function findRealLocationPhoto(
+    images: { mimeType: string; data: string }[],
+    baseUrl: string,
+    gatewayToken: string,
+    apiKey: string
+) {
+    if (images.length === 0) return { best_index: -1, confidence: "LOW" };
+    if (images.length === 1) return { best_index: 0, confidence: "HIGH" };
+
+    const prompt = `
+    You are an expert image analyst tasked with extracting geolocation data from student presentations.
+    I have provided ${images.length} images extracted from a student's slideshow. Your GOAL is to identify the single best "True Location" real-world photograph of the geographic target.
+    
+    EXCLUDE the following:
+    1. Screenshots of Google Maps, Google Earth, or 3D topological renders (Look for UI elements, road lines, map labels).
+    2. Title slides consisting mostly of large text on a background.
+    3. Selfies or entirely unrelated graphics (clipart, logos).
+    
+    If there are multiple real photos of the same location, pick the one that is clearest, widest angle, and shows the most distinct permanent landmarks.
+    
+    Return ONLY a JSON object containing the 0-based index of the best image, and your confidence level ("HIGH", "MEDIUM", "LOW") that this is a real-world camera photo of a location.
+    Format: { "best_index": 2, "confidence": "HIGH" }
+    If ZERO images are actual real-world photos, return { "best_index": -1, "confidence": "LOW" }.
+    `;
+
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    // We can use 1.5 Flash for basic image filtering as it's very fast and cheaper.
+    const url = apiKey
+        ? `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
+        : `${cleanBaseUrl}/v1beta/models/gemini-1.5-flash:generateContent`;
+
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    if (gatewayToken) {
+        headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
+    }
+
+    const payload: any = {
+        contents: [{
+            parts: [
+                { text: prompt },
+                ...images.map(img => ({
+                    inlineData: {
+                        mimeType: img.mimeType,
+                        data: img.data
+                    }
+                }))
+            ]
+        }],
+        generationConfig: { responseMimeType: "application/json" }
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error(`Status: ${response.status}`);
+        
+        const data = await response.json() as any;
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const parsed = JSON.parse(text.trim());
+        return {
+            best_index: typeof parsed.best_index === 'number' ? parsed.best_index : -1,
+            confidence: parsed.confidence || "LOW"
+        };
+    } catch (e) {
+        console.error("[Gemini] findRealLocationPhoto failed:", e);
+        // Fallback: trigger manual review
+        return { best_index: -1, confidence: "LOW" };
+    }
+}
+
 export async function generateSocraticHint(
     imageUrl: string,
     locationName: string,

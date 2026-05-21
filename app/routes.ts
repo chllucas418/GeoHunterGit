@@ -13,6 +13,7 @@ export default [
     route("profile", "routes/profile.tsx"),
     route("leaderboard", "routes/leaderboard.tsx"),
     route("privacy", "routes/privacy.tsx"),
+    route("about", "routes/about.tsx"),
     route("support", "routes/support.tsx"),
     route("resources/image/:locationId", "routes/resources.image.$locationId.ts"),
 

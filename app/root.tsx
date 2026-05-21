@@ -75,7 +75,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* --- Global System Footer (Sleek Centered Design) --- */}
           <footer className="relative z-20 py-12 mt-auto text-center border-t border-white/5 bg-[#030712]/40 backdrop-blur-md transition-colors duration-500 footer-glass">
             <div className="flex justify-center items-center gap-6 text-[10px] uppercase font-bold tracking-[0.3em] text-white/40 mb-4">
-              <a href="/privacy" className="hover:text-blue-400 transition-all duration-300">Privacy Protocol</a>
+              <a href="https://hkgeohunter.com/privacy" className="hover:text-blue-400 transition-all duration-300">Privacy Policy</a>
               <span className="text-white/10">/</span>
               <a href="/support" className="hover:text-indigo-400 transition-all duration-300">Support</a>
             </div>

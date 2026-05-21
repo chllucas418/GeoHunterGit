@@ -1,20 +1,15 @@
-import { useState, useRef, useEffect, useMemo, memo } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
-import { Form, useActionData, useSubmit, useNavigation, useLoaderData, useNavigate, Link } from 'react-router';
+import { Form, useActionData, useSubmit, useNavigation, useLoaderData, useNavigate } from 'react-router';
 import { useDropzone } from 'react-dropzone';
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { EvidenceCanvas } from '~/components/EvidenceCanvas';
-import { ClassroomImportModal } from '~/components/ClassroomImportModal';
 import JSZip from 'jszip';
 import type { BoxCoordinates } from '~/types/shared';
-import { requireTeacher } from '~/lib/auth.server';
-// pdfjs-dist dynamically imported client-side to prevent SSR DOMMatrix errors
 
 
 
-
-export async function loader({ request, context }: LoaderFunctionArgs) {
-    await requireTeacher(request);
+export async function loader({ context }: LoaderFunctionArgs) {
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
     const { results: mapSets } = await db.prepare("SELECT id, name FROM map_sets ORDER BY created_at DESC").all<any>();
@@ -40,9 +35,8 @@ export default function MassAdd() {
     const { mapsApiKey, googleDriveApiKey, googleDriveClientId, mapSets, draft } = useLoaderData<typeof loader>();
     const [files, setFiles] = useState<any[]>(draft || []);
     const [analyzingIds, setAnalyzingIds] = useState<Set<number>>(new Set());
-    const [editingId, setEditingId] = useState<number | 'all' | null>(null); // Index of file being edited
+    const [editingId, setEditingId] = useState<number | null>(null); // Index of file being edited
     const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>(draft ? 'synced' : 'idle');
-    const [extractionQueue, setExtractionQueue] = useState<{name: string, items: {blob: Blob, url: string, name: string}[]}[]>([]);
 
 
     // Auto-prompt developer to add map evidence
@@ -159,7 +153,6 @@ export default function MassAdd() {
                                 hints: Array.isArray(data.aiData.generated_hints) ? data.aiData.generated_hints :
                                     Array.isArray(data.aiData.hints) ? data.aiData.hints :
                                         ["", "", ""],
-                                hint_pins: Array.isArray(data.aiData.hint_pins) ? data.aiData.hint_pins : [],
                                 status: f.lat ? 'reviewed' : 'needs_gps'
                             };
                         }
@@ -198,7 +191,6 @@ export default function MassAdd() {
             description: "",
             difficulty: 5,
             hints: ["", "", ""],
-            hint_pins: [],
             evidence: [],
             addToSet: "",
             status: 'extracting',
@@ -237,63 +229,16 @@ export default function MassAdd() {
                 const mediaDir = extension === 'pptx' ? 'ppt/media/' : 'word/media/';
                 const mediaFiles = Object.keys(zip.files).filter(path => path.startsWith(mediaDir));
                 
-                const items: {blob: Blob, url: string, name: string}[] = [];
                 for (const path of mediaFiles) {
                     const zipFile = zip.files[path];
                     if (zipFile.dir) continue;
                     const blob = await zipFile.async('blob');
                     const fileName = path.split('/').pop() || 'image.jpg';
-                    const type = fileName.endsWith('.png') ? 'image/png' : fileName.endsWith('.gif') ? 'image/gif' : 'image/jpeg';
-                    const typedBlob = new Blob([blob], { type: blob.type || type });
-                    items.push({
-                        blob: typedBlob,
-                        url: URL.createObjectURL(typedBlob),
-                        name: `${file.name.split('.')[0]}_${fileName}`
-                    });
-                }
-                if (items.length > 0) {
-                    setExtractionQueue(prev => [...prev, { name: file.name, items }]);
-                } else {
-                    alert(`No images found in ${file.name}`);
+                    const newFile = new File([blob], `${file.name.split('.')[0]}_${fileName}`, { type: blob.type });
+                    await addToFileList(newFile);
                 }
             } catch (e) {
                 console.error("Failed to extract from office doc:", e);
-                alert(`Failed to read documents from ${file.name}`);
-            }
-        } else if (extension === 'pdf') {
-            try {
-                const pdfjsLib = await import('pdfjs-dist');
-                pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                const items: {blob: Blob, url: string, name: string}[] = [];
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 2.0 });
-                    const canvas = document.createElement('canvas');
-                    const context = canvas.getContext('2d');
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    if (context) {
-                        await page.render({ canvasContext: context, viewport } as any).promise;
-                        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-                        if (blob) {
-                            items.push({
-                                blob,
-                                url: URL.createObjectURL(blob),
-                                name: `${file.name.split('.')[0]}_Page_${i}`
-                            });
-                        }
-                    }
-                }
-                if (items.length > 0) {
-                    setExtractionQueue(prev => [...prev, { name: file.name, items }]);
-                } else {
-                    alert(`No pages extracted from PDF ${file.name}`);
-                }
-            } catch (e) {
-                console.error("Failed to extract PDF:", e);
-                alert(`Failed to extract pages from ${file.name}.`);
             }
         } else {
             await addToFileList(file);
@@ -367,12 +312,19 @@ export default function MassAdd() {
     }, [files]);
 
     // Auto-Analyze when Location is pinned
-    // DISABLED: This was causing 429 Too Many Requests errors by triggering Gemini on every location edit.
-    // Users must now manually click the "AI Generate" or "✨ Auto-Generate Details" button.
+    useEffect(() => {
+        const needsAnalysis = files.find(f => f.lat && f.lng && f.status !== 'analyzed' && !analyzingIds.has(f.id));
+        if (!needsAnalysis) return;
+
+        console.log(`[Auto-Analyze] Triggering for ${needsAnalysis.photographer}`);
+        analyzeFile(needsAnalysis.id, needsAnalysis.file);
+        
+        // Mark as analyzed (or similar) to prevent loop
+        setFiles(prev => prev.map(f => f.id === needsAnalysis.id ? { ...f, status: 'analyzed' } : f));
+    }, [files, analyzingIds]);
 
     // Google Picker State & Logic
     const [accessToken, setAccessToken] = useState<string | null>(null);
-    const [showClassroomModal, setShowClassroomModal] = useState(false);
     const tokenClientRef = useRef<any>(null);
 
     useEffect(() => {
@@ -396,7 +348,7 @@ export default function MassAdd() {
                 if (google) {
                     tokenClientRef.current = google.accounts.oauth2.initTokenClient({
                         client_id: googleDriveClientId,
-                        scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.rosters.readonly',
+                        scope: 'https://www.googleapis.com/auth/drive.readonly',
                         callback: (response: any) => {
                             if (response.access_token) {
                                 setAccessToken(response.access_token);
@@ -418,14 +370,6 @@ export default function MassAdd() {
         }
     };
 
-    const handleImportFromClassroom = () => {
-        if (!accessToken) {
-            tokenClientRef.current?.requestAccessToken({ prompt: 'consent' });
-        } else {
-            setShowClassroomModal(true);
-        }
-    };
-
     const createPicker = (token: string) => {
         const gapi = (window as any).gapi;
         const google = (window as any).google;
@@ -434,13 +378,13 @@ export default function MassAdd() {
                 // View for My Drive with folder navigation
                 const docsView = new google.picker.DocsView(google.picker.ViewId.DOCS)
                     .setIncludeFolders(true)
-                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf');
+                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
                 
                 // View for Shared Drives
                 const drivesView = new google.picker.DocsView(google.picker.ViewId.DOCS)
                     .setEnableDrives(true)
                     .setIncludeFolders(true)
-                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf');
+                    .setMimeTypes('image/jpeg,image/png,image/webp,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 
                 const picker = new google.picker.PickerBuilder()
                     .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
@@ -485,12 +429,7 @@ export default function MassAdd() {
 
     const { getRootProps, getInputProps } = useDropzone({
         onDrop,
-        accept: { 
-            'image/*': [],
-            'application/pdf': ['.pdf'],
-            'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
-        }
+        accept: { 'image/*': [] }
     } as any);
 
 
@@ -625,15 +564,7 @@ export default function MassAdd() {
     return (
         <div className="min-h-screen bg-gray-950 text-white p-8">
             <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-4">
-                    <Link
-                        to="/teacher/dashboard"
-                        className="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs border border-gray-700 transition-colors"
-                    >
-                        ← Back to Dashboard
-                    </Link>
-                    <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Mass Add Locations</h1>
-                </div>
+                <h1 className="text-2xl font-bold">Mass Add Locations</h1>
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={() => window.location.reload()}
@@ -675,8 +606,8 @@ export default function MassAdd() {
             <div {...getRootProps()} className="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center hover:border-emerald-500 transition-colors cursor-pointer bg-gray-900/50 relative group">
                 <input {...getInputProps()} />
                 <div className="flex flex-col items-center gap-2">
-                    <p className="text-gray-300">Drag & drop images or documents here</p>
-                    <p className="text-xs text-gray-500">Supports JPG, PNG, WEBP, **PPTX**, **DOCX**, and **PDF**</p>
+                    <p className="text-gray-300">Drag & drop images or Office documents here</p>
+                    <p className="text-xs text-gray-500">Supports JPG, PNG, WEBP, **PPTX**, and **DOCX**</p>
                     
                     <div className="flex gap-4 mt-6">
                         <div className="px-6 py-2 bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-sm font-bold flex items-center gap-2 group-hover:bg-emerald-600/30 transition-all">
@@ -696,24 +627,11 @@ export default function MassAdd() {
                             </svg>
                             Import from Cloud
                         </button>
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleImportFromClassroom();
-                            }}
-                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all active:scale-95"
-                        >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-1c0-.55-.45-1-1-1H9v-1c0-1.1-.9-2-2-2H5c-.55 0-1-.45-1-1v-1c0-.55.45-1 1-1h1c1.1 0 2 .9 2 2v2h2v-2h2v-2c0-.55.45-1 1-1H6V5c1.66-1.57 3.9-2.5 6.36-2.5 5.51 0 10 4.49 10 10 0 2.21-.71 4.26-1.92 5.91-.71-.85-1.58-1.55-2.58-2.07l-.76-.43c-.43-.24-.95-.23-1.37.03z"/>
-                            </svg>
-                            Import from Classroom
-                        </button>
                     </div>
 
                     <div className="mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg max-w-lg mx-auto">
                         <p className="text-[10px] text-blue-400 leading-tight">
-                            <strong>💡 Pro Tip:</strong> For **Google Slides**, **Canva**, or **Google Docs**, 
+                            <strong>≡ƒÆí Pro Tip:</strong> For **Google Slides**, **Canva**, or **Google Docs**, 
                             simply <strong>Download as PPTX or DOCX</strong> and drag that file here. 
                             The system will automatically extract all images for you!
                         </p>
@@ -721,38 +639,12 @@ export default function MassAdd() {
                 </div>
             </div>
 
-            <div className="flex justify-between items-center mt-12 mb-4">
-                <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-blue-500 bg-clip-text text-transparent">Manage Pending Locations</h2>
-                <div className="flex items-center gap-4">
-                    <button 
-                        onClick={() => setEditingId('all')}
-                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-lg shadow-[0_4px_15px_rgba(79,70,229,0.4)] transition-all flex items-center gap-2 tracking-widest uppercase active:scale-95"
-                        disabled={files.length === 0}
-                    >
-                        🚀 Edit All Locations
-                    </button>
-                    {files.some(f => f.status === 'saved') && (
-                        <button 
-                            onClick={() => setFiles(prev => prev.filter(f => f.status !== 'saved'))}
-                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 hover:text-red-400 rounded-lg text-sm text-gray-300 flex items-center gap-2 border border-gray-700 transition-colors uppercase font-bold tracking-widest"
-                        >
-                            Trash Completed
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
                 {files.map((file, idx) => (
-                    <div key={file.id} className={`bg-gray-900 border rounded-lg overflow-hidden flex flex-col transition-all ${file.status === 'saved' ? 'border-indigo-500 scale-[0.98] opacity-80 shadow-[0_0_15px_rgba(79,70,229,0.3)]' : 'border-gray-800'}`}>
+                    <div key={file.id} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex flex-col">
                         <div className="relative h-48 bg-gray-800">
                             <img src={file.preview} className="w-full h-full object-cover opacity-80" />
                             <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-                                {file.status === 'saved' && (
-                                    <span className="bg-indigo-600 text-white font-black text-xs px-2 py-1 rounded shadow-lg uppercase tracking-widest border border-indigo-400 mb-1 animate-pulse">
-                                        ✅ DEPLOYED
-                                    </span>
-                                )}
                                 {file.lat ? (
                                     <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded whitespace-nowrap">GPS Found</span>
                                 ) : (
@@ -770,7 +662,7 @@ export default function MassAdd() {
                                 </button>
                                 {file.evidence.length > 0 && (
                                     <span className="bg-amber-500/90 text-black font-black text-[10px] px-2 py-1 rounded shadow-lg animate-pulse uppercase tracking-tighter whitespace-nowrap border border-black/10">
-                                        ⚡ {file.evidence.length} Evidence!
+                                        ΓÜí {file.evidence.length} Evidence!
                                     </span>
                                 )}
                             </div>
@@ -810,139 +702,26 @@ export default function MassAdd() {
                             ) : (
                                 <button
                                     onClick={() => saveLocation(idx)}
-                                    className={`px-4 py-1.5 rounded text-sm font-bold transition-colors shadow-md ${file.status === 'saved' ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-sm text-white"
                                 >
-                                    {file.status === 'saved' ? 'Re-Save' : 'Save'}
+                                    Save
                                 </button>
                             )}
-                            <button onClick={() => removeFile(idx)} className="px-2 text-gray-500 hover:text-red-400">×</button>
+                            <button onClick={() => removeFile(idx)} className="px-2 text-gray-500 hover:text-red-400">├ù</button>
                         </div>
                     </div>
                 ))}
             </div>
 
             <EditModal editingId={editingId} files={files} setFiles={setFiles} setEditingId={setEditingId} isLoaded={isLoaded} mapSets={mapSets} onSave={saveLocation} />
-
-            {extractionQueue.length > 0 && (
-                <ExtractionModal
-                    document={extractionQueue[0]}
-                    onConfirm={async (selectedIndices) => {
-                        const doc = extractionQueue[0];
-                        for (const idx of selectedIndices) {
-                            const item = doc.items[idx];
-                            const file = new File([item.blob], `${item.name}.jpg`, { type: item.blob.type });
-                            await addToFileList(file);
-                        }
-                        setExtractionQueue(prev => prev.slice(1));
-                    }}
-                    onCancel={() => {
-                        setExtractionQueue(prev => prev.slice(1));
-                    }}
-                />
-            )}
-
-            {showClassroomModal && accessToken && (
-                <ClassroomImportModal
-                    accessToken={accessToken}
-                    onClose={() => setShowClassroomModal(false)}
-                    onAddFile={addToFileList}
-                    onAddExtractionQueue={(queueItem: any) => setExtractionQueue((prev: any) => [...prev, queueItem])}
-                />
-            )}
         </div>
     );
 }
 
-export function ExtractionModal({ document, onConfirm, onCancel }: { document: { name: string, items: { blob: Blob, url: string, name: string }[] }, onConfirm: (indices: number[]) => void, onCancel: () => void }) {
-    const [selected, setSelected] = useState<Set<number>>(new Set(document.items.map((_, i) => i)));
 
-    const toggle = (idx: number) => {
-        const next = new Set(selected);
-        if (next.has(idx)) next.delete(idx);
-        else next.add(idx);
-        setSelected(next);
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
-            <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
-                <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-950">
-                    <div>
-                        <h2 className="text-xl font-bold text-white">Extract Images</h2>
-                        <p className="text-sm text-gray-400">Select images/pages to import from <span className="text-blue-400 font-mono">{document.name}</span></p>
-                    </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => setSelected(new Set(document.items.map((_, i) => i)))}
-                            className="px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-800 text-xs text-blue-400 font-bold transition-colors"
-                        >
-                            Select All
-                        </button>
-                        <button
-                            onClick={() => setSelected(new Set())}
-                            className="px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-800 text-xs text-gray-400 font-bold transition-colors"
-                        >
-                            Deselect All
-                        </button>
-                    </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-6 bg-gray-900/50 custom-scrollbar">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {document.items.map((item, idx) => {
-                            const isSelected = selected.has(idx);
-                            return (
-                                <div 
-                                    key={idx} 
-                                    onClick={() => toggle(idx)}
-                                    className={`relative rounded-xl border-2 overflow-hidden cursor-pointer transition-all aspect-square ${isSelected ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'border-gray-800 opacity-60 hover:opacity-100 hover:border-gray-600'}`}
-                                >
-                                    <img src={item.url} className="w-full h-full object-cover bg-gray-800" />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2 pointer-events-none">
-                                        <div className="text-[10px] text-white truncate w-full">{item.name}</div>
-                                    </div>
-                                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-500 bg-black/50'}`}>
-                                        {isSelected && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                <div className="p-4 border-t border-gray-800 bg-gray-950 flex justify-between items-center">
-                    <div className="text-sm font-bold text-gray-400">
-                        <span className="text-emerald-400">{selected.size}</span> / {document.items.length} selected
-                    </div>
-                    <div className="flex gap-3">
-                        <button onClick={onCancel} className="px-5 py-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700 font-bold transition-colors">
-                            Cancel
-                        </button>
-                        <button 
-                            onClick={() => onConfirm(Array.from(selected))}
-                            disabled={selected.size === 0}
-                            className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:bg-gray-700 text-white font-black uppercase tracking-widest transition-all shadow-[0_4px_15px_rgba(16,185,129,0.3)]"
-                        >
-                            Import Selected
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-export const SingleLocationEditor = memo(function SingleLocationEditor({ item, editingIdx, setFiles, isLoaded, mapSets, onSave, isMulti }: {
-    item: any;
-    editingIdx: number;
-    setFiles: any;
-    isLoaded: boolean;
-    mapSets: any[];
-    onSave: any;
-    isMulti: boolean;
-}) {
-    if (!item) return null;
-    const editingId = editingIdx;
+export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets, onSave }: any) {
+    if (editingId === null) return null;
+    const item = files[editingId];
 
     // Local state for evidence description editing inside modal
     const [tempEvidenceBox, setTempEvidenceBox] = useState<BoxCoordinates | null>(null);
@@ -1065,8 +844,9 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
 
     const handleAutoGenerateDetails = async () => {
         if (editingId === null) return;
+        const item = files[editingId];
         setIsChatting(true);
-        setChatHistory(prev => [...prev, { role: "user", content: "✨ Auto-generating hints and description..." }]);
+        setChatHistory(prev => [...prev, { role: "user", content: "Γ£¿ Auto-generating hints and description..." }]);
 
         try {
             const formData = new FormData();
@@ -1100,20 +880,19 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
             if (data.error) throw new Error(data.error);
 
             if (data.aiData) {
-                const { precontext, generated_hints, difficulty_rating, hint_pins } = data.aiData;
+                const { precontext, generated_hints, difficulty_rating } = data.aiData;
                 setFiles((prev: any[]) => {
                     const cp = [...prev];
                     cp[editingId].description = precontext;
                     cp[editingId].hints = generated_hints || [];
                     cp[editingId].difficulty = difficulty_rating;
-                    cp[editingId].hint_pins = hint_pins || [];
                     return cp;
                 });
-                setChatHistory(prev => [...prev, { role: "model", content: "✅ Successfully generated Tuen Mun-specific hints and atmospheric description." }]);
+                setChatHistory(prev => [...prev, { role: "model", content: "Γ£à Successfully generated Tuen Mun-specific hints and atmospheric description." }]);
             }
         } catch (e: any) {
             console.error(e);
-            setChatHistory(prev => [...prev, { role: "model", content: `⚠️ Generation failed: ${e.message}` }]);
+            setChatHistory(prev => [...prev, { role: "model", content: `ΓÜá∩╕Å Generation failed: ${e.message}` }]);
         } finally {
             setIsChatting(false);
             chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1123,11 +902,13 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
     const handleAutoDetectEvidence = async () => {
         if (editingId === null || isChatting) return;
         
+        const currentFile = files[editingId];
+        
         // VALIDATION: Ensure location is pinned
-        if (!item.lat || !item.lng) {
+        if (!currentFile.lat || !currentFile.lng) {
             setChatHistory(prev => [...prev, { 
                 role: "model", 
-                content: "⚠️ **Location Required**: Please pin the location on the map first so the AI can ground the evidence against real map data!" 
+                content: "ΓÜá∩╕Å **Location Required**: Please pin the location on the map first so the AI can ground the evidence against real map data!" 
             }]);
             return;
         }
@@ -1136,16 +917,16 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
         setChatHistory(prev => [...prev, { role: "user", content: "Please auto-detect evidence for this location." }]);
         
         const locationPayload = {
-            lat: item.lat,
-            lng: item.lng,
-            name: item.photographer // Use photographer field as name if available
+            lat: currentFile.lat,
+            lng: currentFile.lng,
+            name: currentFile.photographer // Use photographer field as name if available
         };
 
         try {
             let payload: any = { location: locationPayload };
             
-            if (item.preview && item.preview.startsWith('http')) {
-                payload.imageUrl = item.preview;
+            if (currentFile.preview && currentFile.preview.startsWith('http')) {
+                payload.imageUrl = currentFile.preview;
             } else {
                 // Fallback to converting File to Base64 if preview is not a URL
                 const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
@@ -1154,7 +935,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                     reader.onload = () => resolve(reader.result as string);
                     reader.onerror = error => reject(error);
                 });
-                payload.base64Image = await toBase64(item.file);
+                payload.base64Image = await toBase64(currentFile.file);
             }
 
             const res = await fetch("/api/admin/auto-detect", {
@@ -1182,49 +963,60 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                     cp[editingId].evidence = [...cp[editingId].evidence, ...mappedEvidence];
                     return cp;
                 });
-                setChatHistory(prev => [...prev, { role: "model", content: `✅ Successfully auto-detected ${mappedEvidence.length} evidence markers.` }]);
+                setChatHistory(prev => [...prev, { role: "model", content: `Γ£à Successfully auto-detected ${mappedEvidence.length} evidence markers.` }]);
             } else {
                 setChatHistory(prev => [...prev, { role: "model", content: "No distinct evidence landmarks could be automatically detected." }]);
             }
             chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         } catch (e: any) {
             console.error(e);
-            setChatHistory(prev => [...prev, { role: "model", content: `⚠️ Auto-detect failed: ${e.message}` }]);
+            setChatHistory(prev => [...prev, { role: "model", content: `ΓÜá∩╕Å Auto-detect failed: ${e.message}` }]);
         } finally {
             setIsChatting(false);
         }
     };
 
-    const mapCenter = useMemo(() => item.lat ? { lat: item.lat, lng: item.lng } : { lat: 22.3193, lng: 114.1694 }, [item.lat, item.lng]);
-    const mapOptions = useMemo(() => ({
-        mapTypeId: 'satellite',
-        mapTypeControl: true,
-        streetViewControl: false,
-        fullscreenControl: true,
-        gestureHandling: 'greedy'
-    }), []);
-
     return (
-        <div className={isMulti ? 'w-full shrink-0 flex flex-col snap-center h-full' : 'w-full h-full flex flex-col'}>
-            <div className={isMulti ? 'bg-gray-900 rounded-2xl w-full h-[85vh] shrink-0 flex flex-col border border-gray-700 shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden' : 'bg-gray-900 rounded-2xl w-full h-full flex flex-col border border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden'}>
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center overflow-hidden">
+            <div className="bg-gray-900 rounded-2xl w-full h-[95vh] mx-4 max-w-[98vw] flex flex-col border border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                 {/* Header */}
-                <div className="flex justify-between items-center p-3 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                            <span className="p-1 bg-blue-600/20 rounded-lg text-blue-400 text-sm">#{editingId + 1}</span>
-                            <span className="text-blue-400 font-mono text-sm">{item.file?.name || item.photographer || "Unnamed"}</span>
+                <div className="flex justify-between items-center p-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
+                    <div className="flex items-center gap-6">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <span className="p-1.5 bg-blue-600/20 rounded-lg text-blue-400">≡ƒôì</span>
+                            Edit Location: <span className="text-blue-400 font-mono ml-2">{item.file?.name || item.photographer || "Unnamed"}</span>
                         </h2>
+                        {/* Navigation */}
+                        <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+                            <button
+                                onClick={() => setEditingId(Math.max(0, editingId - 1))}
+                                disabled={editingId === 0}
+                                className="px-3 py-1.5 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold border-r border-gray-700 transition-colors"
+                            >
+                                ΓåÉ PREV
+                            </button>
+                            <span className="px-3 py-1.5 text-[10px] font-mono text-gray-400">
+                                {editingId + 1} / {files.length}
+                            </span>
+                            <button
+                                onClick={() => setEditingId(Math.min(files.length - 1, editingId + 1))}
+                                disabled={editingId === files.length - 1}
+                                className="px-3 py-1.5 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold transition-colors"
+                            >
+                                NEXT ΓåÆ
+                            </button>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         <button
                             onClick={() => setIsEvidenceFullscreen(!isEvidenceFullscreen)}
-                            className={`px-3 py-1.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all border flex items-center gap-2 ${isEvidenceFullscreen
+                            className={`px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all border flex items-center gap-2 ${isEvidenceFullscreen
                                     ? "bg-amber-600/20 border-amber-500/50 text-amber-400 hover:bg-amber-600/30"
                                     : "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white"
                                 }`}
                         >
-                            {isEvidenceFullscreen ? "⏹ Exit FS" : "⛶ Fullscreen"}
+                            {isEvidenceFullscreen ? "ΓÅ╣ Exit Fullscreen" : "Γ¢╢ Fullscreen Editor"}
                         </button>
                         <button
                             disabled={isSaving}
@@ -1233,9 +1025,12 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                 await onSave(editingId, true);
                                 setIsSaving(false);
                             }}
-                            className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2"
+                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2"
                         >
-                            {isSaving ? "SAVING..." : "💾 Save"}
+                            {isSaving ? "SAVING..." : "≡ƒÆ╛ Save"}
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-white font-bold border border-gray-700 text-xs uppercase tracking-widest">
+                            Exit
                         </button>
                     </div>
                 </div>
@@ -1256,7 +1051,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                             className="absolute top-6 right-6 z-[70] p-3 bg-red-600/80 hover:bg-red-600 text-white rounded-full shadow-2xl transition-all"
                                             title="Close Fullscreen (Esc)"
                                         >
-                                            <span className="text-xl font-bold">×</span>
+                                            <span className="text-xl font-bold">├ù</span>
                                         </button>
                                     )}
                                     <EvidenceCanvas
@@ -1272,7 +1067,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                         {item.evidence.length > 0 && (
                                             <div className="absolute top-4 left-4 z-40">
                                                 <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-black px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center gap-2 border border-amber-400/50">
-                                                    <span className="text-lg animate-bounce">🔥</span>
+                                                    <span className="text-lg animate-bounce">≡ƒöÑ</span>
                                                     <span className="font-black text-xs uppercase tracking-widest italic">
                                                         {item.evidence.length >= 2
                                                             ? `INTEL OVERLOAD: ${item.evidence.length} EVIDENCE MARKERS DETECTED!`
@@ -1308,7 +1103,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                         });
                                                     }}
                                                 >
-                                                    ×
+                                                    ├ù
                                                 </button>
                                                 <div className="absolute bottom-full left-0 bg-black/70 text-white text-xs px-2 py-1 rounded mb-1 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">
                                                     {ev.description}
@@ -1359,7 +1154,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                     </EvidenceCanvas>
                                 </div>
                                 <div className="flex justify-between items-center text-xs text-gray-400">
-                                    <p>💡 Click and drag to draw evidence boxes.</p>
+                                    <p>≡ƒÆí Click and drag to draw evidence boxes.</p>
                                     <p>{item.evidence.length} items recorded</p>
                                 </div>
                             </div>
@@ -1378,7 +1173,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                     {isLoaded && (
                                         <GoogleMap
                                             mapContainerClassName="w-full h-56 rounded-xl border border-gray-700"
-                                            center={mapCenter}
+                                            center={item.lat ? { lat: item.lat, lng: item.lng } : { lat: 22.3193, lng: 114.1694 }}
                                             zoom={item.lat ? 16 : 11}
                                             onLoad={(map: google.maps.Map) => {
                                                 itemsMapRef.current = map;
@@ -1419,18 +1214,15 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                     })
                                                 }
                                             }}
-                                            options={mapOptions}
+                                            options={{
+                                                mapTypeId: 'satellite',
+                                                mapTypeControl: true,
+                                                streetViewControl: false,
+                                                fullscreenControl: true,
+                                                gestureHandling: 'greedy'
+                                            }}
                                         >
                                             {item.lat && <Marker position={{ lat: item.lat, lng: item.lng }} />}
-                                            {item.hint_pins && item.hint_pins.map((pin: any, idx: number) => (
-                                                <Marker
-                                                    key={idx}
-                                                    position={{ lat: pin.lat, lng: pin.lng }}
-                                                    title={pin.description}
-                                                    label={{ text: "H" + (idx + 1), color: "black", fontWeight: "bold" }}
-                                                    icon="http://maps.google.com/mapfiles/ms/icons/yellow-dot.png"
-                                                />
-                                            ))}
                                         </GoogleMap>
                                     )}
                                     <div className="flex gap-2 text-xs text-gray-500 font-mono">
@@ -1449,7 +1241,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                 disabled={isChatting}
                                                 className="text-[10px] font-black text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest flex items-center gap-1 active:scale-95 disabled:opacity-50"
                                             >
-                                                <span>✨ Auto-Generate Details</span>
+                                                <span>Γ£¿ Auto-Generate Details</span>
                                             </button>
                                         </div>
                                         <textarea
@@ -1551,7 +1343,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                         })}
                                                         className="text-gray-500 hover:text-red-400 px-1"
                                                     >
-                                                        ×
+                                                        ├ù
                                                     </button>
                                                 </div>
                                             ))}
@@ -1583,7 +1375,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                         <div className="bg-gray-950 flex flex-col h-full border-l border-gray-800 flex-shrink-0" style={{ width: `${splitRatio}%` }}>
                             <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-black/40">
                                 <h3 className="text-sm font-black bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text uppercase tracking-widest flex items-center gap-2">
-                                    <span>✨</span> AI Copilot (v2.2)
+                                    <span>Γ£¿</span> AI Copilot (v2.2)
                                 </h3>
                                 <div className="flex items-center gap-3">
                                     <button
@@ -1592,7 +1384,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                         className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-[10px] font-black px-2.5 py-1 rounded-lg border border-emerald-500/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
                                         title="Auto-Detect Evidence"
                                     >
-                                        <span className={isChatting ? "animate-pulse" : ""}>✨</span>
+                                        <span className={isChatting ? "animate-pulse" : ""}>Γ£¿</span>
                                         {isChatting ? "DETECTING..." : "AUTO-DETECT"}
                                     </button>
                                     <div className="text-[10px] text-gray-500 font-mono">Panel</div>
@@ -1640,7 +1432,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                     <div key={mIdx} className="bg-slate-900 border-2 border-indigo-500/50 rounded-2xl p-4 shadow-2xl relative overflow-hidden group">
                                                                         <div className="absolute top-0 right-0 p-2 opacity-20 text-[10px] font-mono">v2.2</div>
                                                                         <div className="flex items-center gap-2 mb-4">
-                                                                            <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400">✨</div>
+                                                                            <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400">Γ£¿</div>
                                                                             <h4 className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em]">Full Metadata Suggestion</h4>
                                                                         </div>
 
@@ -1664,7 +1456,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                             })}
                                                                             className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-black px-4 py-3.5 rounded-xl shadow-[0_5px_15px_rgba(99,102,241,0.4)] transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
                                                                         >
-                                                                            🚀 APPLY FULL REFINEMENT
+                                                                            ≡ƒÜÇ APPLY FULL REFINEMENT
                                                                         </button>
                                                                     </div>
                                                                 );
@@ -1674,7 +1466,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                 return (
                                                                     <div key={mIdx} className="bg-slate-900 border-2 border-purple-500/50 rounded-2xl p-4 shadow-xl">
                                                                         <div className="flex items-center gap-2 mb-4">
-                                                                            <div className="p-1.5 bg-purple-500/20 rounded-lg text-purple-400">📝</div>
+                                                                            <div className="p-1.5 bg-purple-500/20 rounded-lg text-purple-400">≡ƒô¥</div>
                                                                             <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest">Hints Suggestion (v2.2)</h4>
                                                                         </div>
                                                                         <div className="text-sm text-slate-200 mb-5 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
@@ -1697,7 +1489,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                 return (
                                                                     <div key={mIdx} className="bg-slate-900 border-2 border-blue-500/50 rounded-2xl p-4 shadow-xl">
                                                                         <div className="flex items-center gap-2 mb-4">
-                                                                            <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400">📖</div>
+                                                                            <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400">≡ƒôû</div>
                                                                             <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Description Suggestion (v2.2)</h4>
                                                                         </div>
                                                                         <div className="text-sm text-slate-200 mb-5 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5 italic">
@@ -1719,7 +1511,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                         } catch (e) {
                                                             return (
                                                                 <div key={mIdx} className="text-[10px] text-red-400 bg-red-900/10 p-4 rounded-xl border border-red-500/30">
-                                                                    ⚠️ Parsing Failure in JSON block.
+                                                                    ΓÜá∩╕Å Parsing Failure in JSON block.
                                                                 </div>
                                                             );
                                                         }
@@ -1761,86 +1553,6 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
-    );
-}, (prevProps, nextProps) => {
-    return prevProps.item === nextProps.item && prevProps.isLoaded === nextProps.isLoaded && prevProps.isMulti === nextProps.isMulti;
-});
-
-export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, mapSets, onSave }: any) {
-    if (editingId === null) return null;
-
-    const renderMode = editingId === 'all' ? 'all' : 'single';
-    const activeItems = renderMode === 'all'
-        ? files.map((f: any, i: number) => ({ item: f, idx: i }))
-        : [{ item: files[editingId], idx: editingId as number }];
-
-    return (
-        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col overflow-hidden">
-            {/* Sticky top bar */}
-            <div className="shrink-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-[60] px-6 py-3 flex justify-between items-center shadow-2xl">
-                <div className="flex items-center gap-6">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <span className="p-1.5 bg-blue-600/20 rounded-lg text-blue-400">🚀</span>
-                        {renderMode === 'all'
-                            ? `Editing ${files.length} Locations Concurrently`
-                            : `Edit Location: ${activeItems[0]?.item?.file?.name || activeItems[0]?.item?.photographer || "Unnamed"}`}
-                    </h2>
-                    {renderMode !== 'all' && (
-                        <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-inner">
-                            <button
-                                onClick={() => setEditingId(Math.max(0, (editingId as number) - 1))}
-                                disabled={editingId === 0}
-                                className="px-4 py-2 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold border-r border-gray-700 transition-colors"
-                            >
-                                ← PREV
-                            </button>
-                            <span className="px-4 py-2 text-xs font-mono text-gray-400 bg-black/20">
-                                {(editingId as number) + 1} / {files.length}
-                            </span>
-                            <button
-                                onClick={() => setEditingId(Math.min(files.length - 1, (editingId as number) + 1))}
-                                disabled={editingId === files.length - 1}
-                                className="px-4 py-2 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold transition-colors"
-                            >
-                                NEXT →
-                            </button>
-                        </div>
-                    )}
-                </div>
-                <div className="flex items-center gap-4">
-                    {renderMode === 'all' && (
-                        <span className="text-xs text-gray-400 font-mono bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
-                            Scroll ↕ to switch between locations
-                        </span>
-                    )}
-                    <button
-                        onClick={() => setEditingId(null)}
-                        className="px-6 py-2 bg-red-600/20 hover:bg-red-600 hover:text-white rounded-lg text-red-400 font-black border border-red-500/50 text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95 flex items-center gap-2"
-                    >
-                        <span>×</span> Exit Editor
-                    </button>
-                </div>
-            </div>
-
-            {/* Main content area — scrollable list of editors */}
-            <div className={renderMode === 'all'
-                ? 'flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-10 p-6'
-                : 'flex-1 overflow-hidden p-4'
-            }>
-                {activeItems.map((entry: { item: any; idx: number }) => (
-                    <SingleLocationEditor
-                        key={entry.item.id}
-                        item={entry.item}
-                        editingIdx={entry.idx}
-                        setFiles={setFiles}
-                        isLoaded={isLoaded}
-                        mapSets={mapSets}
-                        onSave={onSave}
-                        isMulti={renderMode === 'all'}
-                    />
-                ))}
             </div>
         </div>
     );

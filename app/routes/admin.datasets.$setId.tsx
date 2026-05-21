@@ -1,9 +1,9 @@
 import { Form, Link, useLoaderData, useFetcher } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { requireDeveloper } from "~/lib/auth.server";
+import { requireTeacher } from "~/lib/auth.server";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
-    await requireDeveloper(request);
+    await requireTeacher(request);
     const setId = params.setId;
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
@@ -31,7 +31,7 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params, context }: ActionFunctionArgs) {
-    await requireDeveloper(request);
+    await requireTeacher(request);
     const setId = params.setId;
     const formData = await request.formData();
     const intent = formData.get("intent");

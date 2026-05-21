@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from 'react-router';
-import { analyzeImageQuality, chatWithGemini, classifyBatchImages } from '~/lib/gemini.server';
+import { analyzeImageQuality, chatWithGemini, classifyBatchImages, findRealLocationPhoto } from '~/lib/gemini.server';
 
 // Server-side Action for Mass Add
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -86,6 +86,26 @@ export async function action({ request, context }: ActionFunctionArgs) {
             return Response.json({ success: true, validIndices });
         } catch (e: any) {
             console.error("[MassAdd API] classify_batch failed:", e);
+            return Response.json({ success: false, error: e.message }, { status: 500 });
+        }
+    }
+
+    if (intent === 'filter_target_image') {
+        try {
+            const imagesJson = formData.get('images') as string;
+            const images = JSON.parse(imagesJson) as { mimeType: string; data: string }[];
+            
+            console.log(`[MassAdd API] Filtering target photo from batch of ${images.length} candidate images`);
+            const { best_index, confidence } = await findRealLocationPhoto(
+                images,
+                env.GEMINI_BASE_URL,
+                env.GEMINI_GATEWAY_TOKEN,
+                env.GEMINI_API_KEY
+            );
+            
+            return Response.json({ success: true, bestIndex: best_index, confidence });
+        } catch (e: any) {
+            console.error("[MassAdd API] filter_target_image failed:", e);
             return Response.json({ success: false, error: e.message }, { status: 500 });
         }
     }

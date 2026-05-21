@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs } from "react-router";
-import { requireDeveloper } from "~/lib/auth.server";
+import { requireTeacher } from "~/lib/auth.server";
 import { autoDetectMapEvidence } from "~/lib/gemini.server";
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -8,7 +8,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     try {
-        await requireDeveloper(request);
+        await requireTeacher(request);
     } catch (e) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
     }

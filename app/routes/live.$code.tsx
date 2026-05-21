@@ -4,6 +4,14 @@ import { requireUser } from "~/lib/auth.server";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
 import { useSound } from "~/lib/useSound";
+import { HighPrecisionTimeAttackHUD } from "~/components/game/TimeAttackHUD";
+import { ResultPanel } from "~/components/game/ResultPanel";
+import { ActionBar } from "~/components/game/ActionBar";
+import { GameMap } from "~/components/game/GameMap";
+import { Compass } from "~/components/game/Compass";
+import { PlayerHUD } from "~/components/game/PlayerHUD";
+import { getRoomByCode, getRoomParticipants, getRoomGuessRecord, getRoomGuessCount } from "~/models/room.server";
+import { getDefaultSimulationLocation, getLocationById, getMapEvidenceByLocation, getMapSetItemsCount, getMapSetItemByIndex } from "~/models/location.server";
 import type { BoxCoordinates } from "~/types/shared";
 
 export async function loader({ request, params, context }: any) {
@@ -13,18 +21,14 @@ export async function loader({ request, params, context }: any) {
     const db = env.DB as D1Database;
 
     // 1. Get Room & Current Round to check for existing submission
-    const room = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first<any>();
+    const room = await getRoomByCode(db, code);
     let existingGuess = null;
 
     if (room && room.status !== 'WAITING') {
-        const item = await db.prepare(
-            "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-        ).bind(room.map_set_id, room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index).first<any>();
+        const item = await getMapSetItemByIndex(db, room.map_set_id, room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index);
 
         if (item) {
-            const guessRecord = await db.prepare(
-                "SELECT * FROM room_guesses WHERE room_code = ? AND location_id = ? AND user_id = ?"
-            ).bind(code, item.location_id, userId).first<any>();
+            const guessRecord = await getRoomGuessRecord(db, code, item.location_id, userId);
 
             if (guessRecord) {
                 let aiFeedback = null;
@@ -50,41 +54,31 @@ export async function loader({ request, params, context }: any) {
     // 2. Build initial room state (mirrors api.room.$code.status logic)
     let initialRoomState = null;
     if (room) {
-        const [participantsResult, mapSetInfo] = await Promise.all([
-            db.prepare(`
-                SELECT rp.*, u.display_name, u.profile_picture_url 
-                FROM room_participants rp
-                JOIN users u ON rp.user_id = u.id
-                WHERE rp.room_code = ? 
-                ORDER BY rp.score DESC
-            `).bind(code).all<any>(),
+        const [participants, mapSetInfo] = await Promise.all([
+            getRoomParticipants(db, code),
             room.map_set_id ? Promise.all([
-                db.prepare("SELECT COUNT(*) as count FROM map_set_items WHERE set_id = ?").bind(room.map_set_id).first<any>(),
-                db.prepare(
-                    "SELECT location_id FROM map_set_items WHERE set_id = ? ORDER BY order_index ASC LIMIT 1 OFFSET ?"
-                ).bind(room.map_set_id, room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index).first<any>()
+                getMapSetItemsCount(db, room.map_set_id),
+                getMapSetItemByIndex(db, room.map_set_id, room.has_guided_playthrough && room.current_index > 0 ? room.current_index - 1 : room.current_index)
             ]) : Promise.resolve([null, null])
         ]);
-        const participants = participantsResult.results || [];
-        const [total, item2] = mapSetInfo;
+        const [totalCount, item2] = mapSetInfo;
         let currentRound = null;
 
         const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
 
         if (isGuidedRound) {
-            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            const defaultSim = await getDefaultSimulationLocation(db);
             if (defaultSim) {
-                const totalResult = total || { count: 0 };
                 const [location, allEvidence] = await Promise.all([
-                    db.prepare("SELECT * FROM locations WHERE id = ?").bind(defaultSim.id).first<any>(),
-                    db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(defaultSim.id).all<any>()
+                    getLocationById(db, defaultSim.id),
+                    getMapEvidenceByLocation(db, defaultSim.id)
                 ]);
                 let evidence: any[] = [];
-                if (room.status === 'REVIEW' || isGuidedRound) evidence = allEvidence.results || [];
-                const evidenceCount = allEvidence.results?.length || 0;
+                if (room.status === 'REVIEW' || isGuidedRound) evidence = allEvidence || [];
+                const evidenceCount = allEvidence?.length || 0;
                 currentRound = {
                     index: room.current_index,
-                    total: (totalResult.count || 0) + 1,
+                    total: (totalCount || 0) + 1,
                     startTime: room.round_start_time,
                     location, evidence, evidenceCount,
                     focusedEvidenceId: room.focused_evidence_id,
@@ -97,22 +91,22 @@ export async function loader({ request, params, context }: any) {
             const realItem = item2;
             if (realItem) {
                 const targetLocationId = realItem.location_id;
-                const [location, allEvidence, submissionCountResult] = await Promise.all([
-                    db.prepare("SELECT * FROM locations WHERE id = ?").bind(targetLocationId).first<any>(),
-                    db.prepare("SELECT * FROM map_evidence WHERE location_id = ?").bind(targetLocationId).all<any>(),
-                    db.prepare("SELECT COUNT(*) as count FROM room_guesses WHERE room_code = ? AND location_id = ?").bind(code, targetLocationId).first<any>()
+                const [location, allEvidence, submissionCount] = await Promise.all([
+                    getLocationById(db, targetLocationId),
+                    getMapEvidenceByLocation(db, targetLocationId),
+                    getRoomGuessCount(db, code, targetLocationId)
                 ]);
                 let evidence: any[] = [];
-                if (room.status === 'REVIEW') evidence = allEvidence.results || [];
-                const evidenceCount = allEvidence.results?.length || 0;
-                const totalRounds = room.has_guided_playthrough ? (total?.count || 0) + 1 : (total?.count || 0);
+                if (room.status === 'REVIEW') evidence = allEvidence || [];
+                const evidenceCount = allEvidence?.length || 0;
+                const totalRounds = room.has_guided_playthrough ? (totalCount || 0) + 1 : (totalCount || 0);
                 currentRound = {
                     index: room.current_index,
                     total: totalRounds,
                     startTime: room.round_start_time,
                     location, evidence, evidenceCount,
                     focusedEvidenceId: room.focused_evidence_id,
-                    submissionCount: submissionCountResult?.count || 0,
+                    submissionCount: submissionCount,
                     timeLimit: room.time_limit || 120,
                     isGuidedRound: false
                 };
@@ -124,90 +118,7 @@ export async function loader({ request, params, context }: any) {
     return { code, userId, mapsApiKey: env.GOOGLE_MAPS_API_KEY, existingGuess, initialRoomState };
 }
 
-function HighPrecisionTimeAttackHUD({ currentRound, room, serverClockOffsetRef, submittedAtSeconds, result, hasScoreMultiplier }: any) {
-    const timeLimit = currentRound?.timeLimit || 120;
-    const taMax = room?.ta_max_multiplier ?? 2.0;
-    const taMin = room?.ta_min_multiplier ?? 0.5;
-    const graceSec = room?.ta_grace_period ?? 30;
-
-    const START_GRACE = Math.min(graceSec, Math.floor(timeLimit * 0.25));
-    const END_GRACE = Math.min(graceSec, Math.floor(timeLimit * 0.25));
-    const DECAY_WINDOW = Math.max(1, timeLimit - START_GRACE - END_GRACE);
-
-    const [displayMultiplier, setDisplayMultiplier] = useState(taMax);
-    const [progress, setProgress] = useState(100);
-    const [graceRemaining, setGraceRemaining] = useState(START_GRACE);
-
-    useEffect(() => {
-        let animationFrameId: number;
-
-        const updateMultiplier = () => {
-            const currentSeconds = Math.max(0, (Date.now() - serverClockOffsetRef.current - currentRound.startTime) / 1000);
-            const finalSeconds = submittedAtSeconds !== null ? submittedAtSeconds : currentSeconds;
-            
-            let active = taMax;
-            if (result?.baseTimeMultiplier !== undefined) {
-                active = result.baseTimeMultiplier;
-            } else if (finalSeconds > START_GRACE) {
-                if (finalSeconds >= timeLimit - END_GRACE) active = taMin;
-                else active = taMax - ((taMax - taMin) * ((finalSeconds - START_GRACE) / DECAY_WINDOW));
-            }
-            
-            setDisplayMultiplier(active);
-            setProgress(Math.max(0, ((active - taMin) / (taMax - taMin)) * 100));
-            setGraceRemaining(Math.max(0, START_GRACE - finalSeconds));
-
-            if (submittedAtSeconds === null && result === null) {
-                animationFrameId = requestAnimationFrame(updateMultiplier);
-            }
-        };
-
-        animationFrameId = requestAnimationFrame(updateMultiplier);
-        return () => cancelAnimationFrame(animationFrameId);
-    }, [submittedAtSeconds, result, serverClockOffsetRef, currentRound.startTime, timeLimit, taMax, taMin, START_GRACE, END_GRACE, DECAY_WINDOW]);
-
-    const multiplierColor = displayMultiplier > 1.5 ? '#3b82f6' : displayMultiplier > 1.0 ? '#eab308' : '#ef4444';
-
-    return (
-        <div className="flex flex-col items-center pointer-events-none w-full w-full">
-            {graceRemaining > 0 && (
-                <div className="mb-2 bg-blue-500/20 border border-blue-400/50 text-blue-200 px-3 py-0.5 rounded-full text-[10px] uppercase font-black tracking-widest backdrop-blur-md animate-pulse">
-                    Multiplier Locked For: {graceRemaining.toFixed(1)}s
-                </div>
-            )}
-            
-            {/* Liquid Glass Dynamic Bar */}
-            <div className={`w-full bg-slate-900/60 backdrop-blur-xl rounded-full border border-slate-500/30 h-8 relative overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.8)] ${hasScoreMultiplier ? 'ring-2 ring-orange-500/50' : ''}`}>
-                
-                {/* Retracting Fluid Core */}
-                <div 
-                    className="absolute top-0 left-0 h-full rounded-full flex items-center pr-3 overflow-hidden shadow-[inset_0_-2px_8px_rgba(0,0,0,0.6)]"
-                    style={{
-                        width: `${progress}%`,
-                        background: hasScoreMultiplier 
-                            ? 'linear-gradient(90deg, rgba(234,88,12,0.8), rgba(251,146,60,0.9))' 
-                            : `linear-gradient(90deg, ${multiplierColor}60 0%, ${multiplierColor}cc 100%)`,
-                        boxShadow: `0 0 15px ${hasScoreMultiplier ? '#f97316' : multiplierColor}`
-                    }}
-                >
-                    <div className="ml-auto w-1 h-3/4 rounded-full bg-white animate-pulse shadow-[0_0_5px_white]" />
-                </div>
-
-                {/* Normal High-Precision Text Overlay */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 font-mono tracking-widest text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
-                    <div className="text-sm md:text-base font-black uppercase text-shadow">
-                        {displayMultiplier.toFixed(4)}x {hasScoreMultiplier && <span className="text-orange-400 ml-1 text-[10px] tracking-normal mb-1 inline-block drop-shadow-md">(OVERCLOCKED)</span>}
-                    </div>
-                </div>
-            </div>
-            
-            <div className="mt-1 flex justify-between w-full px-2 font-mono">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Min: {taMin.toFixed(1)}x</span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Max: {taMax.toFixed(1)}x</span>
-            </div>
-        </div>
-    );
-}
+// Extracted HighPrecisionTimeAttackHUD to ~/components/game/TimeAttackHUD
 
 export default function StudentLiveGame() {
     const { code, userId, mapsApiKey, existingGuess, initialRoomState } = useLoaderData() as any;
@@ -294,16 +205,7 @@ export default function StudentLiveGame() {
         }
     };
 
-    const SUPERPOWER_DESCRIPTIONS: Record<string, string> = {
-        'gps_scrambler': 'Inverts opponent map controls. Tap again to cast!',
-        'intel_corruptor': 'Scrambles opponent evidence. Tap again to cast!',
-        'emp_blackout': 'Full-screen blindness. Tap again to cast!',
-        'multiplier_leech': 'Steals multiplier from top player. Tap again to cast!',
-        'aegis_reflection': 'Reflects the next attack back. Tap again to cast!',
-        'chrono_freeze': 'Pauses your score multiplier decay. Tap again to cast!',
-        'quantum_triangulation': 'Reveals a 500m target zone. Tap again to cast!',
-        'ironclad_lockdown': 'Max multiplier on next submit. Tap again to cast!'
-    };
+    // Extracted SUPERPOWER_DESCRIPTIONS to ~/components/game/ActionBar
 
     const hasAegisRef = useRef(hasAegis);
     useEffect(() => { hasAegisRef.current = hasAegis; }, [hasAegis]);
@@ -1302,196 +1204,26 @@ export default function StudentLiveGame() {
                     ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full"}`}
                 style={layoutMode !== "result" ? { flexBasis: `${splitRatio}%` } : {}}
             >
-                {/* Header / Timer & Hints */}
-                {room.status === 'PLAYING' && (
-                    <div className="absolute top-0 inset-x-0 z-[60] p-4 flex justify-between items-start pointer-events-none">
-                        <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex flex-col items-center mx-auto pointer-events-auto">
-                            <div suppressHydrationWarning className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${(currentRound && ((currentRound.timeLimit || 120) - secondsElapsed) < 30) ? 'text-red-500 animate-pulse' : 'text-white'}`}>
-                                {currentRound ? (
-                                    <>
-                                        {Math.floor(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) / 60)}:{(Math.max(0, (currentRound.timeLimit || 120) - secondsElapsed) % 60).toString().padStart(2, '0')}
-                                    </>
-                                ) : "--:--"}
-                            </div>
-                            {/* Hint Timer - Only show if hints remaining */}
-                            {currentRound && (Math.floor(secondsElapsed / (room.hint_interval || 30)) + 1) <= hintList.length && (
-                                <div className="flex items-center gap-2 mt-1">
-                                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-                                    <span className="text-[10px] text-yellow-100 font-mono uppercase">
-                                        Hint in {Math.max(0, (room.hint_interval || 30) - (secondsElapsed % (room.hint_interval || 30)))}s
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* [UI] REWARD ROUND BANNER */}
-                        {currentRound?.isRewardRound && (
-                            <div className="absolute top-20 inset-x-0 flex justify-center pointer-events-none">
-                                <div className="bg-gradient-to-r from-yellow-600 to-amber-600 px-6 py-1.5 rounded-full border-2 border-yellow-400 shadow-[0_0_20px_rgba(251,191,36,0.5)] animate-bounce pointer-events-auto">
-                                    <span className="text-[10px] font-black text-white uppercase tracking-[0.3em] flex items-center gap-2">
-                                        <span className="text-sm">🔥</span> REWARD ROUND: 2X POINTS <span className="text-sm">🔥</span>
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-
-                    </div>
-                )}
-
-                {/* Intro Splash */}
-                {introStage < 3 && location && (
-                    <div className={`absolute inset-0 z-50 flex items-center justify-center pointer-events-none transition-all duration-1000 ease-in-out bg-black/60 backdrop-blur-xl ${introStage === 2 ? 'opacity-0' : 'opacity-100'}`}>
-                        <div className="text-center">
-                            <div className="mb-2 text-[10px] font-mono text-blue-300 tracking-widest uppercase">Incoming Transmission</div>
-                            <h1 className="text-6xl font-black text-white tracking-tighter mb-2">SECTOR {location.id?.slice(-4).toUpperCase()}</h1>
-                            <div className="text-4xl font-black text-yellow-400">{"★".repeat(Math.ceil((location.difficulty_rating || 1) / 2))}</div>
-                            <div className="mt-2 text-[10px] font-mono font-bold text-blue-300 uppercase tracking-widest border border-blue-500/30 px-2 py-1 rounded bg-blue-500/10 inline-block">
-                                {currentRound.evidenceCount || 0} Intel Items
-                            </div>
-                            {currentRound?.isRewardRound && (
-                                <div className="mt-4 animate-bounce">
-                                    <div className="bg-yellow-500 text-black px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest">
-                                        💰 Reward Round: 2X Points!
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* STRICT GAME MODE ACKNOWLEDGMENT (Only on Round 1) */}
-                {room.status === 'PLAYING' && currentRound?.index === 0 && !hasAcknowledgedRules && (
-                    <div className="absolute inset-0 z-[100] bg-slate-900/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center animate-in slide-in-from-bottom-10 pointer-events-auto">
-                        <div className="max-w-2xl w-full bg-black border border-white/20 rounded-3xl p-8 md:p-12 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
-                            <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">MISSION BRIEFING</h2>
-                            <div className="w-16 h-2 bg-blue-500 mx-auto mb-8 rounded-full" />
-                            
-                            {room.game_mode === 'time_attack' && (
-                                <div className="space-y-4">
-                                    <h3 className="text-2xl font-black text-blue-400 uppercase tracking-widest flex justify-center items-center gap-2"><span>⏰</span> Time Attack Mode</h3>
-                                    <p className="text-lg text-slate-300 leading-relaxed font-medium">Speed is your greatest asset. Confirm coordinates within the first 30 seconds for a <span className="text-green-400 font-bold">2.0x score multiplier</span>. Delaying your submission will linearly incur penalties down to <span className="text-red-500 font-bold">0.5x</span>.</p>
-                                </div>
-                            )}
-                            {room.game_mode === 'teams' && (
-                                <div className="space-y-4">
-                                    <h3 className="text-2xl font-black text-green-400 uppercase tracking-widest flex justify-center items-center gap-2"><span>🛡️</span> Squad Battle</h3>
-                                    <p className="text-lg text-slate-300 leading-relaxed font-medium">Your individual performance fuels your Squad's total score. Communicate verbally with your team, use your sabotage powers strategically, and outscore rival factions.</p>
-                                </div>
-                            )}
-                            {(room.game_mode === 'standard' || !room.game_mode) && (
-                                <div className="space-y-4">
-                                    <h3 className="text-2xl font-black text-white uppercase tracking-widest flex justify-center items-center gap-2"><span>🎯</span> Classic Solo</h3>
-                                    <p className="text-lg text-slate-300 leading-relaxed font-medium">Score high by accurately placing pins on the map and identifying critical intel from the image. Only one agent will stand on the final podium.</p>
-                                </div>
-                            )}
-
-                            <button 
-                                onClick={() => setHasAcknowledgedRules(true)}
-                                className="mt-12 w-full py-6 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xl uppercase tracking-widest shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 active:scale-95"
-                            >
-                                I ACKNOWLEDGE GAME MODE
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- TUTORIAL OVERLAY --- */}
-                {room.has_guided_playthrough === 1 && currentRound.index === 0 && tutorialStep > 0 && tutorialStep < 8 && (
-                    <div className="absolute inset-0 z-[70] pointer-events-none flex flex-col items-center justify-end pb-12">
-                        <div className="bg-blue-600/90 backdrop-blur-xl border-2 border-blue-400 p-6 rounded-2xl max-w-md shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-10">
-                            <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2 flex items-center gap-2">
-                                <span>🎓</span> Simulation Guide
-                            </h3>
-                            <p className="text-blue-100 text-sm mb-6 leading-relaxed font-medium">
-                                {tutorialStep === 1 && "Welcome Agent. Before we begin, let's review our Intelligence Tools. Your objective is to lock onto the precise GPS coordinates of this image."}
-                                {tutorialStep === 2 && "First, analyze the image. Click 'Enable Scanner' (top right) and draw a box over a distinct clue you see (e.g., an architectural feature or street sign)."}
-                                {tutorialStep === 3 && "Excellent. Marking evidence gives you an Evidence Bonus when HQ reviews your report. The more accurate, the higher the bonus."}
-                                {tutorialStep === 4 && "Keep an eye on the Hints deployed periodically at the top left. Also, use the Energy Bar at the bottom to deploy abilities like 'Jammer' against other agents!"}
-                                {tutorialStep === 5 && "If you're lost, you can use the 'Vicinity Scan' below to detect if the target is within your current map bounds."}
-                                {tutorialStep === 6 && "Now, click on the satellite map on the right to place your coordinate pin. Try to be as precise as possible."}
-                                {tutorialStep === 7 && "Finally, click CONFIRM COORDINATES to lock in your submission. High scores are awarded for accuracy within a 100m radius."}
-                            </p>
-                            <div className="flex justify-between items-center">
-                                <div className="flex gap-1">
-                                    {[1, 2, 3, 4, 5, 6, 7].map(s => (
-                                        <div key={s} className={`w-2 h-2 rounded-full ${s === tutorialStep ? 'bg-white' : 'bg-white/30'}`} />
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={() => setTutorialStep(prev => prev + 1)}
-                                    disabled={
-                                        (tutorialStep === 2 && evidenceList.length === 0) ||
-                                        (tutorialStep === 6 && guess === null)
-                                    }
-                                    className={`px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest transition-colors ${((tutorialStep === 2 && evidenceList.length === 0) || (tutorialStep === 6 && guess === null))
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : 'hover:bg-blue-50'
-                                        }`}
-                                >
-                                    {tutorialStep === 7 ? "Begin Operation" : "Next ➔"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Hints Overlay */}
-                {!submitted && visibleHints.length > 0 && (
-                    <div className="absolute bottom-28 left-4 md:bottom-32 md:left-6 z-30 w-[calc(100%-2rem)] max-w-sm space-y-2 pointer-events-none">
-                        {visibleHints.map((hint, i) => (
-                            <div key={i} className={`bg-black/40 backdrop-blur-xl border-l-4 ${isIntelCorrupted ? 'border-purple-600 bg-purple-900/60 animate-pulse' : 'border-yellow-400'} p-3 rounded text-xs text-white animate-in slide-in-from-left-10 shadow-lg`}>
-                                {isIntelCorrupted ? (
-                                    <span className="font-mono text-purple-300 font-bold tracking-widest line-through decoration-wavy opacity-90 blur-[0.5px]">
-                                        👾 ████ ENCRYPTED: PAYLOAD CORRUPTED ████
-                                    </span>
-                                ) : (
-                                    hint
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-
-
-                {/* [UI] Persistent Intel Signal Banner */}
-                {currentRound?.evidenceCount !== undefined && introStage >= 3 && (
-                    <div className="absolute top-20 md:top-24 left-1/2 -translate-x-1/2 z-40 w-max animate-in slide-in-from-top-10 duration-700">
-                        <div className="bg-black/60 backdrop-blur-xl border border-blue-500/40 px-6 py-2 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.3)] flex flex-col items-center">
-                            <div className="flex items-center gap-3">
-                                <div className="relative">
-                                    <span className="text-xl">📡</span>
-                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-ping" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] leading-none mb-1">Scan Results</span>
-                                    <span className="text-sm font-black text-white uppercase tracking-tighter tabular-nums">
-                                        {currentRound.evidenceCount} <span className="text-blue-300/80">Intel Signals Detected</span>
-                                    </span>
-                                </div>
-                            </div>
-                            {/* Progress bar / pulse effect */}
-                            <div className="mt-1.5 w-full h-0.5 bg-blue-900/40 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-500 animate-[shimmer_2s_infinite] w-1/3" />
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Mode Toggle */}
-                {!submitted && (
-                    <div className="absolute top-4 right-4 md:top-6 md:right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
-                        <button 
-                            onClick={() => setIsEvidenceMode(!isEvidenceMode)} 
-                            className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'} ${currentRound?.isGuidedRound && tutorialStep === 2 && !isEvidenceMode ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}
-                        >
-                            {isEvidenceMode ? "Scanner Active" : "Enable Scanner"}
-                        </button>
-                        <div className="text-[9px] font-bold text-blue-300 uppercase tracking-widest bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
-                            Extra marks for novel discoveries! 🗃️
-                        </div>
-                    </div>
-                )}
+                {/* PLAYER HUD OVERLAYS */}
+                <PlayerHUD 
+                    room={room} 
+                    currentRound={currentRound} 
+                    secondsElapsed={secondsElapsed} 
+                    hintList={hintList} 
+                    introStage={introStage} 
+                    location={location}
+                    hasAcknowledgedRules={hasAcknowledgedRules} 
+                    setHasAcknowledgedRules={setHasAcknowledgedRules} 
+                    tutorialStep={tutorialStep} 
+                    setTutorialStep={setTutorialStep}
+                    evidenceList={evidenceList} 
+                    guess={guess} 
+                    submitted={submitted} 
+                    visibleHints={visibleHints} 
+                    isIntelCorrupted={isIntelCorrupted}
+                    isEvidenceMode={isEvidenceMode} 
+                    setIsEvidenceMode={setIsEvidenceMode}
+                />
 
                 {/* Tutorial Column 1 Blur Overlay */}
                 {!submitted && currentRound?.isGuidedRound && (tutorialStep === 1 || tutorialStep === 3 || tutorialStep === 4) && (
@@ -1648,260 +1380,48 @@ export default function StudentLiveGame() {
             )}
 
             {/* COLUMN 2: MAP */}
-            <div
-                className={`relative h-full md:h-full bg-slate-900 border-r border-white/10 ${isMapScrambled ? 'saturate-200 invert hue-rotate-180 blur-[2px] scale-y-[-1]' : ''}
-                    ${layoutMode === "result" ? "hidden md:block md:w-[40%]" : "w-full"}`}
-                style={layoutMode !== "result" ? { flexBasis: `${100 - splitRatio}%` } : {}}
-            >    <div ref={mapRef} className="w-full h-full relative z-0" />
-
-                {/* Tutorial Column 2 Blur Overlay */}
-                {!submitted && currentRound?.isGuidedRound && (tutorialStep >= 1 && tutorialStep <= 5) && (
-                    <div className="absolute inset-0 z-[65] bg-black/60 backdrop-blur-md transition-all duration-500" />
-                )}
-
-                {/* SYNCHRONIZED DRAWING LAYER */}
-                <canvas
-                    ref={mapCanvasRef}
-                    className="absolute inset-0 w-full h-full pointer-events-none z-10 mix-blend-screen"
-                />
-
-                {
-                    !submitted && !isTimeUp ? (
-                        <>
-                            {/* Vicinity Scan Button */}
-                            {!submitted && isVicinityScanAvailable && !hasZoomed && (
-                                <div className="absolute bottom-[280px] md:bottom-[220px] left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-20">
-                                    {isTargetInRange ? (
-                                        <div className="w-full py-3 bg-red-500/20 text-red-300 border border-red-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 animate-in fade-in transition-all">
-                                            <span className="text-lg">📶</span>
-                                            Signal Strong • Scan Disabled
-                                        </div>
-                                    ) : (
-                                        <button
-                                            onClick={handleVicinityScan}
-                                            className="w-full py-3 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 animate-pulse"
-                                        >
-                                            <span className="text-lg">📡</span>
-                                            Initiate Vicinity Scan
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* [UI] TIME ATTACK BURN BAR */}
-                            {room.game_mode === 'time_attack' && (
-                                <div className="absolute bottom-[210px] md:bottom-[170px] left-1/2 -translate-x-1/2 w-full max-w-sm px-4 z-[9990] pointer-events-none">
-                                    <HighPrecisionTimeAttackHUD 
-                                        currentRound={currentRound} 
-                                        room={room}
-                                        serverClockOffsetRef={serverClockOffsetRef} 
-                                        submittedAtSeconds={submittedAtSeconds} 
-                                        result={result} 
-                                        hasScoreMultiplier={hasScoreMultiplier} 
-                                    />
-                                </div>
-                            )}
-
-                            <div className="absolute bottom-[130px] md:bottom-[100px] left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-                                <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'} ${currentRound?.isGuidedRound && tutorialStep === 7 ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}>
-                                    CONFIRM COORDINATES
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        room.status === 'PLAYING' && (
-                            <div className="absolute bottom-10 md:bottom-6 left-6 right-6 z-10">
-                                {actionFetcher.state !== "idle" ? (
-                                    <div className="border font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5 bg-yellow-500/20 text-yellow-400 border-yellow-500/50">
-                                        <div className="text-xs uppercase tracking-widest mb-1 text-yellow-300">Target Acquired</div>
-                                        <div className="text-lg font-black animate-pulse">SENDING AI TO HQ...</div>
-                                        <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">AI is generating your map analysis...</div>
-                                    </div>
-                                ) : actionFetcher.data?.aiFeedback ? (
-                                    <div className="border font-bold p-4 rounded-xl shadow-lg backdrop-blur-3xl animate-in slide-in-from-bottom-5 bg-slate-900/95 text-slate-200 border-blue-500/50 max-h-[40vh] overflow-y-auto pointer-events-auto">
-                                        <div className="text-[10px] font-black uppercase tracking-widest mb-3 text-blue-400 border-b border-white/10 pb-2 flex justify-between items-center">
-                                            <span>HQ AI Preliminary Report</span>
-                                            <span className="text-emerald-400">AWAITING REVIEW</span>
-                                        </div>
-                                        {actionFetcher.data.aiFeedback.results?.length > 0 ? (
-                                            <div className="space-y-3">
-                                                {actionFetcher.data.aiFeedback.results.map((r: any, idx: number) => (
-                                                    <div key={idx} className="bg-black/40 p-3 rounded-lg border border-white/5 relative overflow-hidden">
-                                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${r.validity >= 0.7 ? "bg-green-500" : (r.validity >= 0.4 ? "bg-yellow-500" : "bg-red-500")}`} />
-                                                        <div className="text-white text-xs font-bold pl-2">{r.description || "Unknown Intel"}</div>
-                                                        <div className="text-slate-400 text-[10px] mt-1 pl-2 leading-relaxed font-normal">{r.explanation}</div>
-                                                        <div className="mt-2 pl-2 text-[10px] font-black uppercase flex items-center gap-2">
-                                                            <span className={r.validity >= 0.7 ? "text-green-400" : (r.validity >= 0.4 ? "text-yellow-400" : "text-red-400")}>
-                                                                CONFIDENCE: {Math.round(r.validity * 100)}%
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="text-sm p-4 text-center text-slate-400 font-normal">
-                                                No recognizable intel items detected in your scan.
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="border font-bold p-4 rounded-xl text-center shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-5 bg-emerald-500/20 text-emerald-400 border-emerald-500/50">
-                                        <div className="text-xs uppercase tracking-widest mb-1 text-emerald-300">Target Acquired</div>
-                                        <div className="text-lg font-black">LOCKED IN</div>
-                                        <div className="text-[10px] font-mono opacity-70 mt-1 uppercase">Transmission Secure. Awaiting Mission Control...</div>
-                                    </div>
-                                )}
-                            </div>
-                        )
-                    )
-                }
-            </div >
+            <GameMap
+                layoutMode={layoutMode}
+                isMapScrambled={isMapScrambled}
+                splitRatio={splitRatio}
+                mapRef={mapRef}
+                mapCanvasRef={mapCanvasRef}
+                submitted={submitted}
+                isTimeUp={isTimeUp}
+                currentRound={currentRound}
+                tutorialStep={tutorialStep}
+                isVicinityScanAvailable={isVicinityScanAvailable}
+                hasZoomed={hasZoomed}
+                isTargetInRange={isTargetInRange}
+                handleVicinityScan={handleVicinityScan}
+                room={room}
+                serverClockOffsetRef={serverClockOffsetRef}
+                submittedAtSeconds={submittedAtSeconds}
+                result={result}
+                hasScoreMultiplier={hasScoreMultiplier}
+                guess={guess}
+                handleSubmit={handleSubmit}
+                actionFetcher={actionFetcher}
+            />
 
             {/* ACTION BAR (Bottom Center Global) */}
-            {room.status === 'PLAYING' && !submitted && (
-                <div className="absolute bottom-10 md:bottom-6 left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center gap-2 w-[95%] sm:w-auto">
-                    {/* Tooltip for Double Tap */}
-                    {previewPowerId && (
-                        <div className="bg-slate-900/95 backdrop-blur-xl border border-yellow-500/50 text-white text-[10px] sm:text-xs font-bold px-4 py-2 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.4)] animate-bounce relative uppercase tracking-widest text-center">
-                            {SUPERPOWER_DESCRIPTIONS[previewPowerId]}
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-solid border-t-slate-900/95 border-t-6 border-x-transparent border-x-6 border-b-0"></div>
-                        </div>
-                    )}
-
-                    <div className="flex w-full sm:w-auto items-center gap-4 bg-slate-950/90 backdrop-blur-2xl border border-white/10 px-6 py-3 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.8)] border-b-4 border-b-slate-800">
-                        <div className="flex flex-col items-center border-r border-white/20 pr-4">
-                            <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest drop-shadow-[0_0_10px_rgba(234,179,8,0.8)]">Energy</span>
-                            <span className="text-xl font-black font-mono text-yellow-400">{localEnergy}/200</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-4 sm:flex sm:flex-wrap md:flex-nowrap gap-1 md:gap-2 justify-center max-h-[140px] overflow-y-auto pr-1">
-                            {/* OFFENSIVE */}
-                            {availablePowers.offensive.includes('gps_scrambler') && (
-                                <button 
-                                    disabled={localEnergy < 30} title="Scramble Map"
-                                    onClick={() => handlePowerTap('gps_scrambler', 30, activatePower)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 30 ? (previewPowerId === 'gps_scrambler' ? 'bg-indigo-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'bg-indigo-600/80 hover:bg-indigo-500 text-white border-indigo-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">🗺️</span> Scramble(30)
-                                </button>
-                            )}
-                            {availablePowers.offensive.includes('intel_corruptor') && (
-                                <button 
-                                    disabled={localEnergy < 50} title="Intel Corruptor"
-                                    onClick={() => handlePowerTap('intel_corruptor', 50, activatePower)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 50 ? (previewPowerId === 'intel_corruptor' ? 'bg-purple-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(168,85,247,0.8)]' : 'bg-purple-600/80 hover:bg-purple-500 text-white border-purple-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">👾</span> Corrupt(50)
-                                </button>
-                            )}
-                            {availablePowers.offensive.includes('emp_blackout') && (
-                                <button 
-                                    disabled={localEnergy < 80} title="EMP Blackout"
-                                    onClick={() => handlePowerTap('emp_blackout', 80, activatePower)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 80 ? (previewPowerId === 'emp_blackout' ? 'bg-slate-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(100,116,139,0.8)]' : 'bg-slate-700/80 hover:bg-slate-600 text-white border-slate-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">⚡</span> EMP(80)
-                                </button>
-                            )}
-                            {availablePowers.offensive.includes('multiplier_leech') && (
-                                <button 
-                                    disabled={localEnergy < 100} title="Multiplier Leech"
-                                    onClick={() => handlePowerTap('multiplier_leech', 100, activatePower)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 100 ? (previewPowerId === 'multiplier_leech' ? 'bg-rose-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(244,63,94,0.8)]' : 'bg-rose-600/80 hover:bg-rose-500 text-white border-rose-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">🧛</span> Leech(100)
-                                </button>
-                            )}
-                            
-                            {/* DEFENSIVE */}
-                            {availablePowers.defensive.includes('aegis_reflection') && (
-                                <button 
-                                    disabled={localEnergy < 60 || hasAegis} title="Aegis Reflection"
-                                    onClick={() => handlePowerTap('aegis_reflection', 60, activateSelfBuff)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 60 && !hasAegis ? (previewPowerId === 'aegis_reflection' ? 'bg-cyan-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(6,182,212,0.8)]' : 'bg-cyan-600/80 hover:bg-cyan-500 text-white border-cyan-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">🛡️</span> Aegis(60)
-                                </button>
-                            )}
-                            {availablePowers.defensive.includes('chrono_freeze') && (
-                                <button 
-                                    disabled={localEnergy < 120 || hasChronoFreeze} title="Chrono Freeze"
-                                    onClick={() => handlePowerTap('chrono_freeze', 120, activateSelfBuff)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 120 && !hasChronoFreeze ? (previewPowerId === 'chrono_freeze' ? 'bg-blue-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(59,130,246,0.8)]' : 'bg-blue-600/80 hover:bg-blue-500 text-white border-blue-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">❄️</span> Freeze(120)
-                                </button>
-                            )}
-                            {availablePowers.defensive.includes('quantum_triangulation') && (
-                                <button 
-                                    disabled={localEnergy < 160 || !!quantumCircle} title="Quantum Triangulation"
-                                    onClick={() => handlePowerTap('quantum_triangulation', 160, activateSelfBuff)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 160 && !quantumCircle ? (previewPowerId === 'quantum_triangulation' ? 'bg-emerald-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-emerald-600/80 hover:bg-emerald-500 text-white border-emerald-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">🎯</span> Triang.(160)
-                                </button>
-                            )}
-                            {availablePowers.defensive.includes('ironclad_lockdown') && (
-                                <button 
-                                    disabled={localEnergy < 200 || hasIroncladLockdown} title="Ironclad Lockdown"
-                                    onClick={() => handlePowerTap('ironclad_lockdown', 200, activateSelfBuff)}
-                                    className={`px-1 py-1 md:px-3 md:py-2 rounded-xl font-bold text-[8px] md:text-[9px] uppercase transition-all shadow-lg border flex flex-col items-center flex-1 ${localEnergy >= 200 && !hasIroncladLockdown ? (previewPowerId === 'ironclad_lockdown' ? 'bg-yellow-500 text-white border-white scale-110 shadow-[0_0_15px_rgba(234,179,8,0.8)]' : 'bg-yellow-600/80 hover:bg-yellow-500 text-white border-yellow-400 hover:scale-105 active:scale-95') : 'bg-slate-800 text-slate-500 border-transparent cursor-not-allowed'}`}
-                                >
-                                    <span className="text-base md:text-xl mb-0.5">🔒</span> Ironclad(200)
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ActionBar
+                room={room}
+                submitted={submitted}
+                previewPowerId={previewPowerId}
+                localEnergy={localEnergy}
+                availablePowers={availablePowers}
+                hasAegis={hasAegis}
+                hasChronoFreeze={hasChronoFreeze}
+                quantumCircle={quantumCircle}
+                hasIroncladLockdown={hasIroncladLockdown}
+                handlePowerTap={handlePowerTap}
+                activatePower={activatePower}
+                activateSelfBuff={activateSelfBuff}
+            />
 
             {/* COMPASS RADAR UI */}
-            {showCompass && location && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] pointer-events-none">
-                    <div className="w-52 h-52 md:w-64 md:h-64 rounded-full border-2 border-emerald-500/60 bg-black/70 backdrop-blur-xl relative flex items-center justify-center"
-                         style={{ animation: 'compassPulse 1.5s ease-in-out infinite' }}>
-                        {/* Concentric Rings */}
-                        <div className="absolute w-3/4 h-3/4 rounded-full border border-emerald-500/20" />
-                        <div className="absolute w-1/2 h-1/2 rounded-full border border-emerald-500/20" />
-                        <div className="absolute w-1/4 h-1/4 rounded-full border border-emerald-500/20" />
-                        {/* Cross-hairs */}
-                        <div className="absolute w-full h-[1px] bg-emerald-500/15" />
-                        <div className="absolute w-[1px] h-full bg-emerald-500/15" />
-                        {/* Sweeping Radar Arm */}
-                        <div className="absolute w-1/2 h-[2px] bg-gradient-to-r from-emerald-400/60 to-transparent origin-left"
-                             style={{ animation: 'compassSweep 2s linear infinite' }} />
-                        {/* Directional Needle — originates from center, points toward target */}
-                        <div className="absolute w-1.5 h-1/2 origin-bottom rounded-t-full"
-                             style={{
-                                 background: 'linear-gradient(to top, #34d399, #10b981)',
-                                 boxShadow: '0 0 15px #34d399, 0 0 30px rgba(52,211,153,0.4)',
-                                 bottom: '50%',
-                                 left: 'calc(50% - 3px)',
-                                 transform: `rotate(${(() => {
-                                     if (!mapInstance) return 0;
-                                     const center = mapInstance.getCenter();
-                                     if (!center) return 0;
-                                     const dy = location.lat - center.lat();
-                                     const dx = location.lng - center.lng();
-                                     return Math.atan2(dx, dy) * (180 / Math.PI);
-                                 })()}deg)`
-                             }}
-                        />
-                        {/* Cardinal Labels */}
-                        <span className="absolute top-2 text-[9px] font-bold text-emerald-300/60 tracking-widest">N</span>
-                        <span className="absolute bottom-2 text-[9px] font-bold text-emerald-300/40 tracking-widest">S</span>
-                        <span className="absolute right-3 text-[9px] font-bold text-emerald-300/40 tracking-widest">E</span>
-                        <span className="absolute left-3 text-[9px] font-bold text-emerald-300/40 tracking-widest">W</span>
-                        {/* Center Dot */}
-                        <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399,0_0_20px_rgba(52,211,153,0.5)] z-10 relative" />
-                    </div>
-                    {/* Label */}
-                    <div className="text-center mt-3">
-                        <div className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em]">Target Compass</div>
-                        <div className="text-[9px] text-emerald-300/50 font-mono">3s Active</div>
-                    </div>
-                </div>
-            )}
+            <Compass showCompass={showCompass} location={location} mapInstance={mapInstance} />
 
             {/* Logout Button */}
             < div className="absolute top-4 left-4 z-50" >
@@ -1968,220 +1488,7 @@ export default function StudentLiveGame() {
             }
 
             {/* Hints Overlay */}
-            {
-                (result && layoutMode === "result") && (
-                    <div className="w-full md:w-[20%] bg-slate-900 border-l border-white/10 overflow-y-auto">
-                        {result.score !== undefined ? (
-                            <div className="p-6">
-                                <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
-                                <p className="text-xs text-green-400 uppercase tracking-widest">Total Score</p>
-                                
-                                <div className="mt-4 bg-black/20 rounded-lg p-3 border border-white/5 space-y-2 text-[10px] md:text-xs">
-                                    <div className="flex justify-between items-center text-slate-300">
-                                        <span className="uppercase tracking-wider">📍 Base Alignment</span>
-                                        <span className="font-mono font-bold text-white">{result.baseDistanceScore || 0}</span>
-                                    </div>
-                                    {(result.baseTimeMultiplier !== undefined && room.game_mode === 'time_attack') && (
-                                        <div className="flex justify-between items-center text-orange-300">
-                                            <span className="uppercase tracking-wider">⏱️ Sub Time Multiplier</span>
-                                            <span className="font-mono font-bold text-white">x{Number(result.baseTimeMultiplier).toFixed(2)}</span>
-                                        </div>
-                                    )}
-                                    {result.powerupActive && (
-                                        <div className="flex justify-between items-center text-pink-400">
-                                            <span className="uppercase tracking-wider">🔥 Overclock Bonus</span>
-                                            <span className="font-mono font-bold text-white">x1.5</span>
-                                        </div>
-                                    )}
-                                    <div className="flex justify-between items-center text-green-300 border-t border-white/10 pt-2 mt-2">
-                                        <span className="uppercase tracking-wider">🎯 Final Alignment Score</span>
-                                        <span className="font-mono font-bold text-white">+{result.distanceScore || 0}</span>
-                                    </div>
-
-                                    <div className="flex justify-between items-center text-blue-300 pt-2">
-                                        <span className="uppercase tracking-wider">🔍 Evidence Bonus</span>
-                                        <span className="font-mono font-bold text-white">+{result.evidenceScore || 0}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-indigo-300">
-                                        <span className="uppercase tracking-wider">⚡ Speed Flat Bonus</span>
-                                        <span className="font-mono font-bold text-white">+{result.timeScore || 0}</span>
-                                    </div>
-                                    {result.difficultyMulti > 1 && (
-                                        <div className="flex justify-between items-center text-yellow-400 border-t border-white/10 pt-2 mt-2">
-                                            <span className="uppercase tracking-wider">⭐ Hard Mode Ext.</span>
-                                            <span className="font-mono font-black text-white">x{result.difficultyMulti}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <hr className="border-white/10 my-6" />
-
-                                <div className="text-xl font-black text-slate-200">
-                                    {result.distance !== undefined && !isNaN(result.distance)
-                                        ? `${Math.round(result.distance)}m`
-                                        : "-- m"}
-                                </div>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Deviation</p>
-
-                                <div className="mt-8 space-y-4">
-                                    <h3 className="text-xs uppercase text-slate-400 mb-2">Evidence Analysis</h3>
-
-                                    {/* Compute categorized evidence using IoU spatial overlap */}
-                                    {(() => {
-                                        const officialList = result?.officialEvidence || currentRound?.evidence || [];
-                                        const aiResults = result?.aiFeedback?.results || [];
-
-                                        // Helper: compute overlap between two boxes
-                                        const boxesOverlap = (sBox: any, oBox: any) => {
-                                            const ax1 = sBox.x, ay1 = sBox.y, ax2 = sBox.x + sBox.w, ay2 = sBox.y + sBox.h;
-                                            const bx1 = oBox.x, by1 = oBox.y, bx2 = oBox.x + oBox.w, by2 = oBox.y + oBox.h;
-                                            const ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1);
-                                            const ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
-                                            const iw = Math.max(0, ix2 - ix1), ih = Math.max(0, iy2 - iy1);
-                                            const intersection = iw * ih;
-                                            const areaA = sBox.w * sBox.h;
-                                            const areaB = oBox.w * oBox.h;
-                                            const union = areaA + areaB - intersection;
-                                            const iou = union > 0 ? intersection / union : 0;
-                                            const coverageOfOfficial = areaB > 0 ? intersection / areaB : 0;
-                                            return iou >= 0.15 || coverageOfOfficial >= 0.3;
-                                        };
-
-                                        // Parse official bounding boxes
-                                        const parsedOfficials = officialList.map((ev: any) => {
-                                            let box = null;
-                                            try { box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box; } catch {}
-                                            return { ...ev, box };
-                                        });
-
-                                        // Categorize student evidence
-                                        const foundEvidence: { userIndex: number; official: any; aiItem: any }[] = [];
-                                        const novelEvidence: { userIndex: number; aiItem: any }[] = [];
-                                        const matchedOfficialIds = new Set<string>();
-
-                                        evidenceList.forEach((userEv, index) => {
-                                            const aiItem = aiResults.find((r: any) => r.index === index);
-                                            let matchedOfficial = null;
-
-                                            for (const oe of parsedOfficials) {
-                                                if (!oe.box) continue;
-                                                if (boxesOverlap(userEv.box, oe.box)) {
-                                                    matchedOfficial = oe;
-                                                    break;
-                                                }
-                                            }
-
-                                            if (matchedOfficial) {
-                                                foundEvidence.push({ userIndex: index, official: matchedOfficial, aiItem });
-                                                matchedOfficialIds.add(matchedOfficial.id);
-                                            } else {
-                                                novelEvidence.push({ userIndex: index, aiItem });
-                                            }
-                                        });
-
-                                        // Missed = official evidence not matched by any student box
-                                        const missedEvidence = parsedOfficials.filter((oe: any) => oe.box && !matchedOfficialIds.has(oe.id));
-
-                                        return (
-                                            <>
-                                                {/* ✅ FOUND EVIDENCE */}
-                                                {foundEvidence.length > 0 && (
-                                                    <div className="space-y-2">
-                                                        <h4 className="text-[10px] uppercase text-green-400 tracking-widest flex items-center gap-1">
-                                                            <span>✅</span> Found ({foundEvidence.length})
-                                                        </h4>
-                                                        {foundEvidence.map((item, i) => (
-                                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-green-500/50 pl-3 py-1">
-                                                                <span className="font-bold text-green-400 block mb-1">
-                                                                    {item.official.description || item.aiItem?.description || `Evidence #${item.userIndex + 1}`}
-                                                                </span>
-                                                                <p className="opacity-80 leading-snug text-green-200/80">
-                                                                    {item.aiItem?.explanation || item.official.ai_analysis || "Correctly identified this landmark feature."}
-                                                                </p>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-
-                                                {/* 🔵 NOVEL DISCOVERIES */}
-                                                {novelEvidence.length > 0 && (
-                                                    <div className="space-y-2 mt-3">
-                                                        <h4 className="text-[10px] uppercase text-blue-400 tracking-widest flex items-center gap-1">
-                                                            <span>🔍</span> Additional Observations ({novelEvidence.length})
-                                                        </h4>
-                                                        {novelEvidence.map((item, i) => (
-                                                            <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
-                                                                <span className="font-bold text-blue-400 block mb-1">
-                                                                    {item.aiItem?.description || `Observation #${item.userIndex + 1}`}
-                                                                </span>
-                                                                <p className="opacity-80 leading-snug">
-                                                                    {item.aiItem?.explanation || "Selected area did not match any official evidence."}
-                                                                </p>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-
-                                                {/* ❌ MISSED INTEL */}
-                                                {missedEvidence.length > 0 && (
-                                                    <div className="space-y-2 mt-3">
-                                                        <h4 className="text-[10px] uppercase text-red-400 tracking-widest flex items-center gap-1">
-                                                            <span>❌</span> Missed Intel ({missedEvidence.length})
-                                                        </h4>
-                                                        {missedEvidence.map((ev: any) => {
-                                                            let personalizedExplanation = null;
-                                                            if (result.aiFeedback?.missed_evidence_explanations && Array.isArray(result.aiFeedback.missed_evidence_explanations)) {
-                                                                const AIExplanation = result.aiFeedback.missed_evidence_explanations.find((m: any) => m.admin_id === ev.id);
-                                                                if (AIExplanation?.explanation) personalizedExplanation = AIExplanation.explanation;
-                                                            }
-                                                            return (
-                                                                <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
-                                                                    <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
-                                                                    {(personalizedExplanation || ev.ai_analysis) && (
-                                                                        <p className="opacity-70 leading-snug">{personalizedExplanation || ev.ai_analysis}</p>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-
-                                                {/* Summary if AI feedback has a summary */}
-                                                {result.aiFeedback?.summary_explanation && (
-                                                    <div className="mt-3 p-3 bg-slate-800/50 rounded border border-white/5">
-                                                        <p className="text-xs text-slate-400 leading-relaxed italic">{result.aiFeedback.summary_explanation}</p>
-                                                    </div>
-                                                )}
-
-                                                {/* No evidence at all */}
-                                                {foundEvidence.length === 0 && novelEvidence.length === 0 && missedEvidence.length === 0 && (
-                                                    <p className="text-xs text-slate-500 italic">No evidence data available for this round.</p>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-
-                                    {/* Matched Evidence Summary */}
-                                    {result.evidenceScore > 0 && (
-                                        <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
-                                            <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
-                                            <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="mt-8">
-                                    <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-6 text-center text-slate-500 italic">
-                                {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
-                            </div>
-                        )}
-                    </div>
-                )
-            }
+            <ResultPanel result={result} layoutMode={layoutMode} room={room} currentRound={currentRound} evidenceList={evidenceList} />
 
             {isEmpBlackout && (
                 <div className="fixed inset-0 z-[9999] bg-black bg-opacity-95 pointer-events-none flex flex-col items-center justify-center animate-pulse backdrop-blur-3xl">
