@@ -46,7 +46,10 @@ export async function loader({ request, params, context }: any) {
 
     if (isGuidedRound) {
         // Tutorial round — use default simulation location
-        const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        let defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        if (!defaultSim) {
+            defaultSim = await db.prepare("SELECT id FROM locations ORDER BY created_at ASC LIMIT 1").first<any>();
+        }
         if (defaultSim) {
             const totalResult = total || { count: 0 };
             const [location, allEvidence] = await Promise.all([

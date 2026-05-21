@@ -20,7 +20,10 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
     let targetLocationId: string;
 
     if (isGuidedRound) {
-        const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        let defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        if (!defaultSim) {
+            defaultSim = await db.prepare("SELECT id FROM locations ORDER BY created_at ASC LIMIT 1").first<any>();
+        }
         if (!defaultSim) return Response.json({ guesses: [] });
         targetLocationId = defaultSim.id;
     } else {

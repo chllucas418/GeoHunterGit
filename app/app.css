@@ -176,3 +176,27 @@ body.light-mode div {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* --- Hint Card Slide-In & Fade-Out Animation --- */
+@keyframes hint-slide-in-fade-out {
+  0% {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  5% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+.hint-fade-card {
+  animation: hint-slide-in-fade-out 12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

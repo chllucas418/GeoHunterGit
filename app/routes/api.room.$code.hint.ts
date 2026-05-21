@@ -22,7 +22,10 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     let targetLocationId = item.location_id;
     // Guided Playthrough: index 0 = tutorial (default sim), index 1+ = dataset[index-1]
     if (room.current_index === 0 && room.has_guided_playthrough) {
-        const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        let defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+        if (!defaultSim) {
+            defaultSim = await db.prepare("SELECT id FROM locations ORDER BY created_at ASC LIMIT 1").first<any>();
+        }
         if (defaultSim) {
             targetLocationId = defaultSim.id;
         }

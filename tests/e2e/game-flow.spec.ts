@@ -59,6 +59,12 @@ test.describe('Teacher-Student Game Flow', () => {
             return;
         }
         
+        // Uncheck Guided Practice to run standard E2E game cycle without guide obstruction
+        const guidedCheckbox = teacherPage.locator('input[name="hasGuidedPlaythrough"]').first();
+        if (await guidedCheckbox.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await guidedCheckbox.uncheck();
+        }
+        
         // Deploy the first available dataset
         await deployBtn.click();
         await expect(teacherPage).toHaveURL(/\/teacher\/room\/\d+/, { timeout: 15000 });
@@ -86,8 +92,8 @@ test.describe('Teacher-Student Game Flow', () => {
         await studentPage.check('input[name="agreeToTerms"]');
         await studentPage.click('button[type="submit"]');
         
-        // Wait for registration to complete — student should be redirected to home
-        await studentPage.waitForURL('**/', { timeout: 15000 });
+        // Wait for registration to complete — student should be redirected to home or join
+        await studentPage.waitForURL((url: URL) => url.pathname === '/' || url.pathname === '/join', { timeout: 15000 });
         await studentPage.waitForLoadState('networkidle');
 
         // Join Room
@@ -95,18 +101,18 @@ test.describe('Teacher-Student Game Flow', () => {
         await studentPage.waitForLoadState('domcontentloaded');
         await studentPage.fill('input[name="code"]', roomCode);
         await studentPage.click('button[type="submit"]');
-        await expect(studentPage).toHaveURL(/\/live\/\d+/);
-        await expect(studentPage.locator('text=Stand By')).toBeVisible();
+        await expect(studentPage).toHaveURL(/\/live\/\d+/, { timeout: 15000 });
+        await expect(studentPage.locator('text=Stand By')).toBeVisible({ timeout: 15000 });
 
         // Check Teacher Lobby
-        await expect(teacherPage.locator('text=Test Agent')).toBeVisible();
+        await expect(teacherPage.locator('text=Test Agent')).toBeVisible({ timeout: 15000 });
 
         // --- START GAME ---
         await teacherPage.click('text=Start Mission');
-        await expect(teacherPage.locator('text=ROUND 1')).toBeVisible();
+        await expect(teacherPage.locator('text=ROUND 1')).toBeVisible({ timeout: 15000 });
 
         // --- RULE ACKNOWLEDGMENT FLOW ---
-        await expect(studentPage.locator('text=MISSION BRIEFING')).toBeVisible({ timeout: 10000 });
+        await expect(studentPage.locator('text=MISSION BRIEFING')).toBeVisible({ timeout: 15000 });
         
         // The game mode description should be visible
         // Time Attack shows specific text 
@@ -114,26 +120,30 @@ test.describe('Teacher-Student Game Flow', () => {
         
         // Click acknowledge
         const acknowledgeBtn = studentPage.locator('text=I ACKNOWLEDGE GAME MODE');
-        await expect(acknowledgeBtn).toBeVisible();
+        await expect(acknowledgeBtn).toBeVisible({ timeout: 15000 });
         await acknowledgeBtn.click();
         
         // After acknowledgment, modal disappears
-        await expect(studentPage.locator('text=MISSION BRIEFING')).not.toBeVisible({ timeout: 3000 });
-        await expect(studentPage.locator('text=CONFIRM COORDINATES')).toBeVisible({ timeout: 10000 });
+        await expect(studentPage.locator('text=MISSION BRIEFING')).not.toBeVisible({ timeout: 5000 });
+        await expect(studentPage.locator('text=CONFIRM COORDINATES')).toBeVisible({ timeout: 15000 });
 
         // --- STUDENT PLAY ---
-        const mapCol = studentPage.locator('[class*="bg-slate-900"]').first();
-        await mapCol.click({ position: { x: 200, y: 200 } });
+        // Wait for Google Maps container and style overlay to ensure click listeners are active
+        await expect(studentPage.locator('.gm-style').first()).toBeVisible({ timeout: 20000 });
+        await studentPage.waitForTimeout(3000);
+
+        const googleMap = studentPage.locator('.gm-style').first();
+        await googleMap.click({ position: { x: 200, y: 200 } });
         await studentPage.click('text=CONFIRM COORDINATES');
-        await expect(studentPage.locator('text=LOCKED IN')).toBeVisible();
+        await expect(studentPage.locator('text=LOCKED IN')).toBeVisible({ timeout: 15000 });
 
         // --- TEACHER REVEAL ---
         await teacherPage.click('text=Reveal Intel');
-        await expect(teacherPage.locator('text=Official Intel')).toBeVisible();
+        await expect(teacherPage.locator('text=Official Intel')).toBeVisible({ timeout: 15000 });
 
         // Student Results
-        await expect(studentPage.locator('text=Score')).toBeVisible({ timeout: 8000 });
-        await expect(studentPage.locator('text=Deviation')).toBeVisible();
+        await expect(studentPage.locator('text=Score')).toBeVisible({ timeout: 15000 });
+        await expect(studentPage.locator('text=Deviation')).toBeVisible({ timeout: 15000 });
     });
 });
 

@@ -4,6 +4,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher, Link, useNavigation } from "react-router";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 import { EvidenceCanvas } from "~/components/EvidenceCanvas";
+import { FadingHint } from "~/components/game/FadingHint";
 import { requireUser } from "~/lib/auth.server";
 import type { BoxCoordinates, Location } from "~/types/shared";
 
@@ -349,15 +350,12 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 {!result && visibleHints.length > 0 && (
                     <div className="absolute bottom-24 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
                         {visibleHints.map((hint, i) => (
-                            <div
+                            <FadingHint
                                 key={i}
-                                className="bg-black/40 backdrop-blur-xl border border-white/10 p-3 rounded-r-xl rounded-bl-xl border-l-4 border-l-yellow-400 text-xs font-medium text-white shadow-lg animate-in slide-in-from-left-10 fade-in duration-500"
-                            >
-                                <span className="block text-[10px] font-black text-yellow-400 mb-1 uppercase tracking-widest">
-                                    Incoming Transmisson {i < hintList.length ? `#0${i + 1} / 0${hintList.length}` : 'SYSTEM'}
-                                </span>
-                                {hint}
-                            </div>
+                                hint={hint}
+                                index={i}
+                                totalHints={hintList.length}
+                            />
                         ))}
                     </div>
                 )}

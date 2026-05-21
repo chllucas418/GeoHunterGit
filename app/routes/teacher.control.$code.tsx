@@ -16,7 +16,10 @@ export async function loader({ request, params, context }: any) {
         const isGuidedRound = room.current_index === 0 && room.has_guided_playthrough;
 
         if (isGuidedRound) {
-            const defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            let defaultSim = await db.prepare("SELECT id FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+            if (!defaultSim) {
+                defaultSim = await db.prepare("SELECT id FROM locations ORDER BY created_at ASC LIMIT 1").first<any>();
+            }
             if (defaultSim) {
                 location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(defaultSim.id).first<any>();
             }

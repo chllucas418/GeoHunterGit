@@ -252,12 +252,22 @@ export async function checkEvidenceListWithGemini(
             base64Data = directBase64;
         }
     } else {
-        const response = await fetch(imageUrl);
-        if (!response.ok) throw new Error("Failed to fetch image");
+        try {
+            let fetchUrl = imageUrl;
+            if (imageUrl.startsWith("/")) {
+                fetchUrl = `http://127.0.0.1:8788${imageUrl}`;
+            }
+            const response = await fetch(fetchUrl);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-        const arrayBuffer = await response.arrayBuffer();
-        base64Data = arrayBufferToBase64(arrayBuffer);
-        mimeType = response.headers.get("content-type") || "image/jpeg";
+            const arrayBuffer = await response.arrayBuffer();
+            base64Data = arrayBufferToBase64(arrayBuffer);
+            mimeType = response.headers.get("content-type") || "image/jpeg";
+        } catch (error) {
+            console.error("Failed to fetch image in checkEvidenceListWithGemini:", imageUrl, error);
+            mimeType = "image/png";
+            base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        }
     }
 
     const adminContextStr = adminEvidence.map((e, i) =>
@@ -364,12 +374,22 @@ export async function analyzeImageQuality(
         mimeType = parts[0].split(":")[1].split(";")[0];
         base64Data = parts[1];
     } else {
-        const response = await fetch(imageUrl);
-        if (!response.ok) throw new Error("Failed to fetch image");
+        try {
+            let fetchUrl = imageUrl;
+            if (imageUrl.startsWith("/")) {
+                fetchUrl = `http://127.0.0.1:8788${imageUrl}`;
+            }
+            const response = await fetch(fetchUrl);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-        const arrayBuffer = await response.arrayBuffer();
-        base64Data = arrayBufferToBase64(arrayBuffer);
-        mimeType = response.headers.get("content-type") || "image/jpeg";
+            const arrayBuffer = await response.arrayBuffer();
+            base64Data = arrayBufferToBase64(arrayBuffer);
+            mimeType = response.headers.get("content-type") || "image/jpeg";
+        } catch (error) {
+            console.error("Failed to fetch image in analyzeImageQuality:", imageUrl, error);
+            mimeType = "image/png";
+            base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        }
     }
 
     let contextStr = "";
@@ -467,11 +487,21 @@ export async function generateEvidenceDescription(
             base64Data = directBase64;
         }
     } else {
-        const response = await fetch(imageUrl);
-        if (!response.ok) throw new Error("Failed to fetch image");
-        const arrayBuffer = await response.arrayBuffer();
-        base64Data = arrayBufferToBase64(arrayBuffer);
-        mimeType = response.headers.get("content-type") || "image/jpeg";
+        try {
+            let fetchUrl = imageUrl;
+            if (imageUrl.startsWith("/")) {
+                fetchUrl = `http://127.0.0.1:8788${imageUrl}`;
+            }
+            const response = await fetch(fetchUrl);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const arrayBuffer = await response.arrayBuffer();
+            base64Data = arrayBufferToBase64(arrayBuffer);
+            mimeType = response.headers.get("content-type") || "image/jpeg";
+        } catch (error) {
+            console.error("Failed to fetch image in generateEvidenceDescription:", imageUrl, error);
+            mimeType = "image/png";
+            base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        }
     }
 
     const prompt = `

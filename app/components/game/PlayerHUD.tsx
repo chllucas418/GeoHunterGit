@@ -1,3 +1,5 @@
+import { FadingHint } from "./FadingHint";
+
 export function PlayerHUD({
     room, currentRound, secondsElapsed, hintList, introStage, location,
     hasAcknowledgedRules, setHasAcknowledgedRules, tutorialStep, setTutorialStep,
@@ -101,7 +103,7 @@ export function PlayerHUD({
 
             {/* --- TUTORIAL OVERLAY --- */}
             {room.has_guided_playthrough === 1 && currentRound.index === 0 && tutorialStep > 0 && tutorialStep < 8 && (
-                <div className="absolute inset-0 z-[70] pointer-events-none flex flex-col items-center justify-end pb-12">
+                <div className="absolute inset-0 z-[95] pointer-events-none flex flex-col items-center justify-end pb-32 sm:pb-36">
                     <div className="bg-blue-600/90 backdrop-blur-xl border-2 border-blue-400 p-6 rounded-2xl max-w-md shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-10">
                         <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2 flex items-center gap-2">
                             <span>🎓</span> Simulation Guide
@@ -143,15 +145,13 @@ export function PlayerHUD({
             {!submitted && visibleHints.length > 0 && (
                 <div className="absolute bottom-28 left-4 md:bottom-32 md:left-6 z-30 w-[calc(100%-2rem)] max-w-sm space-y-2 pointer-events-none">
                     {visibleHints.map((hint: string, i: number) => (
-                        <div key={i} className={`bg-black/40 backdrop-blur-xl border-l-4 ${isIntelCorrupted ? 'border-purple-600 bg-purple-900/60 animate-pulse' : 'border-yellow-400'} p-3 rounded text-xs text-white animate-in slide-in-from-left-10 shadow-lg`}>
-                            {isIntelCorrupted ? (
-                                <span className="font-mono text-purple-300 font-bold tracking-widest line-through decoration-wavy opacity-90 blur-[0.5px]">
-                                    👾 ████ ENCRYPTED: PAYLOAD CORRUPTED ████
-                                </span>
-                            ) : (
-                                hint
-                            )}
-                        </div>
+                        <FadingHint
+                            key={i}
+                            hint={hint}
+                            index={i}
+                            totalHints={hintList?.length}
+                            isIntelCorrupted={isIntelCorrupted}
+                        />
                     ))}
                 </div>
             )}

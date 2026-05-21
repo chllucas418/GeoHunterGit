@@ -1,7 +1,11 @@
 import type { D1Database } from "@cloudflare/workers-types";
 
 export async function getDefaultSimulationLocation(db: D1Database) {
-    return db.prepare("SELECT * FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+    let location = await db.prepare("SELECT * FROM locations WHERE is_default_simulation = 1 LIMIT 1").first<any>();
+    if (!location) {
+        location = await db.prepare("SELECT * FROM locations ORDER BY created_at ASC LIMIT 1").first<any>();
+    }
+    return location;
 }
 
 export async function getLocationById(db: D1Database, id: string) {
