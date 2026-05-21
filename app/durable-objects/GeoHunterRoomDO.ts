@@ -9,13 +9,32 @@ export class GeoHunterRoomDO extends DurableObject {
     }
 
     async fetch(request: Request) {
+        const url = new URL(request.url);
+
+        // Securely handle standard HTTP POST broadcasts to propagate events (e.g. live AI reports, pause signals)
+        if (request.method === "POST" && url.pathname.endsWith("/broadcast")) {
+            try {
+                const body = await request.text();
+                const websockets = this.ctx.getWebSockets();
+                for (const session of websockets) {
+                    try {
+                        session.send(body);
+                    } catch (err) {
+                        // Ignore individual session send errors
+                    }
+                }
+                return new Response("OK", { status: 200 });
+            } catch (err: any) {
+                return new Response(`Broadcast failed: ${err.message}`, { status: 500 });
+            }
+        }
+
         const upgradeHeader = request.headers.get("Upgrade");
         if (!upgradeHeader || upgradeHeader !== "websocket") {
             return new Response("Expected Upgrade: websocket", { status: 426 });
         }
 
         // Cache the room code so the alarm knows which room to close in the database
-        const url = new URL(request.url);
         const codeMatch = url.pathname.match(/\/api\/room\/([^/]+)/);
         if (codeMatch && codeMatch[1]) {
             await this.ctx.storage.put("roomCode", codeMatch[1]);

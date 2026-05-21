@@ -5,6 +5,36 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     return Buffer.from(buffer).toString('base64');
 }
 
+// Robust helper to parse Gemini JSON responses without raising false warnings in monitoring
+function parseGeminiJsonResponse(responseText: string): any {
+    const trimmed = responseText.trim();
+    
+    try {
+        return JSON.parse(trimmed);
+    } catch (_) {}
+
+    try {
+        const cleanText = trimmed.replace(/```json/g, "").replace(/```/g, "").trim();
+        return JSON.parse(cleanText);
+    } catch (_) {}
+
+    const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        try {
+            return JSON.parse(jsonMatch[0]);
+        } catch (_) {}
+    }
+
+    const arrayMatch = trimmed.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+        try {
+            return JSON.parse(arrayMatch[0]);
+        } catch (_) {}
+    }
+
+    throw new SyntaxError(`Failed to parse Gemini response as JSON. Content preview: "${trimmed.substring(0, 200)}..."`);
+}
+
 // Helper for raw fetch to Gemini API via Cloudflare AI Gateway
 async function callGeminiApi(
     modelName: string,
@@ -333,18 +363,11 @@ export async function checkEvidenceListWithGemini(
         );
 
         try {
-            const parsed = JSON.parse(responseText.trim());
+            const parsed = parseGeminiJsonResponse(responseText);
             if (!parsed.results) parsed.results = [];
             return parsed;
-        } catch (e) {
-            console.error("JSON Parse Error:", e);
-            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                if (!parsed.results) parsed.results = [];
-                return parsed;
-            }
+        } catch (e: any) {
+            console.warn("[Gemini] Parse attempt finished with fallback logic or warning:", e.message);
         }
 
         return { results: [], summary_explanation: "AI feedback unavailable." };
@@ -450,14 +473,9 @@ export async function analyzeImageQuality(
         );
 
         try {
-            return JSON.parse(responseText.trim());
-        } catch (e) {
-            console.error("JSON Parse Fallback Error:", e);
-            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]);
-            }
+            return parseGeminiJsonResponse(responseText);
+        } catch (e: any) {
+            console.warn("[Gemini] Quality analysis parse attempt warning:", e.message);
         }
         return { quality_score: 50, precontext: "AI analysis failed", recommendation: "Review manually", generated_hints: [] };
 
@@ -609,16 +627,10 @@ export async function autoDetectMapEvidence(
         );
 
         try {
-            const parsed = JSON.parse(responseText.trim());
+            const parsed = parseGeminiJsonResponse(responseText);
             return parsed.evidence || [];
-        } catch (e) {
-            console.warn("[Gemini] JSON Parse Fallback in autoDetectMapEvidence:", e);
-            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                return parsed.evidence || [];
-            }
+        } catch (e: any) {
+            console.warn("[Gemini] Map evidence auto-detect parse warning:", e.message);
             throw e;
         }
     } catch (e: any) {
@@ -676,15 +688,10 @@ export async function batchAnalyzeOfficialEvidence(
         );
 
         try {
-            const parsed = JSON.parse(responseText.trim());
+            const parsed = parseGeminiJsonResponse(responseText);
             return parsed.results || [];
-        } catch (e) {
-            const cleanText = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-            const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                return parsed.results || [];
-            }
+        } catch (e: any) {
+            console.warn("[Gemini] Batch evidence parse warning:", e.message);
         }
         return items.map((item: any) => ({ id: item.id, ai_analysis: `Analysis failed: Invalid JSON response` }));
     } catch (e: any) {
@@ -748,7 +755,7 @@ export async function classifyBatchImages(
         
         const data = await response.json() as any;
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-        const parsed = JSON.parse(text.trim());
+        const parsed = parseGeminiJsonResponse(text);
         return Array.isArray(parsed.valid_indices) ? parsed.valid_indices : [];
     } catch (e) {
         console.error("[Gemini] Batch classification failed:", e);
@@ -821,7 +828,7 @@ export async function findRealLocationPhoto(
         
         const data = await response.json() as any;
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-        const parsed = JSON.parse(text.trim());
+        const parsed = parseGeminiJsonResponse(text);
         return {
             best_index: typeof parsed.best_index === 'number' ? parsed.best_index : -1,
             confidence: parsed.confidence || "LOW"
