@@ -115,8 +115,8 @@ async function callGeminiApi(
                 );
             }
             // Second Fallback: Downgrade to 2.5-pro if all else fails
-            if (modelName.includes("3.1-pro")) {
-                console.warn("[Gemini Fallback] 3.1 Pro quota hit completely. Downgrading to 2.5 Pro.");
+            if (modelName.includes("3.1-pro") || modelName.includes("3.5-flash") || modelName.includes("3.0-flash")) {
+                console.warn(`[Gemini Fallback] ${modelName} quota hit completely. Downgrading to 2.5 Pro.`);
                 return callGeminiApi(
                     "gemini-2.5-pro",
                     prompt,
@@ -228,8 +228,8 @@ async function callGeminiChatApi(
                 );
             }
             // Second Fallback: Downgrade to 2.5-pro
-            if (modelName.includes("3.1-pro")) {
-                console.warn("[Gemini Chat Fallback] 3.1 Pro quota hit completely. Downgrading to 2.5 Pro.");
+            if (modelName.includes("3.1-pro") || modelName.includes("3.5-flash") || modelName.includes("3.0-flash")) {
+                console.warn(`[Gemini Chat Fallback] ${modelName} quota hit completely. Downgrading to 2.5 Pro.`);
                 return callGeminiChatApi(
                     "gemini-2.5-pro",
                     systemInstruction,

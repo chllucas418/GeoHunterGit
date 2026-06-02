@@ -1,0 +1,12 @@
+# Cloudflare Worker Environment Variables Example
+# Duplicate this file as `.dev.vars` and fill in your keys.
+
+VALUE_FROM_CLOUDFLARE="Hello from Cloudflare"
+DEVELOPER_PASSWORD="your_developer_password"
+DEVELOPER_REGISTRATION_KEY="your_developer_registration_key"
+GEMINI_BASE_URL=""
+GEMINI_API_KEY=""
+GEMINI_GATEWAY_TOKEN=""
+GOOGLE_MAPS_API_KEY="your_google_maps_api_key"
+GOOGLE_DRIVE_API_KEY="your_google_drive_api_key"
+GOOGLE_DRIVE_CLIENT_ID="your_google_drive_client_id"

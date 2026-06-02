@@ -100,7 +100,7 @@ export default function MassAdd() {
     // Map Setup
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: mapsApiKey || "<REDACTED_MAPS_KEY>",
+        googleMapsApiKey: mapsApiKey || "",
         libraries: LIBRARIES
     });
 

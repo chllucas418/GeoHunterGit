@@ -69,7 +69,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
-    const REQUIRED_DEV_KEY = env.DEVELOPER_REGISTRATION_KEY || "<REDACTED_DEV_KEY>";
+    const REQUIRED_DEV_KEY = env.DEVELOPER_REGISTRATION_KEY || "";
     const isDevOverride = developerKey === REQUIRED_DEV_KEY;
 
     if (!isDevOverride) {

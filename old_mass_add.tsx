@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from 'react-router';
 import { Form, useActionData, useSubmit, useNavigation, useLoaderData, useNavigate } from 'react-router';
 import { useDropzone } from 'react-dropzone';
@@ -49,7 +49,7 @@ export default function MassAdd() {
     // Map Setup
     const { isLoaded } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: mapsApiKey || "<REDACTED_MAPS_KEY>",
+        googleMapsApiKey: mapsApiKey || "",
         libraries: LIBRARIES
     });
 

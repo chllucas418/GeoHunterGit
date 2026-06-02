@@ -8,13 +8,7 @@
 	"compatibility_date": "2025-04-04",
 	"main": "./workers/app.ts",
 	"vars": {
-		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
-		"DEVELOPER_PASSWORD": "<REDACTED_PASSWORD>@4@18&3&16",
-		"GEMINI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/<REDACTED_GATEWAY_ID>/geohunter-proxy/google-ai-studio",
-		"GOOGLE_MAPS_API_KEY": "<REDACTED_MAPS_KEY>",
-		"DEVELOPER_REGISTRATION_KEY": "<REDACTED_DEV_KEY>",
-		"GOOGLE_DRIVE_API_KEY": "<REDACTED_DRIVE_KEY>",
-		"GOOGLE_DRIVE_CLIENT_ID": "<REDACTED_CLIENT_ID>"
+		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
 	},
 	"d1_databases": [
 		{

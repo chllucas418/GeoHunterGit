@@ -41,12 +41,16 @@ GeoHunterGit is a location-guessing game where players identify locations from i
     ```
 
 3.  **Environment Setup:**
-    Create a `.dev.vars` file in the root directory for local development secrets:
+    Create a `.dev.vars` file in the root directory for local development secrets (you can copy `.dev.vars.example`):
     ```ini
-    GEMINI_API_KEY=your_gemini_api_key
-    GOOGLE_MAPS_API_KEY=your_google_maps_api_key
-    GEMINI_BASE_URL=https://gateway.ai.cloudflare.com/v1/{account}/{id}/google-ai  # Optional: For Regional Proxy
-    VALUE_FROM_CLOUDFLARE=Hello World
+    VALUE_FROM_CLOUDFLARE="Hello from Cloudflare"
+    DEVELOPER_PASSWORD="your_developer_password"
+    DEVELOPER_REGISTRATION_KEY="your_developer_registration_key"
+    GEMINI_API_KEY="your_gemini_api_key"
+    GEMINI_BASE_URL="https://gateway.ai.cloudflare.com/v1/{account}/{id}/google-ai"  # Optional: For Regional Proxy
+    GOOGLE_MAPS_API_KEY="your_google_maps_api_key"
+    GOOGLE_DRIVE_API_KEY="your_google_drive_api_key"
+    GOOGLE_DRIVE_CLIENT_ID="your_google_drive_client_id"
     ```
 
     > **Note on Regional Restrictions**: If you are in a region where Google Gemini is unavailable (e.g., UK, EU), setup a [Cloudflare AI Gateway](https://developers.cloudflare.com/ai-gateway/) and add its URL as `GEMINI_BASE_URL`. This relays requests through permitted regions.

@@ -11,7 +11,7 @@ env.GEOHUNTER_ROOM_DO (GeoHunterRoomDO)                      Durable Object     
 env.DB (geohunter-db)                                        D1 Database               local
 env.ASSETS_BUCKET (geohunter-assets)                         R2 Bucket                 local
 env.VALUE_FROM_CLOUDFLARE ("Hello from Cloudflare")          Environment Variable      local
-env.DEVELOPER_PASSWORD ("<REDACTED_PASSWORD>@4@18&3&16")         Environment Variable      local
+env.DEVELOPER_PASSWORD ("<REDACTED>")         Environment Variable      local
 
 Attaching additional modules:
 ┌─────────────────────────────────┬──────┬─────────────┐
