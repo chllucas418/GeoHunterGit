@@ -153,5 +153,78 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
         }
     }
 
+    if (action === "ANALYZE_EVIDENCE") {
+        const evidenceId = formData.get("evidenceId") as string;
+        if (!evidenceId) {
+            return Response.json({ error: "Evidence ID required" }, { status: 400 });
+        }
+
+        // Get the evidence record
+        const evidence = await db.prepare("SELECT * FROM map_evidence WHERE id = ?").bind(evidenceId).first<any>();
+        if (!evidence) {
+            return Response.json({ error: "Evidence not found" }, { status: 404 });
+        }
+
+        // Get the location for image URL
+        const location = await db.prepare("SELECT * FROM locations WHERE id = ?").bind(evidence.location_id).first<any>();
+        if (!location || !location.image_url) {
+            return Response.json({ error: "Location image not found" }, { status: 404 });
+        }
+
+        try {
+            // Import the Gemini helper
+            const { checkEvidenceListWithGemini } = await import("~/lib/gemini.server");
+
+            const GEMINI_BASE_URL = env.GEMINI_BASE_URL;
+            const GEMINI_GATEWAY_TOKEN = env.GEMINI_GATEWAY_TOKEN;
+            const GEMINI_API_KEY = env.GEMINI_API_KEY;
+
+            // Parse the bounding box
+            let box = evidence.bounding_box;
+            if (typeof box === "string") {
+                try { box = JSON.parse(box); } catch { box = null; }
+            }
+
+            // Analyze single evidence item
+            const result = await checkEvidenceListWithGemini(
+                location.image_url,
+                [{ box, description: evidence.description }],
+                location.name,
+                [{ id: evidence.id, box, description: evidence.description }],
+                GEMINI_BASE_URL,
+                GEMINI_GATEWAY_TOKEN,
+                GEMINI_API_KEY,
+                undefined,
+                location.lat,
+                location.lng
+            );
+
+            // Extract the analysis for this evidence item
+            const analysisResult = result.results?.[0];
+
+            if (analysisResult) {
+                const analysis = analysisResult.explanation || analysisResult.description || "Analysis complete.";
+
+                // Update the evidence record with the AI analysis
+                await db.prepare(
+                    "UPDATE map_evidence SET ai_analysis = ? WHERE id = ?"
+                ).bind(analysis, evidenceId).run();
+
+                return Response.json({
+                    success: true,
+                    evidenceId,
+                    ai_analysis: analysis,
+                    description: analysisResult.description || evidence.description,
+                    validity: analysisResult.validity
+                });
+            } else {
+                return Response.json({ error: "No analysis generated" }, { status: 500 });
+            }
+        } catch (e) {
+            console.error("AI Analysis error:", e);
+            return Response.json({ error: "AI analysis failed", details: (e as any).message }, { status: 500 });
+        }
+    }
+
     return Response.json({ success: true });
 }

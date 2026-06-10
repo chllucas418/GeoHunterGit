@@ -178,6 +178,10 @@ export default function StudentLiveGame() {
     const [hasScoreMultiplier, setHasScoreMultiplier] = useState(false);
     const [showCompass, setShowCompass] = useState(false);
 
+    // --- WEBSOCKET CONNECTION STATUS ---
+    const [wsStatus, setWsStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
+    const wsReconnectAttemptRef = useRef(0);
+
     // NEW PHASE 2 SUPERPOWER STATES
     const [isEmpBlackout, setIsEmpBlackout] = useState(false);
     const [isIntelCorrupted, setIsIntelCorrupted] = useState(false);
@@ -537,7 +541,12 @@ export default function StudentLiveGame() {
         const connect = () => {
             if (typeof WebSocket === "undefined") return;
             socket = new WebSocket(wsUrl);
-            socket.onopen = () => console.log("Live WS Connected");
+
+            socket.onopen = () => {
+                setWsStatus('connected');
+                wsReconnectAttemptRef.current = 0;
+            };
+
             socket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
@@ -690,8 +699,11 @@ export default function StudentLiveGame() {
                 } catch (e) { }
             };
             socket.onclose = () => {
-                console.log("Live WS Closed, reconnecting...");
-                reconnectTimer = setTimeout(connect, 3000);
+                setWsStatus('reconnecting');
+                // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+                const delay = Math.min(1000 * Math.pow(2, wsReconnectAttemptRef.current), 30000);
+                wsReconnectAttemptRef.current++;
+                reconnectTimer = setTimeout(connect, delay);
             };
             wsRef.current = socket;
         };
@@ -1452,6 +1464,16 @@ export default function StudentLiveGame() {
                     <span>⚠</span> ABORT MISSION
                 </Link>
             </div >
+
+            {/* WebSocket Connection Status Indicator */}
+            <div className={`absolute top-4 right-4 z-50 ws-status ${
+                wsStatus === 'connected' ? 'ws-status-connected' :
+                wsStatus === 'reconnecting' ? 'ws-status-reconnecting' :
+                'ws-status-disconnected'
+            }`}>
+                <span className="ws-status-dot" />
+                <span>{wsStatus === 'connected' ? 'LIVE' : wsStatus === 'reconnecting' ? 'SYNCING' : 'OFFLINE'}</span>
+            </div>
 
             {/* Evidence Reveal Modal (Syncs with Teacher) */}
             {
