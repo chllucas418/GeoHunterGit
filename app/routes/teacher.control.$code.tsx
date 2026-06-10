@@ -75,6 +75,7 @@ export default function TeacherControlPanel() {
         let reconnectTimer: NodeJS.Timeout;
 
         const connect = () => {
+            if (typeof WebSocket === "undefined") return;
             socket = new WebSocket(wsUrl);
             socket.onopen = () => console.log("Control WS Connected");
 

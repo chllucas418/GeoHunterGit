@@ -535,6 +535,7 @@ export default function StudentLiveGame() {
         let reconnectTimer: NodeJS.Timeout;
 
         const connect = () => {
+            if (typeof WebSocket === "undefined") return;
             socket = new WebSocket(wsUrl);
             socket.onopen = () => console.log("Live WS Connected");
             socket.onmessage = (event) => {

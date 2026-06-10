@@ -225,7 +225,7 @@ export default function TeacherRoom() {
         let reconnectTimer: any;
 
         const connect = () => {
-            if (socket) return;
+            if (socket || typeof WebSocket === "undefined") return;
             const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
             socket = new WebSocket(`${protocol}//${window.location.host}/api/room/${code}/ws`);
             
