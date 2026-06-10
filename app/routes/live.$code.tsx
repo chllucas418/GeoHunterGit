@@ -10,6 +10,7 @@ import { ActionBar } from "~/components/game/ActionBar";
 import { GameMap } from "~/components/game/GameMap";
 import { Compass } from "~/components/game/Compass";
 import { PlayerHUD } from "~/components/game/PlayerHUD";
+import { PowersGuide } from "~/components/game/PowersGuide";
 import { getRoomByCode, getRoomParticipants, getRoomGuessRecord, getRoomGuessCount } from "~/models/room.server";
 import { getDefaultSimulationLocation, getLocationById, getMapEvidenceByLocation, getMapSetItemsCount, getMapSetItemByIndex } from "~/models/location.server";
 import type { BoxCoordinates } from "~/types/shared";
@@ -195,6 +196,19 @@ export default function StudentLiveGame() {
             return () => clearTimeout(t);
         }
     }, [previewPowerId]);
+
+    // PowersGuide: show once per session on first mission with powers
+    const [showPowersGuide, setShowPowersGuide] = useState(false);
+    useEffect(() => {
+        const hasSeenPowersGuide = sessionStorage.getItem("hasSeenPowersGuide");
+        if (!hasSeenPowersGuide && availablePowers.offensive.length > 0) {
+            setShowPowersGuide(true);
+        }
+    }, []);
+    const dismissPowersGuide = () => {
+        sessionStorage.setItem("hasSeenPowersGuide", "1");
+        setShowPowersGuide(false);
+    };
 
     const handlePowerTap = (id: string, cost: number, actionFn: Function) => {
         if (previewPowerId === id) {
@@ -1419,6 +1433,14 @@ export default function StudentLiveGame() {
                 activatePower={activatePower}
                 activateSelfBuff={activateSelfBuff}
             />
+
+            {/* POWERS GUIDE — shown once on first mission with abilities */}
+            {showPowersGuide && (
+                <PowersGuide
+                    availablePowers={availablePowers}
+                    onDismiss={dismissPowersGuide}
+                />
+            )}
 
             {/* COMPASS RADAR UI */}
             <Compass showCompass={showCompass} location={location} mapInstance={mapInstance} />

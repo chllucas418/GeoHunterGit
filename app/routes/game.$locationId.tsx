@@ -182,7 +182,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                     disableDefaultUI: true, // Clean UI
                     mapTypeId: "hybrid",
                     mapId: "DEMO_MAP_ID",
-                    gestureHandling: "greedy", // Enable 1-finger pan
+                    gestureHandling: "cooperative", // Cooperative: 1-finger pan only when not over a button; prevents conflicts with UI overlays
                     // Styles removed to prevent conflict with mapId
                 });
 
@@ -316,56 +316,55 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             }
             >
 
-                {/* Evidence Count Banner (Liquid Glass) */}
-                {!result && (
-                    <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none w-max max-w-[90%] flex flex-col items-center gap-2">
-                        <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-10 duration-1000 fade-in">
-                            <div className="relative w-2 h-2">
-                                <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
-                                <span className="relative block w-2 h-2 rounded-full bg-blue-500"></span>
-                            </div>
-                            <span className="text-xs font-black text-white/90 tracking-[0.2em] uppercase text-shadow-sm">
-                                {totalEvidence} Intel Items Hidden
-                            </span>
+                {/* --- UNIFIED TOP HUD CONTAINER (z-60) --- */}
+                <div className="absolute top-0 inset-x-0 z-[60] pt-[max(env(safe-area-inset-top),16px)] px-4 safe-top">
+                    {/* Header Row: Back button + Target ID */}
+                    <div className="flex justify-between items-start">
+                        <Link to="/" className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-xs font-bold transition-all border border-white/10 touch-target">
+                            ← ABORT MISSION
+                        </Link>
+                        <div className="text-right">
+                            <h1 className="text-2xl md:text-3xl font-black tracking-tighter">TARGET #{location.id.slice(-4).toUpperCase()}</h1>
                         </div>
+                    </div>
 
-                        {/* Timer / Hint Progress */}
-                        {visibleHints.length < hintList.length && (
-                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-700 delay-300">
-                                <div className="w-32 h-1 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm shadow-inner">
-                                    <div
-                                        className="h-full bg-yellow-400 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(250,204,21,0.5)]"
-                                        style={{ width: `${progress}%` }}
-                                    />
+                    {/* Evidence Count Banner */}
+                    {!result && (
+                        <div className="w-max mx-auto flex flex-col items-center gap-2 mt-2">
+                            <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-10 duration-1000 fade-in">
+                                <div className="relative w-2 h-2">
+                                    <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
+                                    <span className="relative block w-2 h-2 rounded-full bg-blue-500"></span>
                                 </div>
-                                <span className="text-[10px] font-mono text-yellow-400 font-bold tracking-tight">
-                                    HINT IN {Math.ceil(timeUntilNext)}s
+                                <span className="text-xs font-black text-white/90 tracking-[0.2em] uppercase">
+                                    {totalEvidence} Intel Items Hidden
                                 </span>
                             </div>
-                        )}
-                    </div>
-                )}
 
-                {/* Hints Overlay */}
-                {!result && visibleHints.length > 0 && (
-                    <div className="absolute bottom-24 left-6 z-30 max-w-sm space-y-2 pointer-events-none">
-                        {visibleHints.map((hint, i) => (
-                            <FadingHint
-                                key={i}
-                                hint={hint}
-                                index={i}
-                                totalHints={hintList.length}
-                            />
-                        ))}
-                    </div>
-                )}
+                            {/* Timer / Hint Progress */}
+                            {visibleHints.length < hintList.length && (
+                                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-700 delay-300">
+                                    <div className="w-32 h-1 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm shadow-inner">
+                                        <div
+                                            className="h-full bg-yellow-400 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(250,204,21,0.5)]"
+                                            style={{ width: `${progress}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-[10px] font-mono text-yellow-400 font-bold tracking-tight">
+                                        HINT IN {Math.ceil(timeUntilNext)}s
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
 
-                {/* Mode Toggle Button (Only in game mode) */}
+                {/* --- UNIFIED RIGHT-SIDE CONTROLS (z-90) --- */}
                 {!result && !isSubmitting && (
-                    <div className="absolute top-24 right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
+                    <div className="absolute top-24 md:top-28 right-4 md:right-6 z-[90] flex flex-col items-end gap-2 pointer-events-auto safe-top">
                         <button
                             onClick={() => setIsEvidenceMode(!isEvidenceMode)}
-                            className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md
+                            className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md touch-target
                                 ${isEvidenceMode
                                     ? 'bg-green-500/20 text-green-400 border-green-500/50 hover:bg-green-500/30'
                                     : 'bg-white/10 text-white border-white/10 hover:bg-white/20'
@@ -378,6 +377,20 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                 {evidenceList.length} Clues Logged
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* --- HINTS OVERLAY (z-30, bottom-left) --- */}
+                {!result && visibleHints.length > 0 && (
+                    <div className="absolute left-4 md:left-6 z-[30] max-w-sm space-y-2 pointer-events-none game-hint-bar">
+                        {visibleHints.map((hint, i) => (
+                            <FadingHint
+                                key={i}
+                                hint={hint}
+                                index={i}
+                                totalHints={hintList.length}
+                            />
+                        ))}
                     </div>
                 )}
 
@@ -481,18 +494,6 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         </div>
                     )}
                 </div>
-
-                <div className="absolute top-0 left-0 p-6 z-10 w-full bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
-                    <div className="flex justify-between items-start pointer-events-auto">
-                        <Link to="/" className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-xs font-bold transition-all border border-white/10">
-                            ← ABORT MISSION
-                        </Link>
-                        <div className="text-right">
-                            {/* Only show target name as simplified header */}
-                            <h1 className="text-3xl font-black tracking-tighter">TARGET #{location.id.slice(-4).toUpperCase()}</h1>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             {/* --- COLUMN 2: MAP --- */}
@@ -503,9 +504,9 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
                 <div ref={mapRef} className="w-full h-full" />
 
-                {/* Floating Map Controls (Game Mode) */}
+                {/* --- UNIFIED BOTTOM CONTROLS (z-80) --- */}
                 {!result && (
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+                    <div className="absolute bottom-0 inset-x-0 pb-[max(env(safe-area-inset-bottom),16px)] z-[80] flex flex-col items-center gap-3 px-4">
                         <button
                             onClick={handleSubmit}
                             disabled={!guess || isSubmitting}

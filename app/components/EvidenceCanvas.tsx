@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect, type ReactNode, useCallback } from "react";
 import type { BoxCoordinates } from "~/types/shared";
 
 interface EvidenceCanvasProps {
@@ -20,6 +20,10 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
     const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null); // In Pixels
+
+    // Debounce ref to prevent accidental double-taps
+    const touchDebounceRef = useRef(false);
+    const lastTouchTimeRef = useRef(0);
 
     // Observer to track container size
     useEffect(() => {
@@ -94,22 +98,29 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
         };
     };
 
-    const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
         if (disabled) return;
-        // Prevent default only for mouse to avoid selecting text, but allow touch
-        if (!('touches' in e)) {
-            e.preventDefault();
-        }
+
+        // Debounce rapid taps (300ms)
+        const now = Date.now();
+        if (now - lastTouchTimeRef.current < 300) return;
+        lastTouchTimeRef.current = now;
+
+        // Prevent default to avoid text selection / browser gestures
+        e.preventDefault();
 
         const { x, y } = getRelativeCoords(e);
         setIsDrawing(true);
         setStartPoint({ x, y });
         setDrawRect({ x, y, w: 0, h: 0 });
         onBoxChange(null); // Reset
-    };
+    }, [disabled, onBoxChange]);
+
+    const handleMouseDown = handlePointerDown;
 
     const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!isDrawing || !startPoint || disabled) return;
+        e.preventDefault(); // Prevent scrolling while drawing
         const { x, y, width, height } = getRelativeCoords(e);
 
         // Clamp to image bounds

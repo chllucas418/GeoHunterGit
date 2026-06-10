@@ -6,6 +6,30 @@ body {
   background-color: #030712;
   color: #f8fafc;
   overflow-x: hidden;
+  /* iPad safe-area padding */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* CSS custom properties for responsive sizing */
+:root {
+  /* Safe areas */
+  --safe-area-top: env(safe-area-inset-top);
+  --safe-area-bottom: env(safe-area-inset-bottom);
+  --safe-area-left: env(safe-area-inset-left);
+  --safe-area-right: env(safe-area-inset-right);
+  /* Touch targets */
+  --touch-target-min: 44px;
+  /* Fluid sizing scale */
+  --text-xs: clamp(0.625rem, 1.5vw, 0.75rem);
+  --text-sm: clamp(0.75rem, 2vw, 0.875rem);
+  --text-base: clamp(0.875rem, 2.5vw, 1rem);
+  --text-lg: clamp(1rem, 3vw, 1.125rem);
+  --text-xl: clamp(1.125rem, 3.5vw, 1.25rem);
+  --text-2xl: clamp(1.25rem, 4vw, 1.5rem);
+  --text-3xl: clamp(1.5rem, 5vw, 1.875rem);
+  --text-4xl: clamp(1.875rem, 6vw, 2.25rem);
+  --text-5xl: clamp(2.25rem, 8vw, 3rem);
+  --text-6xl: clamp(3rem, 10vw, 3.75rem);
 }
 
 /* --- Premium Liquid Glass Utilities --- */
@@ -199,4 +223,97 @@ body.light-mode div {
 
 .hint-fade-card {
   animation: hint-slide-in-fade-out 12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* --- Touch Action Classes for iPad --- */
+.touch-none {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-pan-x {
+  touch-action: pan-x pan-y;
+  -webkit-touch-callout: default;
+}
+
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-touch-callout: default;
+}
+
+/* Prevent iOS bounce/overscroll */
+.no-bounce {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* --- Safe Area Padding Utilities --- */
+.safe-top {
+  padding-top: max(var(--safe-area-top), 0px);
+}
+
+.safe-bottom {
+  padding-bottom: max(var(--safe-area-bottom, 16px), 16px);
+}
+
+.safe-left {
+  padding-left: max(var(--safe-area-left), 0px);
+}
+
+.safe-right {
+  padding-right: max(var(--safe-area-right), 0px);
+}
+
+/* Game element safe area — ensures buttons aren't hidden by notch/home indicator */
+.game-bottom-element {
+  padding-bottom: max(env(safe-area-inset-bottom), 16px);
+}
+
+.game-top-element {
+  padding-top: max(env(safe-area-inset-top), 16px);
+}
+
+/* --- Minimum Touch Target (iOS 44px) --- */
+.touch-target {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+}
+
+/* --- Spotlight Ring for Tutorial --- */
+.tutorial-spotlight {
+  box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.8), 0 0 20px 8px rgba(234, 179, 8, 0.4);
+  animation: spotlight-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spotlight-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.8), 0 0 20px 8px rgba(234, 179, 8, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(234, 179, 8, 1), 0 0 30px 12px rgba(234, 179, 8, 0.6);
+  }
+}
+
+/* --- Mobile Fluid Sizing Helpers --- */
+.game-hint-bar {
+  bottom: clamp(180px, 35vh, 280px);
+  left: 1rem;
+}
+
+.game-submit-btn {
+  bottom: clamp(100px, 18vh, 130px);
+}
+
+.game-vicinity-scan {
+  bottom: clamp(200px, 40vh, 280px);
+}
+
+.game-time-attack-hud {
+  bottom: clamp(150px, 28vh, 210px);
+}
+
+.game-action-bar {
+  bottom: clamp(8px, 2vh, 40px);
 }

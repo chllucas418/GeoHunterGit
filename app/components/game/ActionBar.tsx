@@ -26,7 +26,7 @@ export function ActionBar({
                 </div>
             )}
 
-            <div className="flex w-full sm:w-auto items-center gap-4 bg-slate-950/90 backdrop-blur-2xl border border-white/10 px-6 py-3 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.8)] border-b-4 border-b-slate-800">
+            <div id="action-bar" className="flex w-full sm:w-auto items-center gap-4 bg-slate-950/90 backdrop-blur-2xl border border-white/10 px-6 py-3 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.8)] border-b-4 border-b-slate-800">
                 <div className="flex flex-col items-center border-r border-white/20 pr-4">
                     <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest drop-shadow-[0_0_10px_rgba(234,179,8,0.8)]">Energy</span>
                     <span className="text-xl font-black font-mono text-yellow-400">{localEnergy}/200</span>

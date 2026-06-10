@@ -63,8 +63,8 @@ export function GameMap({
                             </div>
                         )}
 
-                        <div className="absolute bottom-[130px] md:bottom-[100px] left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
-                            <button onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'} ${currentRound?.isGuidedRound && tutorialStep === 7 ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}>
+                        <div id="map-area" className="absolute bottom-[130px] md:bottom-[100px] left-1/2 -translate-x-1/2 w-full max-w-xs px-4">
+                            <button id="submit-btn" onClick={handleSubmit} disabled={!guess} className={`w-full py-4 text-sm font-black uppercase tracking-widest rounded-2xl shadow-xl transition-all border border-white/10 backdrop-blur-xl ${guess ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-black/40 text-white/20'} ${currentRound?.isGuidedRound && tutorialStep === 6 ? 'tutorial-spotlight' : ''}`}>
                                 CONFIRM COORDINATES
                             </button>
                         </div>

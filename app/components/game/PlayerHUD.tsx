@@ -1,16 +1,33 @@
 import { FadingHint } from "./FadingHint";
 
+// Tutorial steps — concise: icon + short phrase (under 15 words each)
+const TUTORIAL_STEPS = [
+    { icon: "🎓", text: "Welcome Agent! Your mission: Pinpoint this location on the map." },
+    { icon: "📷", text: "Tap 'Enable Scanner' above, then draw a box around any clue in the image." },
+    { icon: "💡", text: "Hints will appear here over time. Watch for them!" },
+    { icon: "⚡", text: "Use energy powers to help yourself or slow others down!" },
+    { icon: "🗺️", text: "Tap the satellite map on the right to drop your coordinate pin." },
+    { icon: "✅", text: "Press CONFIRM COORDINATES to lock in your guess." },
+    { icon: "🚀", text: "Mission starts now — good luck, Agent!" },
+];
+
+// Spotlight target IDs for each tutorial step
+const TUTORIAL_TARGETS = [null, "scanner-btn", "hint-area", "action-bar", "map-area", "submit-btn", null];
+
 export function PlayerHUD({
     room, currentRound, secondsElapsed, hintList, introStage, location,
     hasAcknowledgedRules, setHasAcknowledgedRules, tutorialStep, setTutorialStep,
     evidenceList, guess, submitted, visibleHints, isIntelCorrupted,
     isEvidenceMode, setIsEvidenceMode
 }: any) {
+
+    const tutorialTargetId = TUTORIAL_TARGETS[tutorialStep - 1];
+
     return (
         <>
             {/* Header / Timer & Hints */}
             {room.status === 'PLAYING' && (
-                <div className="absolute top-0 inset-x-0 z-[60] p-4 flex justify-between items-start pointer-events-none">
+                <div className="absolute top-0 inset-x-0 z-[60] p-4 flex justify-between items-start pointer-events-none safe-top">
                     <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex flex-col items-center mx-auto pointer-events-auto">
                         <div suppressHydrationWarning className={`text-4xl font-black font-mono tracking-tighter drop-shadow-lg ${(currentRound && ((currentRound.timeLimit || 120) - secondsElapsed) < 30) ? 'text-red-500 animate-pulse' : 'text-white'}`}>
                             {currentRound ? (
@@ -71,79 +88,99 @@ export function PlayerHUD({
                     <div className="max-w-2xl w-full bg-black border border-white/20 rounded-3xl p-8 md:p-12 shadow-[0_0_50px_rgba(0,0,0,0.8)]">
                         <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">MISSION BRIEFING</h2>
                         <div className="w-16 h-2 bg-blue-500 mx-auto mb-8 rounded-full" />
-                        
+
+                        {/* Mode-specific brief — 2-3 concise bullet points */}
                         {room.game_mode === 'time_attack' && (
-                            <div className="space-y-4">
-                                <h3 className="text-2xl font-black text-blue-400 uppercase tracking-widest flex justify-center items-center gap-2"><span>⏰</span> Time Attack Mode</h3>
-                                <p className="text-lg text-slate-300 leading-relaxed font-medium">Speed is your greatest asset. Confirm coordinates within the first 30 seconds for a <span className="text-green-400 font-bold">2.0x score multiplier</span>. Delaying your submission will linearly incur penalties down to <span className="text-red-500 font-bold">0.5x</span>.</p>
+                            <div className="space-y-4 text-left">
+                                <h3 className="text-2xl font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><span>⏰</span> Time Attack</h3>
+                                <ul className="space-y-2 text-slate-300">
+                                    <li className="flex items-start gap-2"><span className="text-blue-400 font-black">•</span> Confirm within <span className="text-green-400 font-bold">30s</span> for a <span className="text-green-400 font-bold">2.0x multiplier</span></li>
+                                    <li className="flex items-start gap-2"><span className="text-blue-400 font-black">•</span> Your multiplier drops the longer you wait</li>
+                                    <li className="flex items-start gap-2"><span className="text-blue-400 font-black">•</span> Pin the location as precisely as possible</li>
+                                </ul>
                             </div>
                         )}
                         {room.game_mode === 'teams' && (
-                            <div className="space-y-4">
-                                <h3 className="text-2xl font-black text-green-400 uppercase tracking-widest flex justify-center items-center gap-2"><span>🛡️</span> Squad Battle</h3>
-                                <p className="text-lg text-slate-300 leading-relaxed font-medium">Your individual performance fuels your Squad's total score. Communicate verbally with your team, use your sabotage powers strategically, and outscore rival factions.</p>
+                            <div className="space-y-4 text-left">
+                                <h3 className="text-2xl font-black text-green-400 uppercase tracking-widest flex items-center gap-2"><span>🛡️</span> Squad Battle</h3>
+                                <ul className="space-y-2 text-slate-300">
+                                    <li className="flex items-start gap-2"><span className="text-green-400 font-black">•</span> Your score contributes to your Squad's total</li>
+                                    <li className="flex items-start gap-2"><span className="text-green-400 font-black">•</span> Use sabotage powers against rival factions</li>
+                                    <li className="flex items-start gap-2"><span className="text-green-400 font-black">•</span> Communicate with your team verbally</li>
+                                </ul>
                             </div>
                         )}
                         {(room.game_mode === 'standard' || !room.game_mode) && (
-                            <div className="space-y-4">
-                                <h3 className="text-2xl font-black text-white uppercase tracking-widest flex justify-center items-center gap-2"><span>🎯</span> Classic Solo</h3>
-                                <p className="text-lg text-slate-300 leading-relaxed font-medium">Score high by accurately placing pins on the map and identifying critical intel from the image. Only one agent will stand on the final podium.</p>
+                            <div className="space-y-4 text-left">
+                                <h3 className="text-2xl font-black text-white uppercase tracking-widest flex items-center gap-2"><span>🎯</span> Classic Solo</h3>
+                                <ul className="space-y-2 text-slate-300">
+                                    <li className="flex items-start gap-2"><span className="text-white font-black">•</span> Find the location using clues and hints</li>
+                                    <li className="flex items-start gap-2"><span className="text-white font-black">•</span> Place your pin as accurately as possible</li>
+                                    <li className="flex items-start gap-2"><span className="text-white font-black">•</span> Only one agent reaches the podium</li>
+                                </ul>
                             </div>
                         )}
 
-                        <button 
+                        <button
                             onClick={() => setHasAcknowledgedRules(true)}
                             className="mt-12 w-full py-6 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-xl uppercase tracking-widest shadow-[0_0_30px_rgba(37,99,235,0.4)] transition-transform hover:scale-105 active:scale-95"
                         >
-                            I ACKNOWLEDGE GAME MODE
+                            I ACKNOWLEDGE
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* --- TUTORIAL OVERLAY --- */}
-            {room.has_guided_playthrough === 1 && currentRound.index === 0 && tutorialStep > 0 && tutorialStep < 8 && (
-                <div className="absolute inset-0 z-[95] pointer-events-none flex flex-col items-center justify-end pb-32 sm:pb-36">
-                    <div className="bg-blue-600/90 backdrop-blur-xl border-2 border-blue-400 p-6 rounded-2xl max-w-md shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-10">
-                        <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2 flex items-center gap-2">
-                            <span>🎓</span> Simulation Guide
-                        </h3>
-                        <p className="text-blue-100 text-sm mb-6 leading-relaxed font-medium">
-                            {tutorialStep === 1 && "Welcome Agent. Before we begin, let's review our Intelligence Tools. Your objective is to lock onto the precise GPS coordinates of this image."}
-                            {tutorialStep === 2 && "First, analyze the image. Click 'Enable Scanner' (top right) and draw a box over a distinct clue you see (e.g., an architectural feature or street sign)."}
-                            {tutorialStep === 3 && "Excellent. Marking evidence gives you an Evidence Bonus when HQ reviews your report. The more accurate, the higher the bonus."}
-                            {tutorialStep === 4 && "Keep an eye on the Hints deployed periodically at the top left. Also, use the Energy Bar at the bottom to deploy abilities like 'Jammer' against other agents!"}
-                            {tutorialStep === 5 && "If you're lost, you can use the 'Vicinity Scan' below to detect if the target is within your current map bounds."}
-                            {tutorialStep === 6 && "Now, click on the satellite map on the right to place your coordinate pin. Try to be as precise as possible."}
-                            {tutorialStep === 7 && "Finally, click CONFIRM COORDINATES to lock in your submission. High scores are awarded for accuracy within a 100m radius."}
-                        </p>
-                        <div className="flex justify-between items-center">
-                            <div className="flex gap-1">
-                                {[1, 2, 3, 4, 5, 6, 7].map(s => (
-                                    <div key={s} className={`w-2 h-2 rounded-full ${s === tutorialStep ? 'bg-white' : 'bg-white/30'}`} />
-                                ))}
+            {/* --- TUTORIAL OVERLAY (CONCISE, SPOTLIGHT) --- */}
+            {room.has_guided_playthrough === 1 && currentRound?.index === 0 && tutorialStep > 0 && tutorialStep < 8 && (
+                <>
+                    {/* Blur everything except spotlighted element */}
+                    <div className="absolute inset-0 z-[95] bg-black/60 backdrop-blur-md pointer-events-none" />
+
+                    {/* Tutorial Card — centered at bottom */}
+                    <div className="absolute inset-x-0 bottom-0 z-[97] flex flex-col items-center justify-end pb-[max(env(safe-area-inset-bottom),24px)] px-4 safe-bottom pointer-events-none">
+                        <div className="bg-blue-600/95 backdrop-blur-xl border-2 border-blue-400 p-5 rounded-2xl max-w-md shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-10 w-full">
+                            {/* Step indicator + content */}
+                            <div className="flex items-start gap-3 mb-3">
+                                <div className="text-3xl flex-shrink-0">{TUTORIAL_STEPS[tutorialStep - 1].icon}</div>
+                                <p className="text-sm text-blue-100 leading-relaxed font-medium pt-1">
+                                    {TUTORIAL_STEPS[tutorialStep - 1].text}
+                                </p>
                             </div>
-                            <button
-                                onClick={() => setTutorialStep((prev: number) => prev + 1)}
-                                disabled={
-                                    (tutorialStep === 2 && evidenceList.length === 0) ||
-                                    (tutorialStep === 6 && guess === null)
-                                }
-                                className={`px-6 py-2 bg-white text-blue-900 rounded-full font-black uppercase text-xs tracking-widest transition-colors ${((tutorialStep === 2 && evidenceList.length === 0) || (tutorialStep === 6 && guess === null))
-                                    ? 'opacity-50 cursor-not-allowed'
-                                    : 'hover:bg-blue-50'
-                                    }`}
-                            >
-                                {tutorialStep === 7 ? "Begin Operation" : "Next ➔"}
-                            </button>
+
+                            {/* Progress dots + Next button */}
+                            <div className="flex justify-between items-center">
+                                <div className="flex gap-1.5">
+                                    {[1, 2, 3, 4, 5, 6, 7].map(s => (
+                                        <div
+                                            key={s}
+                                            className={`w-2 h-2 rounded-full transition-all ${s === tutorialStep ? 'bg-white w-4' : 'bg-white/30'}`}
+                                        />
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={() => setTutorialStep((prev: number) => prev + 1)}
+                                    disabled={
+                                        (tutorialStep === 2 && evidenceList.length === 0) ||
+                                        (tutorialStep === 5 && guess === null)
+                                    }
+                                    className={`px-6 py-2 text-xs font-black uppercase tracking-widest rounded-full transition-all
+                                        ${((tutorialStep === 2 && evidenceList.length === 0) || (tutorialStep === 5 && guess === null))
+                                            ? 'bg-blue-800 text-blue-400 cursor-not-allowed'
+                                            : 'bg-white text-blue-900 hover:bg-blue-50 active:scale-95'
+                                        }`}
+                                >
+                                    {tutorialStep === 7 ? "Start 🚀" : "Next →"}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </>
             )}
 
             {/* Hints Overlay */}
             {!submitted && visibleHints.length > 0 && (
-                <div className="absolute bottom-28 left-4 md:bottom-32 md:left-6 z-30 w-[calc(100%-2rem)] max-w-sm space-y-2 pointer-events-none">
+                <div id="hint-area" className="absolute bottom-28 left-4 md:bottom-32 md:left-6 z-[30] w-[calc(100%-2rem)] max-w-sm space-y-2 pointer-events-none">
                     {visibleHints.map((hint: string, i: number) => (
                         <FadingHint
                             key={i}
@@ -182,10 +219,11 @@ export function PlayerHUD({
 
             {/* Mode Toggle */}
             {!submitted && (
-                <div className="absolute top-4 right-4 md:top-6 md:right-6 z-30 flex flex-col items-end gap-2 pointer-events-auto">
-                    <button 
-                        onClick={() => setIsEvidenceMode(!isEvidenceMode)} 
-                        className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'} ${currentRound?.isGuidedRound && tutorialStep === 2 && !isEvidenceMode ? 'animate-pulse ring-4 ring-yellow-400 ring-opacity-50' : ''}`}
+                <div id="scanner-btn" className="absolute top-4 right-4 md:top-6 md:right-6 z-[90] flex flex-col items-end gap-2 pointer-events-auto safe-top">
+                    <button
+                        onClick={() => setIsEvidenceMode(!isEvidenceMode)}
+                        className={`px-3 py-1.5 md:px-4 md:py-2 rounded-full text-[10px] md:text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md touch-target
+                            ${isEvidenceMode ? 'bg-green-500/20 text-green-400 border-green-500' : 'bg-white/10 text-white'} ${currentRound?.isGuidedRound && tutorialStep === 2 && !isEvidenceMode ? 'tutorial-spotlight' : ''}`}
                     >
                         {isEvidenceMode ? "Scanner Active" : "Enable Scanner"}
                     </button>
