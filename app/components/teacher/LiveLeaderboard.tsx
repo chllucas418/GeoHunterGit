@@ -10,25 +10,25 @@ interface LiveLeaderboardProps {
 
 export function LiveLeaderboard({ room, participants, officialEvidence, code, actionFetcher }: LiveLeaderboardProps) {
     return (
-        <div className="w-[25%] bg-slate-900/95 backdrop-blur-xl flex flex-col z-10 relative shadow-2xl">
-            <div className="p-6 border-b border-white/10">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Round Analysis</h3>
+        <div className="w-[25%] bg-[#0e1a14]/95 backdrop-blur-xl flex flex-col z-10 relative shadow-2xl border-l border-brass/10">
+            <div className="p-6 border-b border-brass/10">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-stone mb-2 font-mono">Round Analysis</h3>
                 <div className="flex justify-between items-end">
                     <div>
-                        <span className="block text-3xl font-black text-white">{participants.length}</span>
-                        <span className="text-[10px] text-slate-400 uppercase">Agents Deployed</span>
+                        <span className="block text-3xl font-black text-cream font-heading">{participants.length}</span>
+                        <span className="text-[10px] text-stone uppercase">Agents Deployed</span>
                     </div>
                     <div className="text-right">
-                        <span className="block text-3xl font-black text-green-400">
+                        <span className="block text-3xl font-black text-teal font-heading">
                             {officialEvidence?.length || 0}
                         </span>
-                        <span className="text-[10px] text-slate-400 uppercase">Intel Items</span>
+                        <span className="text-[10px] text-stone uppercase">Intel Items</span>
                     </div>
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-2">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone mb-2 font-mono">
                     Deployment Log {room.game_mode === 'teams' ? '(SQUAD SCORES)' : ''}
                 </h3>
 
@@ -45,33 +45,33 @@ export function LiveLeaderboard({ room, participants, officialEvidence, code, ac
                         const sortedTeams = Object.entries(teamScores).sort((a: any, b: any) => b[1] - a[1]);
 
                         return sortedTeams.map(([teamId, score], i) => (
-                            <div key={teamId} className={`flex items-center justify-between p-4 rounded-xl border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
+                            <div key={teamId} className={`flex items-center justify-between p-4 rounded-sm border ${i === 0 ? 'bg-brass/10 border-brass/20' : 'bg-[#1a1a18]/50 border-brass/5'} hover:bg-brass/5 transition-colors cursor-pointer`}>
                                 <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-white'}`}>
+                                    <div className={`w-10 h-10 rounded-sm flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-brass text-charcoal' : 'bg-[#1a1a18] text-cream'}`}>
                                         {i + 1}
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className={`font-bold text-lg uppercase truncate max-w-[200px] ${teamId.includes('Red') ? 'text-red-400' : teamId.includes('Blue') ? 'text-blue-400' : teamId.includes('Green') ? 'text-green-400' : 'text-yellow-400'}`}>{teamId}</span>
-                                        {i === 0 && <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest">Winning Squad</span>}
+                                        <span className={`font-bold text-lg uppercase truncate max-w-[200px] ${teamId.includes('Red') ? 'text-rust' : teamId.includes('Blue') ? 'text-teal' : teamId.includes('Green') ? 'text-teal' : 'text-brass'}`}>{teamId}</span>
+                                        {i === 0 && <span className="text-[10px] text-brass font-bold uppercase tracking-widest">Winning Squad</span>}
                                     </div>
                                 </div>
-                                <span className="font-mono text-2xl text-blue-300 font-black">{score as number}</span>
+                                <span className="font-mono text-2xl text-teal-light font-black">{score as number}</span>
                             </div>
                         ));
                     })()
                 ) : (
                     participants.map((p: any, i: number) => (
-                        <div key={i} className={`flex items-center justify-between p-4 rounded-xl border ${i === 0 ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/5 border-white/5'} hover:bg-white/10 transition-colors cursor-pointer`}>
+                        <div key={i} className={`flex items-center justify-between p-4 rounded-sm border ${i === 0 ? 'bg-brass/10 border-brass/20' : 'bg-[#1a1a18]/50 border-brass/5'} hover:bg-brass/5 transition-colors cursor-pointer`}>
                             <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-white'}`}>
+                                <div className={`w-10 h-10 rounded-sm flex items-center justify-center text-xl font-black ${i === 0 ? 'bg-brass text-charcoal' : 'bg-[#1a1a18] text-cream'}`}>
                                     {i + 1}
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="font-bold text-lg text-white truncate max-w-[200px]">{p.display_name}</span>
-                                    {i === 0 && <span className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest">Current Leader</span>}
+                                    <span className="font-bold text-lg text-cream truncate max-w-[200px]">{p.display_name}</span>
+                                    {i === 0 && <span className="text-[10px] text-brass font-bold uppercase tracking-widest">Current Leader</span>}
                                 </div>
                             </div>
-                            <span className="font-mono text-2xl text-blue-300 font-black">{p.score}</span>
+                            <span className="font-mono text-2xl text-teal-light font-black">{p.score}</span>
                         </div>
                     ))
                 )}
@@ -79,11 +79,11 @@ export function LiveLeaderboard({ room, participants, officialEvidence, code, ac
 
             {/* Official Evidence List Toggle/View */}
             {officialEvidence?.length > 0 && (
-                <div className="p-4 border-t border-white/10 bg-slate-900/50">
-                    <h4 className="text-[10px] uppercase font-bold text-yellow-500 tracking-wider mb-2">Official Intel</h4>
+                <div className="p-4 border-t border-brass/10 bg-[#0e1a14]/50">
+                    <h4 className="text-[10px] uppercase font-bold text-brass tracking-wider mb-2 font-mono">Official Intel</h4>
                     <div className="space-y-1 max-h-[100px] overflow-y-auto custom-scrollbar">
                         {officialEvidence.map((ev: any) => (
-                            <div key={ev.id} className="text-[10px] text-slate-400 border-l-2 border-yellow-500/20 pl-2 hover:border-yellow-500 hover:text-white transition-colors cursor-help group relative">
+                            <div key={ev.id} className="text-[10px] text-stone border-l-2 border-brass/20 pl-2 hover:border-brass hover:text-cream transition-colors cursor-help group relative">
                                 <span className="block truncate">{ev.description}</span>
                             </div>
                         ))}
@@ -91,10 +91,10 @@ export function LiveLeaderboard({ room, participants, officialEvidence, code, ac
                 </div>
             )}
 
-            <div className="p-6 border-t border-white/10 bg-slate-900">
+            <div className="p-6 border-t border-brass/10 bg-[#0e1a14]">
                 <button
                     onClick={() => actionFetcher.submit({ action: "NEXT_ROUND" }, { method: "post", action: `/api/room/${code}/action` })}
-                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white text-lg font-black uppercase tracking-widest rounded-xl shadow-lg transition-all transform hover:scale-[1.02]"
+                    className="w-full py-4 bg-teal/80 hover:bg-teal text-cream text-lg font-black uppercase tracking-widest rounded-sm shadow-lg transition-all transform hover:scale-[1.02] font-mono border border-teal/50"
                 >
                     Next Location →
                 </button>

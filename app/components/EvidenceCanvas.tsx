@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, type ReactNode, useCallback } from "react";
-import type { BoxCoordinates } from "~/types/shared";
+import { useEffect, useState, useRef, useCallback } from "react";
+import type { ReactNode } from "react";
 
 interface EvidenceCanvasProps {
     imageUrl: string;
@@ -14,18 +14,16 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
     const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
     const [containerDimensions, setContainerDimensions] = useState<{ width: number; height: number } | null>(null);
 
-    const containerRef = useRef<HTMLDivElement>(null); // The outer responsive container
-    const imageContainerRef = useRef<HTMLDivElement>(null); // The inner aspect-ratio locked container
+    const containerRef = useRef<HTMLDivElement>(null);
+    const imageContainerRef = useRef<HTMLDivElement>(null);
 
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
-    const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null); // In Pixels
+    const [drawRect, setDrawRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
-    // Debounce ref to prevent accidental double-taps
     const touchDebounceRef = useRef(false);
     const lastTouchTimeRef = useRef(0);
 
-    // Observer to track container size
     useEffect(() => {
         if (!containerRef.current) return;
 
@@ -42,7 +40,6 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
         return () => observer.disconnect();
     }, []);
 
-    // Check for cached image on mount
     useEffect(() => {
         const img = imageContainerRef.current?.querySelector('img');
         if (img && img.complete && img.naturalHeight > 0) {
@@ -57,7 +54,6 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
         }
     };
 
-    // Determine styles for the inner container based on which dimension is limiting
     const getContainerStyle = () => {
         if (!imageAspectRatio || !containerDimensions) return { width: '100%', height: '100%' };
 
@@ -65,21 +61,13 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
         const containerAspectRatio = cW / cH;
 
         if (containerAspectRatio > imageAspectRatio) {
-            // Container is wider -> Height limited by container, Width calculated
             const targetHeight = cH;
             const targetWidth = targetHeight * imageAspectRatio;
-            return {
-                height: `${targetHeight}px`,
-                width: `${targetWidth}px`,
-            };
+            return { height: `${targetHeight}px`, width: `${targetWidth}px` };
         } else {
-            // Container is narrower -> Width limited by container, Height calculated
             const targetWidth = cW;
             const targetHeight = targetWidth / imageAspectRatio;
-            return {
-                width: `${targetWidth}px`,
-                height: `${targetHeight}px`,
-            };
+            return { width: `${targetWidth}px`, height: `${targetHeight}px` };
         }
     };
 
@@ -101,29 +89,26 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
     const handlePointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
         if (disabled) return;
 
-        // Debounce rapid taps (300ms)
         const now = Date.now();
         if (now - lastTouchTimeRef.current < 300) return;
         lastTouchTimeRef.current = now;
 
-        // Prevent default to avoid text selection / browser gestures
         e.preventDefault();
 
         const { x, y } = getRelativeCoords(e);
         setIsDrawing(true);
         setStartPoint({ x, y });
         setDrawRect({ x, y, w: 0, h: 0 });
-        onBoxChange(null); // Reset
+        onBoxChange(null);
     }, [disabled, onBoxChange]);
 
     const handleMouseDown = handlePointerDown;
 
     const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!isDrawing || !startPoint || disabled) return;
-        e.preventDefault(); // Prevent scrolling while drawing
+        e.preventDefault();
         const { x, y, width, height } = getRelativeCoords(e);
 
-        // Clamp to image bounds
         const clampedX = Math.max(0, Math.min(x, width));
         const clampedY = Math.max(0, Math.min(y, height));
 
@@ -139,7 +124,6 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
         if (!isDrawing || !drawRect || !imageContainerRef.current) return;
         setIsDrawing(false);
 
-        // Convert to relative 1000-scale for backend
         const rect = imageContainerRef.current.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
             const relativeBox = {
@@ -149,23 +133,20 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
                 h: Math.round((drawRect.h / rect.height) * 1000)
             };
 
-            // Filter tiny boxes
             if (relativeBox.w > 20 && relativeBox.h > 20) {
                 onBoxChange(relativeBox);
             } else {
                 onBoxChange(null);
             }
-            // Unconditionally clear the transient drawing box
             setDrawRect(null);
         }
     };
 
     return (
         <div
-            className="w-full h-full bg-slate-900 flex items-center justify-center overflow-hidden"
+            className="w-full h-full bg-[#0e1a14] flex items-center justify-center overflow-hidden"
             ref={containerRef}
         >
-            {/* Inner Container: Locked to Image Aspect Ratio */}
             <div
                 ref={imageContainerRef}
                 className="relative select-none touch-none"
@@ -186,10 +167,10 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
                     onLoad={handleImageLoad}
                 />
 
-                {/* Drawing Box (Transient) */}
+                {/* Drawing Box — Brass/Amber tint */}
                 {drawRect && (
                     <div
-                        className="absolute border-2 border-yellow-400 bg-yellow-400/20 z-50"
+                        className="absolute border-2 border-brass bg-brass/15 z-50"
                         style={{
                             left: drawRect.x,
                             top: drawRect.y,
@@ -199,13 +180,12 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
                     />
                 )}
 
-                {/* Result/Overlay Content (Anchored to this container) */}
                 {children}
 
                 {/* Guided Box Overlay */}
                 {!hasDrawnBoxes && guidedBox && (
                     <div
-                        className="absolute border-2 border-dashed border-yellow-400 animate-pulse pointer-events-none z-40 bg-yellow-400/10"
+                        className="absolute border-2 border-dashed border-brass animate-pulse pointer-events-none z-40 bg-brass/10"
                         style={{
                             left: `${guidedBox.x / 10}%`,
                             top: `${guidedBox.y / 10}%`,
@@ -213,7 +193,7 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
                             height: `${guidedBox.h / 10}%`
                         }}
                     >
-                        <div className="absolute -top-6 left-0 text-[10px] font-black uppercase tracking-widest text-yellow-400 bg-black/60 px-2 py-0.5 rounded">
+                        <div className="absolute -top-6 left-0 text-[10px] font-bold uppercase tracking-widest text-brass bg-[#0e1a14]/80 px-2 py-0.5 rounded">
                             Draw Here
                         </div>
                     </div>
@@ -222,7 +202,7 @@ export function EvidenceCanvas({ imageUrl, onBoxChange, disabled = false, hasDra
                 {/* Instruction Overlay */}
                 {!drawRect && !isDrawing && !disabled && !hasDrawnBoxes && (
                     <div className="absolute inset-x-0 bottom-4 flex justify-center pointer-events-none">
-                        <p className="bg-black/60 text-white px-3 py-1 rounded text-xs font-mono uppercase tracking-widest backdrop-blur-md border border-white/10">
+                        <p className="bg-[#0e1a14]/80 text-stone-light px-3 py-1 rounded text-[10px] font-mono uppercase tracking-widest backdrop-blur-md border border-brass/20">
                             Draw Box to Scan
                         </p>
                     </div>

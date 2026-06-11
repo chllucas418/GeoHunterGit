@@ -1,24 +1,51 @@
 @import "tailwindcss";
 
+/* ========================================
+   ATLAS DESIGN SYSTEM — GeoHunter
+   Cartographic Expedition Aesthetic
+   ======================================== */
+
+/* --- Custom Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
 html,
 body {
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  background-color: #030712;
-  color: #f8fafc;
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  background-color: #0e1a14;
+  color: #f5f0e8;
   overflow-x: hidden;
-  /* iPad safe-area padding */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* CSS custom properties for responsive sizing */
+/* Typography font families */
+.font-heading {
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+.font-mono,
+code,
+pre,
+.mono-display {
+  font-family: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+}
+
+.font-body {
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* --- CSS Custom Properties --- */
 :root {
   /* Safe areas */
   --safe-area-top: env(safe-area-inset-top);
   --safe-area-bottom: env(safe-area-inset-bottom);
   --safe-area-left: env(safe-area-inset-left);
   --safe-area-right: env(safe-area-inset-right);
+
   /* Touch targets */
   --touch-target-min: 44px;
+
   /* Fluid sizing scale */
   --text-xs: clamp(0.625rem, 1.5vw, 0.75rem);
   --text-sm: clamp(0.75rem, 2vw, 0.875rem);
@@ -30,202 +57,152 @@ body {
   --text-4xl: clamp(1.875rem, 6vw, 2.25rem);
   --text-5xl: clamp(2.25rem, 8vw, 3rem);
   --text-6xl: clamp(3rem, 10vw, 3.75rem);
+
+  /* Atlas Color Palette — Earthy & Warm */
+  --forest-dark: #0e1a14;
+  --forest-mid: #1a3a2f;
+  --forest-light: #2d5a47;
+  --brass: #c9a84c;
+  --brass-light: #e8d48b;
+  --brass-dark: #8a6f2e;
+  --cream: #f5f0e8;
+  --cream-dark: #e8e0d0;
+  --stone-light: #d6cfc3;
+  --stone: #a39e93;
+  --stone-dark: #6b6660;
+  --charcoal: #1a1a18;
+  --teal: #4a9b8c;
+  --teal-light: #7ec8ba;
+  --teal-dark: #2d7063;
+  --amber: #d4822a;
+  --amber-light: #f5a84a;
+  --sienna: #8b4513;
+  --rust: #b7472a;
+  --parchment: #f5f0e8;
+  --ink: #2c2416;
+
+  /* Semantic Colors */
+  --color-danger: #b7472a;
+  --color-danger-light: #d4724a;
+  --color-warning: #d4822a;
+  --color-warning-light: #f5a84a;
+  --color-success: #4a9b8c;
+  --color-success-light: #7ec8ba;
+  --color-info: #6b8fbf;
+  --color-info-light: #a0bddb;
+  --color-primary: #c9a84c;
+  --color-primary-light: #e8d48b;
+  --color-accent: #d4822a;
+  --color-accent-light: #f5a84a;
+
+  /* Text Colors */
+  --text-primary: #f5f0e8;
+  --text-secondary: #d6cfc3;
+  --text-muted: #a39e93;
+
+  /* Letter Spacing */
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.05em;
+  --tracking-widest: 0.15em;
+  --tracking-super: 0.25em;
 }
 
-/* --- Premium Liquid Glass Utilities --- */
+/* ========================================
+   GLASS PANEL UTILITIES — Atlas Version
+   ======================================== */
 
-:root {
-  /* Light Mode Liquid Glass Palette */
-  --glass-bg-light: rgba(255, 255, 255, 0.85);
-  /* More opaque */
-  --glass-border-light: rgba(203, 213, 225, 0.6);
-  /* Slate-300 */
-  --glass-shadow-light: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --text-primary-light: #0f172a;
-  /* Slate-900 */
-  --text-secondary-light: #475569;
-  /* Slate-600 */
-}
-
-body.light-mode {
-  background: #f8fafc;
-  /* Slate-50 - Solid light background */
-  color: var(--text-primary-light);
-}
-
-/* Ensure global elements react to light mode correctly if they use default text colors */
-body.light-mode h1,
-body.light-mode h2,
-body.light-mode h3,
-body.light-mode h4,
-body.light-mode h5,
-body.light-mode h6 {
-  color: #0f172a;
-  /* Force headers to dark in light mode */
-}
-
-body.light-mode p,
-body.light-mode span,
-body.light-mode div {
-  color: inherit;
-  /* Inherit slate-900 */
-}
-
+/* Base glass — aged parchment style */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-}
-
-.light-mode .glass-panel {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  /* Slate-200 */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  color: #0f172a;
+  background: linear-gradient(
+    135deg,
+    rgba(26, 58, 47, 0.92) 0%,
+    rgba(14, 26, 20, 0.96) 100%
+  );
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(201, 168, 76, 0.1);
 }
 
 .glass-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.light-mode .glass-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  color: #0f172a;
+  background: linear-gradient(
+    145deg,
+    rgba(45, 90, 71, 0.6) 0%,
+    rgba(26, 58, 47, 0.8) 100%
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
-  transform: translateY(-4px) scale(1.02);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.4);
+  transform: translateY(-3px) scale(1.01);
+  background: linear-gradient(
+    145deg,
+    rgba(55, 100, 81, 0.7) 0%,
+    rgba(36, 78, 57, 0.9) 100%
+  );
+  border-color: rgba(201, 168, 76, 0.4);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(201, 168, 76, 0.1);
 }
 
-.light-mode .glass-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  border-color: #cbd5e1;
+.glass-panel-dark {
+  background: rgba(14, 26, 20, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(201, 168, 76, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-.glass-card {
-  will-change: transform;
-  /* Performance optimization */
-}
-
-.text-glow {
-  text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-}
-
-.light-mode .text-glow {
-  text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-}
-
-/* --- Aurora Background Animations --- */
+/* ========================================
+   TOPOGRAPHIC BACKGROUND ANIMATION
+   ======================================== */
 
 @keyframes aurora-1 {
-
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-    opacity: 0.4;
-  }
-
-  50% {
-    transform: translate(20px, -20px) scale(1.1);
-    opacity: 0.6;
-  }
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  50% { transform: translate(20px, -20px) scale(1.05); opacity: 0.8; }
 }
 
 @keyframes aurora-2 {
-
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-    opacity: 0.3;
-  }
-
-  50% {
-    transform: translate(-30px, 10px) scale(1.2);
-    opacity: 0.5;
-  }
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.4; }
+  50% { transform: translate(-30px, 10px) scale(1.1); opacity: 0.6; }
 }
 
 @keyframes float {
-
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-10px);
-  }
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 }
 
-.animate-aurora-1 {
-  animation: aurora-1 15s ease-in-out infinite;
-}
+.animate-aurora-1 { animation: aurora-1 18s ease-in-out infinite; }
+.animate-aurora-2 { animation: aurora-2 25s ease-in-out infinite reverse; }
+.animate-float { animation: float 7s ease-in-out infinite; }
 
-.animate-aurora-2 {
-  animation: aurora-2 20s ease-in-out infinite reverse;
-}
+/* ========================================
+   HINT CARD SLIDE-IN & FADE-OUT
+   ======================================== */
 
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* --- Hint Card Slide-In & Fade-Out Animation --- */
 @keyframes hint-slide-in-fade-out {
-  0% {
-    opacity: 0;
-    transform: translateX(-15px);
-  }
-  5% {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  85% {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-12px);
-  }
+  0% { opacity: 0; transform: translateX(-15px); }
+  5% { opacity: 1; transform: translateX(0); }
+  85% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateY(-12px); }
 }
 
 .hint-fade-card {
   animation: hint-slide-in-fade-out 12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* --- Touch Action Classes for iPad --- */
+/* ========================================
+   TOUCH ACTION UTILITIES
+   ======================================== */
+
 .touch-none {
   touch-action: none;
   -webkit-touch-callout: none;
@@ -233,70 +210,313 @@ body.light-mode div {
   user-select: none;
 }
 
-.touch-pan-x {
-  touch-action: pan-x pan-y;
-  -webkit-touch-callout: default;
-}
+.touch-pan-x { touch-action: pan-x pan-y; }
+.touch-manipulation { touch-action: manipulation; }
 
-.touch-manipulation {
-  touch-action: manipulation;
-  -webkit-touch-callout: default;
-}
-
-/* Prevent iOS bounce/overscroll */
 .no-bounce {
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
 }
 
-/* --- Safe Area Padding Utilities --- */
-.safe-top {
-  padding-top: max(var(--safe-area-top), 0px);
-}
+/* ========================================
+   SAFE AREA UTILITIES
+   ======================================== */
 
-.safe-bottom {
-  padding-bottom: max(var(--safe-area-bottom, 16px), 16px);
-}
+.safe-top { padding-top: max(var(--safe-area-top), 0px); }
+.safe-bottom { padding-bottom: max(var(--safe-area-bottom, 16px), 16px); }
+.safe-left { padding-left: max(var(--safe-area-left), 0px); }
+.safe-right { padding-right: max(var(--safe-area-right), 0px); }
 
-.safe-left {
-  padding-left: max(var(--safe-area-left), 0px);
-}
+.game-bottom-element { padding-bottom: max(env(safe-area-inset-bottom), 16px); }
+.game-top-element { padding-top: max(env(safe-area-inset-top), 16px); }
 
-.safe-right {
-  padding-right: max(var(--safe-area-right), 0px);
-}
+/* ========================================
+   TOUCH TARGETS
+   ======================================== */
 
-/* Game element safe area — ensures buttons aren't hidden by notch/home indicator */
-.game-bottom-element {
-  padding-bottom: max(env(safe-area-inset-bottom), 16px);
-}
-
-.game-top-element {
-  padding-top: max(env(safe-area-inset-top), 16px);
-}
-
-/* --- Minimum Touch Target (iOS 44px) --- */
 .touch-target {
   min-height: var(--touch-target-min);
   min-width: var(--touch-target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* --- Spotlight Ring for Tutorial --- */
+/* ========================================
+   TUTORIAL SPOTLIGHT — Atlas Gold
+   ======================================== */
+
 .tutorial-spotlight {
-  box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.8), 0 0 20px 8px rgba(234, 179, 8, 0.4);
+  box-shadow:
+    0 0 0 4px rgba(201, 168, 76, 0.8),
+    0 0 20px 8px rgba(201, 168, 76, 0.4);
   animation: spotlight-pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes spotlight-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.8), 0 0 20px 8px rgba(234, 179, 8, 0.4);
+    box-shadow:
+      0 0 0 4px rgba(201, 168, 76, 0.8),
+      0 0 20px 8px rgba(201, 168, 76, 0.4);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(234, 179, 8, 1), 0 0 30px 12px rgba(234, 179, 8, 0.6);
+    box-shadow:
+      0 0 0 6px rgba(201, 168, 76, 1),
+      0 0 30px 12px rgba(201, 168, 76, 0.6);
   }
 }
 
-/* --- Mobile Fluid Sizing Helpers --- */
+/* ========================================
+   ATLAS TYPOGRAPHY UTILITIES
+   ======================================== */
+
+.heading-1 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: var(--text-4xl);
+  font-weight: 900;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.1;
+}
+
+.heading-2 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.2;
+}
+
+.heading-3 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-normal);
+  line-height: 1.3;
+}
+
+.body-text {
+  font-family: "DM Sans", sans-serif;
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.label-small {
+  font-family: "DM Sans", sans-serif;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+}
+
+/* ========================================
+   ATLAS ANIMATION PRESETS
+   ======================================== */
+
+.anim-bounce-warning {
+  animation: bounce-warning 1.2s ease-in-out infinite;
+}
+
+@keyframes bounce-warning {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.anim-bounce-attention {
+  animation: bounce-attention 1.8s ease-in-out infinite;
+}
+
+@keyframes bounce-attention {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.02); }
+}
+
+.anim-slide-in-bottom {
+  animation: slide-in-bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slide-in-bottom {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.anim-fade-in {
+  animation: fade-in 0.35s ease-out forwards;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.anim-glow-pulse {
+  animation: glow-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(201, 168, 76, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(201, 168, 76, 0.5);
+  }
+}
+
+/* ========================================
+   FOCUS STATES
+   ======================================== */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+/* ========================================
+   CONNECTION STATUS INDICATOR
+   ======================================== */
+
+.ws-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 2px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  border: 1px solid;
+}
+
+.ws-status-connected {
+  background: rgba(74, 155, 140, 0.15);
+  border-color: rgba(74, 155, 140, 0.4);
+  color: var(--teal-light);
+}
+
+.ws-status-reconnecting {
+  background: rgba(212, 130, 42, 0.15);
+  border-color: rgba(212, 130, 42, 0.4);
+  color: var(--amber-light);
+}
+
+.ws-status-disconnected {
+  background: rgba(183, 71, 42, 0.15);
+  border-color: rgba(183, 71, 42, 0.4);
+  color: var(--rust);
+}
+
+.ws-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ws-status-connected .ws-status-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ========================================
+   ATLAS BUTTON SYSTEM
+   ======================================== */
+
+/* Primary Button — Brass/Gold */
+.btn-primary {
+  min-height: 44px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, var(--brass) 0%, var(--brass-dark) 100%);
+  color: var(--charcoal);
+  font-family: "DM Sans", sans-serif;
+  font-weight: 700;
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  border-radius: 2px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow:
+    0 2px 8px rgba(201, 168, 76, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--brass-light) 0%, var(--brass) 100%);
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 16px rgba(201, 168, 76, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Secondary Button — Stone Border */
+.btn-secondary {
+  min-height: 44px;
+  padding: 10px 20px;
+  background: rgba(26, 58, 47, 0.6);
+  color: var(--cream);
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  border-radius: 2px;
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-secondary:hover {
+  background: rgba(45, 90, 71, 0.7);
+  border-color: rgba(201, 168, 76, 0.5);
+}
+
+/* ========================================
+   SCROLLBAR
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(26, 58, 47, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 168, 76, 0.5);
+}
+
+/* ========================================
+   MOBILE FLUID SIZING HELPERS
+   ======================================== */
+
 .game-hint-bar {
   bottom: clamp(180px, 35vh, 280px);
   left: 1rem;
@@ -319,286 +539,148 @@ body.light-mode div {
 }
 
 /* ========================================
-   DESIGN SYSTEM: Semantic Colors
+   LIGHT MODE OVERRIDES
    ======================================== */
-:root {
-  /* Semantic Color Tokens */
-  --color-danger: #ef4444;
-  --color-danger-light: #fca5a5;
-  --color-warning: #eab308;
-  --color-warning-light: #fde047;
-  --color-success: #22c55e;
-  --color-success-light: #86efac;
-  --color-info: #3b82f6;
-  --color-info-light: #93c5fd;
-  --color-primary: #3b82f6;
-  --color-primary-light: #93c5fd;
-  --color-accent: #a855f7;
-  --color-accent-light: #d8b4fe;
 
-  /* Text Colors */
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+body.light-mode {
+  background: var(--parchment);
+  color: var(--ink);
+}
 
-  /* Letter Spacing */
-  --tracking-tight: -0.025em;
-  --tracking-normal: 0em;
-  --tracking-wide: 0.05em;
-  --tracking-widest: 0.1em;
-  --tracking-super: 0.2em;
+body.light-mode h1,
+body.light-mode h2,
+body.light-mode h3,
+body.light-mode h4,
+body.light-mode h5,
+body.light-mode h6 {
+  color: var(--ink);
+}
+
+body.light-mode p,
+body.light-mode span,
+body.light-mode div {
+  color: inherit;
+}
+
+body.light-mode .glass-panel {
+  background: rgba(245, 240, 232, 0.95);
+  border-color: rgba(139, 69, 19, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .glass-card {
+  background: rgba(245, 240, 232, 0.9);
+  border-color: rgba(139, 69, 19, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+body.light-mode .text-secondary {
+  color: var(--stone-dark);
 }
 
 /* ========================================
-   DESIGN SYSTEM: Typography Utilities
+   TEXT GLOW (ATLAS — Warm Brass)
    ======================================== */
-.heading-1 {
-  font-size: var(--text-4xl);
-  font-weight: 900;
-  letter-spacing: var(--tracking-tight);
-  line-height: 1.1;
+
+.text-glow {
+  text-shadow: 0 0 20px rgba(201, 168, 76, 0.5);
 }
 
-.heading-2 {
-  font-size: var(--text-3xl);
-  font-weight: 800;
-  letter-spacing: var(--tracking-tight);
-  line-height: 1.2;
-}
+/* ========================================
+   READABILITY IMPROVEMENTS
+   Minimum font sizes for accessibility
+   ======================================== */
 
-.heading-3 {
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  letter-spacing: var(--tracking-normal);
-  line-height: 1.3;
-}
-
-.body-text {
-  font-size: var(--text-base);
-  font-weight: 400;
+/* Base body text */
+body,
+p,
+li,
+td,
+th,
+label {
+  font-size: 15px;
   line-height: 1.6;
 }
 
-.label-small {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-widest);
-  text-transform: uppercase;
-}
-
-.mono-display {
-  font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
-  letter-spacing: var(--tracking-tight);
-}
-
-/* ========================================
-   DESIGN SYSTEM: Animation Presets
-   ======================================== */
-.anim-bounce-warning {
-  animation: bounce-warning 1s ease-in-out infinite;
-}
-
-@keyframes bounce-warning {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-.anim-bounce-attention {
-  animation: bounce-attention 1.5s ease-in-out infinite;
-}
-
-@keyframes bounce-attention {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-4px) scale(1.02); }
-}
-
-.anim-slide-in-bottom {
-  animation: slide-in-bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes slide-in-bottom {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.anim-fade-in {
-  animation: fade-in 0.3s ease-out forwards;
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.anim-glow-pulse {
-  animation: glow-pulse 2s ease-in-out infinite;
-}
-
-@keyframes glow-pulse {
-  0%, 100% {
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 25px rgba(59, 130, 246, 0.6);
-  }
-}
-
-/* ========================================
-   DESIGN SYSTEM: Focus States (Accessibility)
-   ======================================== */
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible {
-  outline: 2px solid var(--color-info);
-  outline-offset: 2px;
-}
-
-/* ========================================
-   DESIGN SYSTEM: Connection Status Indicator
-   ======================================== */
-.ws-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: var(--tracking-widest);
-  text-transform: uppercase;
-}
-
-.ws-status-connected {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  color: #22c55e;
-}
-
-.ws-status-reconnecting {
-  background: rgba(234, 179, 8, 0.15);
-  border: 1px solid rgba(234, 179, 8, 0.4);
-  color: #eab308;
-}
-
-.ws-status-disconnected {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #ef4444;
-}
-
-.ws-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.ws-status-connected .ws-status-dot {
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-/* ========================================
-   DESIGN SYSTEM: Glass Panel Enhancements
-   ======================================== */
-.glass-panel-dark {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-/* ========================================
-   DESIGN SYSTEM: Interactive Elements
-   ======================================== */
-.touch-target {
-  min-height: 44px;
-  min-width: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Primary Button */
-.btn-primary {
-  min-height: 44px;
-  padding: 10px 20px;
-  background: var(--color-primary);
-  color: white;
+/* Dashboard-specific readability */
+.dashboard-card h3 {
+  font-size: 1.25rem;
   font-weight: 700;
-  font-size: var(--text-sm);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  border-radius: 0.5rem;
-  border: none;
+}
+
+.dashboard-stat {
+  font-size: 2.5rem;
+  font-weight: 900;
+}
+
+/* Form elements - ensure readability */
+.form-label {
+  font-size: 0.875rem;
+  color: var(--stone-light);
+}
+
+.form-input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  font-size: 1rem;
+  color: var(--cream);
+}
+
+/* Admin panel base styles */
+.admin-panel {
+  min-height: 100vh;
+  background-color: var(--forest-dark);
+  color: var(--cream);
+}
+
+/* Atlas-styled form inputs */
+.atlas-input {
+  width: 100%;
+  background-color: var(--forest-dark);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  padding: 0.75rem 1rem;
+  color: var(--cream);
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.atlas-input:focus {
+  outline: none;
+  border-color: var(--brass);
+  box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.1);
+}
+
+.atlas-input::placeholder {
+  color: var(--stone);
+}
+
+/* Atlas-styled select */
+.atlas-select {
+  width: 100%;
+  background-color: var(--forest-dark);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  padding: 0.75rem 1rem;
+  color: var(--cream);
+  font-size: 1rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
 }
 
-.btn-primary:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
+.atlas-select:focus {
+  outline: none;
+  border-color: var(--brass);
 }
 
-.btn-primary:active {
-  transform: translateY(0) scale(0.98);
+/* Atlas text utilities */
+.text-body {
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-/* Secondary Button */
-.btn-secondary {
-  min-height: 44px;
-  padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  font-weight: 600;
-  font-size: var(--text-sm);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-/* ========================================
-   LIGHT MODE OVERRIDES
-   ======================================== */
-body.light-mode .text-secondary {
-  color: #374151; /* Better contrast on light backgrounds */
-}
-
-/* ========================================
-   PREFERS DARK MODE (for systems that default to light)
-   ======================================== */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-  }
+.text-body-lg {
+  font-size: 16px;
+  line-height: 1.7;
 }

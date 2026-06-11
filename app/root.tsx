@@ -36,7 +36,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+    href: "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;600;700&display=swap",
   },
 ];
 
@@ -59,28 +59,41 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Meta />
         <Links />
       </head>
-      <body className="flex flex-col min-h-screen relative font-sans antialiased text-slate-100 overflow-x-hidden transition-colors duration-500">
+      <body className="flex flex-col min-h-screen relative font-body antialiased text-stone-100 overflow-x-hidden transition-colors duration-500">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
 
-        {/* Animated Background Mesh */}
-        <div className="fixed inset-0 z-0 bg-[#030712] pointer-events-none transition-colors duration-500 body-bg">
-          {/* Light mode override in CSS */}
-          <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-indigo-600/30 rounded-full blur-[100px] animate-aurora-1 opacity-40 mix-blend-screen" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-purple-600/20 rounded-full blur-[120px] animate-aurora-2 opacity-30 mix-blend-screen" />
+        {/* Topographic Background */}
+        <div className="fixed inset-0 z-0 bg-[#0e1a14] pointer-events-none transition-colors duration-500 body-bg">
+          {/* Topographic contour lines */}
+          <svg className="absolute inset-0 w-full h-full opacity-[0.07]" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="topo-lines" x="0" y="0" width="120" height="120" patternUnits="userSpaceOnUse">
+                <path d="M0 60 Q30 30 60 60 Q90 90 120 60" fill="none" stroke="#c9a84c" strokeWidth="0.5"/>
+                <path d="M-20 80 Q20 40 60 80 Q100 120 140 80" fill="none" stroke="#c9a84c" strokeWidth="0.5"/>
+                <path d="M0 20 Q40 0 60 20 Q80 40 120 20" fill="none" stroke="#c9a84c" strokeWidth="0.5"/>
+                <circle cx="60" cy="60" r="35" fill="none" stroke="#c9a84c" strokeWidth="0.3"/>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#c9a84c" strokeWidth="0.3"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#topo-lines)"/>
+          </svg>
+          {/* Warm ambient light pools */}
+          <div className="absolute top-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-[#1a3a2f]/40 rounded-full blur-[150px] animate-aurora-1" />
+          <div className="absolute bottom-[-15%] left-[-15%] w-[50vw] h-[50vw] bg-[#4a9b8c]/15 rounded-full blur-[120px] animate-aurora-2" />
         </div>
 
         {/* Content Layer */}
         <div className="relative z-10 flex-grow flex flex-col">
           {children}
           {/* --- Global System Footer (Sleek Centered Design) --- */}
-          <footer className="relative z-20 py-12 mt-auto text-center border-t border-white/5 bg-[#030712]/40 backdrop-blur-md transition-colors duration-500 footer-glass">
-            <div className="flex justify-center items-center gap-6 text-[10px] uppercase font-bold tracking-[0.3em] text-white/40 mb-4">
-              <a href="https://hkgeohunter.com/privacy" className="hover:text-blue-400 transition-all duration-300">Privacy Policy</a>
-              <span className="text-white/10">/</span>
-              <a href="/support" className="hover:text-indigo-400 transition-all duration-300">Support</a>
+          <footer className="relative z-20 py-12 mt-auto text-center border-t border-brass/10 bg-[#0e1a14]/40 backdrop-blur-md transition-colors duration-500 footer-glass">
+            <div className="flex justify-center items-center gap-6 text-[10px] uppercase font-bold tracking-[0.3em] text-stone-400 mb-4">
+              <a href="https://hkgeohunter.com/privacy" className="hover:text-brass transition-all duration-300">Privacy Policy</a>
+              <span className="text-brass/20">/</span>
+              <a href="/support" className="hover:text-brass transition-all duration-300">Support</a>
             </div>
-            <div className="text-[9px] uppercase tracking-[0.5em] font-black text-white/10 flex flex-col items-center gap-2">
-              <span>Engineered by <span className="text-white/30 tracking-[0.2em] font-black">Lucas Cheung</span></span>
+            <div className="text-[9px] uppercase tracking-[0.5em] font-black text-stone-500 flex flex-col items-center gap-2">
+              <span>Engineered by <span className="text-stone-300 tracking-[0.2em] font-black">Lucas Cheung</span></span>
               <span className="opacity-40 text-[7px] font-mono">Status: Optimized // All Rights Reserved</span>
             </div>
           </footer>

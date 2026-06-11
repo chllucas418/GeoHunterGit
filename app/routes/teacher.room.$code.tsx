@@ -193,6 +193,40 @@ export default function TeacherRoom() {
     const [reviewSplitRatio, setReviewSplitRatio] = useState(35);
     const [isResizing, setIsResizing] = useState(false);
     const [teamCount, setTeamCount] = useState(2);
+    const [analyzingEvidenceId, setAnalyzingEvidenceId] = useState<string | null>(null);
+    const [wsStatus, setWsStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
+    const wsReconnectAttemptRef = useRef(0);
+
+    // Fetcher for AI analysis on-demand
+    const analyzeFetcher = useFetcher();
+
+    // Track when AI analysis is complete and update the evidence in room state
+    useEffect(() => {
+        if (analyzeFetcher.data?.success && analyzeFetcher.data?.evidenceId) {
+            setAnalyzingEvidenceId(null);
+            // Update the evidence in roomState with the new AI analysis
+            setRoomState((prev: any) => {
+                if (!prev?.currentRound?.evidence) return prev;
+                const updatedEvidence = prev.currentRound.evidence.map((ev: any) => {
+                    if (ev.id === analyzeFetcher.data.evidenceId) {
+                        return {
+                            ...ev,
+                            ai_analysis: analyzeFetcher.data.ai_analysis,
+                            description: analyzeFetcher.data.description || ev.description
+                        };
+                    }
+                    return ev;
+                });
+                return {
+                    ...prev,
+                    currentRound: {
+                        ...prev.currentRound,
+                        evidence: updatedEvidence
+                    }
+                };
+            });
+        }
+    }, [analyzeFetcher.data]);
 
     // --- ANIMATED COUNTER COMPONENT ---
     const AnimatedCounter = ({ value }: { value: number }) => {
@@ -228,7 +262,11 @@ export default function TeacherRoom() {
             if (socket || typeof WebSocket === "undefined") return;
             const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
             socket = new WebSocket(`${protocol}//${window.location.host}/api/room/${code}/ws`);
-            
+
+            socket.onopen = () => {
+                wsReconnectAttemptRef.current = 0;
+            };
+
             socket.onmessage = (event: any) => {
                 try {
                     const data = JSON.parse(event.data);
@@ -237,9 +275,12 @@ export default function TeacherRoom() {
                     }
                 } catch (e) {}
             };
-            
+
             socket.onclose = () => {
-                reconnectTimer = setTimeout(connect, 3000);
+                // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+                const delay = Math.min(1000 * Math.pow(2, wsReconnectAttemptRef.current), 30000);
+                wsReconnectAttemptRef.current++;
+                reconnectTimer = setTimeout(connect, delay);
             };
         };
         
@@ -375,8 +416,7 @@ export default function TeacherRoom() {
 
                 // Fetch guesses
                 fetch(`/api/room/${code}/review?round=${room.current_index}`).then(res => res.json()).then((data: any) => {
-                    console.log("Teacher Review Data:", data);
-                    if (data.guesses) {
+                                        if (data.guesses) {
                         const bounds = new google.maps.LatLngBounds();
                         if (currentRound?.location) {
                             bounds.extend({ lat: currentRound.location.lat, lng: currentRound.location.lng });
@@ -1051,18 +1091,41 @@ export default function TeacherRoom() {
                                                         }
                                                     }
                                                 }
-                                                
-                                                return dynamicAI ? (
+
+                                                const hasAnalysis = !!dynamicAI;
+                                                const isAnalyzing = analyzingEvidenceId === ev.id;
+                                                const analysisFetcherData = analyzeFetcher.data;
+                                                const justCompleted = analysisFetcherData?.evidenceId === ev.id && analysisFetcherData?.ai_analysis;
+
+                                                return (
                                                     <>
-                                                        <span className="text-yellow-400 font-black block mb-1 uppercase tracking-wider text-[9px]">🤖 Live AI Analysis</span>
-                                                        <span className="text-slate-200 font-medium leading-relaxed block mb-2">{dynamicAI}</span>
-                                                        <span className="text-blue-300 font-bold block border-t border-white/10 pt-2 mt-1 uppercase tracking-wider text-[9px]">
-                                                            🕵️ Found by {ev.discovery_count || 0} Agent{(ev.discovery_count || 0) === 1 ? '' : 's'}
+                                                        <span className={`font-black block mb-1 uppercase tracking-wider text-[9px] ${hasAnalysis || justCompleted ? 'text-green-400' : 'text-yellow-400'}`}>
+                                                            {hasAnalysis || justCompleted ? '🤖 AI Analysis' : '⚠️ No Analysis'}
                                                         </span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <span className="block mb-2">{ev.description}</span>
+                                                        <span className="text-slate-200 font-medium leading-relaxed block mb-2">
+                                                            {justCompleted ? analysisFetcherData.ai_analysis : (dynamicAI || ev.description)}
+                                                        </span>
+                                                        {!hasAnalysis && !justCompleted && !isAnalyzing && (
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setAnalyzingEvidenceId(ev.id);
+                                                                    analyzeFetcher.submit(
+                                                                        { action: "ANALYZE_EVIDENCE", evidenceId: ev.id },
+                                                                        { method: "post", action: `/api/room/${code}/action` }
+                                                                    );
+                                                                }}
+                                                                className="w-full mt-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[9px] font-bold uppercase tracking-wider rounded transition-colors pointer-events-auto"
+                                                            >
+                                                                🔬 Generate AI Analysis
+                                                            </button>
+                                                        )}
+                                                        {isAnalyzing && (
+                                                            <div className="w-full mt-1 px-2 py-1 bg-blue-900/50 text-blue-300 text-[9px] font-bold uppercase tracking-wider rounded flex items-center justify-center gap-1">
+                                                                <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                                                Analyzing...
+                                                            </div>
+                                                        )}
                                                         <span className="text-blue-300 font-bold block border-t border-white/10 pt-2 mt-1 uppercase tracking-wider text-[9px]">
                                                             🕵️ Found by {ev.discovery_count || 0} Agent{(ev.discovery_count || 0) === 1 ? '' : 's'}
                                                         </span>
@@ -1152,10 +1215,37 @@ export default function TeacherRoom() {
                                                         }
                                                     }
                                                 }
+
+                                                const hasAnalysis = !!dynamicAI;
+                                                const isAnalyzing = analyzingEvidenceId === focusedItem.id;
+                                                const justCompleted = analyzeFetcher.data?.evidenceId === focusedItem.id && analyzeFetcher.data?.ai_analysis;
+
                                                 return (
-                                                    <p className="text-slate-300 text-sm leading-relaxed">
-                                                        {dynamicAI || "No agents have submitted clear scans of this intelligence yet."}
-                                                    </p>
+                                                    <div className="space-y-3">
+                                                        <p className="text-slate-300 text-sm leading-relaxed">
+                                                            {justCompleted ? analyzeFetcher.data.ai_analysis : (dynamicAI || "No AI analysis generated yet.")}
+                                                        </p>
+                                                        {!hasAnalysis && !justCompleted && !isAnalyzing && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setAnalyzingEvidenceId(focusedItem.id);
+                                                                    analyzeFetcher.submit(
+                                                                        { action: "ANALYZE_EVIDENCE", evidenceId: focusedItem.id },
+                                                                        { method: "post", action: `/api/room/${code}/action` }
+                                                                    );
+                                                                }}
+                                                                className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2"
+                                                            >
+                                                                <span>🔬</span> Generate AI Analysis
+                                                            </button>
+                                                        )}
+                                                        {isAnalyzing && (
+                                                            <div className="flex items-center justify-center gap-2 py-2 bg-blue-900/30 rounded-lg">
+                                                                <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                                                <span className="text-blue-300 text-xs font-bold uppercase tracking-widest">Generating AI Analysis...</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 );
                                             })()}
                                             </div>

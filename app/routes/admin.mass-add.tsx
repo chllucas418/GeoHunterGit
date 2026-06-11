@@ -82,8 +82,7 @@ export default function MassAdd() {
                 const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
                 if (res.ok) {
                     setSyncStatus('synced');
-                    console.log("[MassAdd] Draft synced to cloud");
-                } else {
+                                    } else {
                     setSyncStatus('error');
                 }
             } catch (err) {
@@ -144,12 +143,10 @@ export default function MassAdd() {
             }
 
             const res = await fetch('/api/admin/mass-add', { method: 'POST', body: formData });
-            console.log("[MassAdd] AI Analysis response received", res.status);
-            const contentType = res.headers.get("content-type");
+                        const contentType = res.headers.get("content-type");
             if (contentType && contentType.includes("application/json")) {
                 const data = (await res.json()) as { success: boolean, aiData?: any, error?: string };
-                console.log("[MassAdd] AI Data:", data);
-                if (data.success && data.aiData) {
+                                if (data.success && data.aiData) {
                     setFiles((prev: any[]) => prev.map(f => {
                         if (f.id === fileId) {
                             return {
@@ -354,8 +351,7 @@ export default function MassAdd() {
                     const invalidIds = toClean.map(tc => tc.id).filter(id => !validIds.includes(id));
                     
                     if (invalidIds.length > 0) {
-                        console.log(`[Janitor] Trashing ${invalidIds.length} logos/icons`);
-                        setFiles(prev => prev.filter(f => !invalidIds.includes(f.id)));
+                                                setFiles(prev => prev.filter(f => !invalidIds.includes(f.id)));
                     }
                 }
             } catch (e) {
@@ -623,64 +619,65 @@ export default function MassAdd() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-950 text-white p-8">
+        <div className="admin-panel p-6 md:p-8">
+            <div className="max-w-7xl mx-auto">
             <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-4">
                     <Link
-                        to="/teacher/dashboard"
-                        className="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs border border-gray-700 transition-colors"
+                        to="/admin"
+                        className="px-4 py-2 bg-[#0a1210] hover:bg-[#0e1a14] text-teal border border-teal/30 hover:border-teal/50 rounded-sm text-sm font-mono uppercase tracking-widest transition-all flex items-center gap-2"
                     >
-                        ← Back to Dashboard
+                        ← Back
                     </Link>
-                    <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Mass Add Locations</h1>
+                    <h1 className="font-heading text-2xl md:text-3xl font-black bg-teal hover:bg-teal/90 text-charcoal">Deploy Targets</h1>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button 
+                    <button
                         onClick={() => window.location.reload()}
-                        className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-300 flex items-center gap-2 border border-gray-700 transition-colors"
+                        className="px-3 py-2 bg-[#0a1210] hover:bg-[#0e1a14] border border-brass/20 text-stone-light hover:bg-teal hover:bg-teal/90 text-charcoal rounded-sm text-sm font-mono uppercase tracking-widest transition-all flex items-center gap-2"
                         title="Reload page to fetch latest draft from other devices"
                     >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                        Refresh Draft
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        Refresh
                     </button>
                     {files.length > 0 && (
-                        <button 
+                        <button
                             onClick={downloadAllImages}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white flex items-center gap-2 shadow-[0_4px_10px_rgba(37,99,235,0.3)] transition-all active:scale-95"
+                            className="px-4 py-2 bg-brass hover:bg-brass/90 text-charcoal rounded-sm text-sm font-mono font-bold uppercase tracking-widest shadow-[0_4px_10px_rgba(201,168,76,0.3)] transition-all active:scale-95 flex items-center gap-2"
                         >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                            Download All ({files.length})
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            Download ({files.length})
                         </button>
                     )}
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-2 ${
-                        syncStatus === 'synced' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' :
-                        syncStatus === 'syncing' ? 'bg-blue-500/10 border-blue-500/50 text-blue-400 animate-pulse' :
-                        syncStatus === 'error' ? 'bg-red-500/10 border-red-500/50 text-red-400' :
-                        'bg-gray-800 border-gray-700 text-gray-500'
+                    <div className={`px-3 py-1.5 rounded-sm text-xs font-mono font-bold border flex items-center gap-2 ${
+                        syncStatus === 'synced' ? 'bg-teal/10 border-teal/50 text-teal' :
+                        syncStatus === 'syncing' ? 'bg-amber/10 border-amber/50 text-amber animate-pulse' :
+                        syncStatus === 'error' ? 'bg-rust/10 border-rust/50 text-rust' :
+                        'bg-[#0a1210] border-brass/20 text-stone'
                     }`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${
-                            syncStatus === 'synced' ? 'bg-emerald-400' :
-                            syncStatus === 'syncing' ? 'bg-blue-400' :
-                            syncStatus === 'error' ? 'bg-red-400' :
-                            'bg-gray-500'
+                        <div className={`w-2 h-2 rounded-full ${
+                            syncStatus === 'synced' ? 'bg-teal' :
+                            syncStatus === 'syncing' ? 'bg-amber' :
+                            syncStatus === 'error' ? 'bg-rust' :
+                            'bg-stone'
                         }`} />
-                        {syncStatus === 'synced' ? 'All changes saved to cloud' :
-                         syncStatus === 'syncing' ? 'Syncing to server...' :
+                        {syncStatus === 'synced' ? 'Synced' :
+                         syncStatus === 'syncing' ? 'Syncing...' :
                          syncStatus === 'error' ? 'Sync failed' :
-                         'Drafting locally'}
+                         'Local draft'}
                     </div>
                 </div>
             </div>
 
-            <div {...getRootProps()} className="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center hover:border-emerald-500 transition-colors cursor-pointer bg-gray-900/50 relative group">
+            <div {...getRootProps()} className="border-2 border-dashed border-brass/30 rounded-sm p-10 text-center hover:border-brass/50 transition-colors cursor-pointer bg-[#0a1210]/80 relative group">
                 <input {...getInputProps()} />
-                <div className="flex flex-col items-center gap-2">
-                    <p className="text-gray-300">Drag & drop images or documents here</p>
-                    <p className="text-xs text-gray-500">Supports JPG, PNG, WEBP, **PPTX**, **DOCX**, and **PDF**</p>
-                    
-                    <div className="flex gap-4 mt-6">
-                        <div className="px-6 py-2 bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-sm font-bold flex items-center gap-2 group-hover:bg-emerald-600/30 transition-all">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                <div className="flex flex-col items-center gap-3">
+                    <p className="text-stone-light text-lg">Drop images or documents here</p>
+                    <p className="text-sm text-stone">JPG, PNG, WEBP, PPTX, DOCX, PDF</p>
+
+                    <div className="flex flex-wrap justify-center gap-4 mt-6">
+                        <div className="px-6 py-3 bg-teal/10 border border-teal/30 text-teal rounded-sm text-sm font-mono font-bold flex items-center gap-2 group-hover:bg-teal/20 transition-all">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
                             Browser Files
                         </div>
                         <button
@@ -689,7 +686,7 @@ export default function MassAdd() {
                                 e.stopPropagation();
                                 handleImportFromCloud();
                             }}
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-[0_4px_15px_rgba(37,99,235,0.3)] transition-all active:scale-95"
+                            className="px-6 py-3 bg-brass hover:bg-brass/90 text-charcoal rounded-sm text-sm font-mono font-bold shadow-[0_4px_15px_rgba(201,168,76,0.3)] transition-all active:scale-95 flex items-center gap-2"
                         >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M11.2 5.25c.34-.58.85-1 1.45-1.23.6-.23 1.25-.26 1.88-.08s1.2.56 1.63 1.1c.43.54.67 1.22.67 1.91v.15a4.5 4.5 0 0 1 4 4.45c0 2.48-2.02 4.5-4.5 4.5h-5.4V5.25zM12 16.05v-5.22c-.67-.3-1.4-.41-2.12-.3a4.502 4.502 0 0 0-3.32 2.05A4.5 4.5 0 0 0 4.5 16.05c0 2.48 2.02 4.5 4.5 4.5h3zm2.5-12.8c-1.38 0-2.5 1.12-2.5 2.5v10.3h5.5c2.48 0 4.5-2.02 4.5-4.5 0-2.33-1.78-4.24-4.06-4.47.04-.17.06-.35.06-.53 0-1.93-1.57-3.5-3.5-3.5z"/>
@@ -702,7 +699,7 @@ export default function MassAdd() {
                                 e.stopPropagation();
                                 handleImportFromClassroom();
                             }}
-                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all active:scale-95"
+                            className="px-6 py-3 bg-teal hover:bg-teal/90 text-charcoal rounded-sm text-sm font-mono font-bold shadow-[0_4px_15px_rgba(74,155,140,0.3)] transition-all active:scale-95 flex items-center gap-2"
                         >
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15v-1c0-.55-.45-1-1-1H9v-1c0-1.1-.9-2-2-2H5c-.55 0-1-.45-1-1v-1c0-.55.45-1 1-1h1c1.1 0 2 .9 2 2v2h2v-2h2v-2c0-.55.45-1 1-1H6V5c1.66-1.57 3.9-2.5 6.36-2.5 5.51 0 10 4.49 10 10 0 2.21-.71 4.26-1.92 5.91-.71-.85-1.58-1.55-2.58-2.07l-.76-.43c-.43-.24-.95-.23-1.37.03z"/>
@@ -711,32 +708,30 @@ export default function MassAdd() {
                         </button>
                     </div>
 
-                    <div className="mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg max-w-lg mx-auto">
-                        <p className="text-[10px] text-blue-400 leading-tight">
-                            <strong>💡 Pro Tip:</strong> For **Google Slides**, **Canva**, or **Google Docs**, 
-                            simply <strong>Download as PPTX or DOCX</strong> and drag that file here. 
-                            The system will automatically extract all images for you!
+                    <div className="mt-6 p-3 bg-amber/10 border border-amber/30 rounded-sm max-w-lg mx-auto">
+                        <p className="text-[10px] text-amber leading-tight">
+                            Pro Tip: For Google Slides, Canva, or Google Docs, simply Download as PPTX or DOCX and drag that file here.
                         </p>
                     </div>
                 </div>
             </div>
 
             <div className="flex justify-between items-center mt-12 mb-4">
-                <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-blue-500 bg-clip-text text-transparent">Manage Pending Locations</h2>
+                <h2 className="font-heading text-xl font-black bg-teal hover:bg-teal/90 text-charcoal">Pending Targets</h2>
                 <div className="flex items-center gap-4">
-                    <button 
+                    <button
                         onClick={() => setEditingId('all')}
-                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-lg shadow-[0_4px_15px_rgba(79,70,229,0.4)] transition-all flex items-center gap-2 tracking-widest uppercase active:scale-95"
+                        className="px-6 py-2.5 bg-amber hover:bg-amber/90 text-charcoal font-black rounded-sm shadow-[0_4px_15px_rgba(212,130,42,0.3)] transition-all flex items-center gap-2 tracking-widest uppercase active:scale-95"
                         disabled={files.length === 0}
                     >
-                        🚀 Edit All Locations
+                        Edit All
                     </button>
                     {files.some(f => f.status === 'saved') && (
-                        <button 
+                        <button
                             onClick={() => setFiles(prev => prev.filter(f => f.status !== 'saved'))}
-                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 hover:text-red-400 rounded-lg text-sm text-gray-300 flex items-center gap-2 border border-gray-700 transition-colors uppercase font-bold tracking-widest"
+                            className="px-4 py-2 bg-[#0a1210] hover:bg-rust/20 text-stone-light hover:text-rust border border-brass/20 rounded-sm text-sm font-mono uppercase tracking-widest transition-colors flex items-center gap-2"
                         >
-                            Trash Completed
+                            Clear Saved
                         </button>
                     )}
                 </div>
@@ -744,82 +739,86 @@ export default function MassAdd() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {files.map((file, idx) => (
-                    <div key={file.id} className={`bg-gray-900 border rounded-lg overflow-hidden flex flex-col transition-all ${file.status === 'saved' ? 'border-indigo-500 scale-[0.98] opacity-80 shadow-[0_0_15px_rgba(79,70,229,0.3)]' : 'border-gray-800'}`}>
-                        <div className="relative h-48 bg-gray-800">
+                    <div key={file.id} className={`bg-[#0a1210] border rounded-sm overflow-hidden flex flex-col transition-all ${file.status === 'saved' ? 'border-brass scale-[0.98] opacity-80 shadow-[0_0_15px_rgba(201,168,76,0.3)]' : 'border-brass/10'}`}>
+                        <div className="relative h-48 bg-[#0e1a14]">
                             <img src={file.preview} className="w-full h-full object-cover opacity-80" />
                             <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
                                 {file.status === 'saved' && (
-                                    <span className="bg-indigo-600 text-white font-black text-xs px-2 py-1 rounded shadow-lg uppercase tracking-widest border border-indigo-400 mb-1 animate-pulse">
-                                        ✅ DEPLOYED
+                                    <span className="bg-brass text-charcoal font-black text-xs px-2 py-1 rounded shadow-lg uppercase tracking-widest border border-brass-light mb-1">
+                                        DEPLOYED
                                     </span>
                                 )}
                                 {file.lat ? (
-                                    <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded whitespace-nowrap">GPS Found</span>
+                                    <span className="bg-teal/20 text-teal text-xs px-2 py-1 rounded whitespace-nowrap">GPS OK</span>
                                 ) : (
-                                    <span className="bg-amber-500/20 text-amber-400 text-xs px-2 py-1 rounded whitespace-nowrap">No GPS</span>
+                                    <span className="bg-amber/20 text-amber text-xs px-2 py-1 rounded whitespace-nowrap">No GPS</span>
                                 )}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         downloadSingleImage(idx);
                                     }}
-                                    className="bg-gray-900/80 hover:bg-blue-600 text-white p-2 rounded-full transition-all border border-white/10"
+                                    className="bg-[#0e1a14]/80 hover:bg-brass bg-teal hover:bg-teal/90 text-charcoal p-2 rounded-sm transition-all border border-brass/20"
                                     title="Download this image"
                                 >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                                 </button>
                                 {file.evidence.length > 0 && (
-                                    <span className="bg-amber-500/90 text-black font-black text-[10px] px-2 py-1 rounded shadow-lg animate-pulse uppercase tracking-tighter whitespace-nowrap border border-black/10">
-                                        ⚡ {file.evidence.length} Evidence!
+                                    <span className="bg-amber/90 text-charcoal font-black text-[10px] px-2 py-1 rounded shadow-lg animate-pulse uppercase tracking-tighter whitespace-nowrap border border-charcoal/10">
+                                        {file.evidence.length} INTEL
                                     </span>
                                 )}
                             </div>
                         </div>
 
                         <div className="p-4 flex-1 space-y-3">
-                            <h3 className="font-semibold truncate">{file.file?.name || file.photographer || "Unnamed"}</h3>
-                            <p className="text-xs text-gray-400 line-clamp-2">{file.description || "No description generated"}</p>
+                            <h3 className="font-heading font-bold truncate bg-teal hover:bg-teal/90 text-charcoal">{file.file?.name || file.photographer || "Unnamed"}</h3>
+                            <p className="text-sm text-stone-light line-clamp-2">{file.description || "No description generated"}</p>
 
-                            <div className="flex gap-2 text-xs">
-                                <span className="bg-gray-800 px-2 py-1 rounded">Diff: {file.difficulty}</span>
-                                <span className="bg-gray-800 px-2 py-1 rounded">Ev: {file.evidence.length}</span>
+                            <div className="flex gap-2 text-sm font-mono">
+                                <span className="bg-[#0e1a14] px-2 py-1 rounded-sm text-stone">Diff: {file.difficulty}</span>
+                                <span className="bg-[#0e1a14] px-2 py-1 rounded-sm text-stone">Ev: {file.evidence.length}</span>
                             </div>
                         </div>
 
-                        <div className="p-3 bg-gray-950/50 flex gap-2 border-t border-gray-800">
+                        <div className="p-3 bg-[#0e1a14]/80 flex gap-2 border-t border-brass/10">
                             <button
                                 onClick={() => analyzeFile(file.id, file.file)}
                                 disabled={analyzingIds.has(file.id)}
-                                className="flex-1 px-3 py-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded text-sm disabled:opacity-50"
+                                className="flex-1 px-3 py-1.5 bg-teal/10 text-teal hover:bg-teal/20 rounded-sm text-sm font-mono disabled:opacity-50"
                             >
-                                {analyzingIds.has(file.id) ? 'Thinking...' : 'AI Generate'}
+                                {analyzingIds.has(file.id) ? 'Processing...' : 'AI Analyze'}
                             </button>
                             <button
                                 onClick={() => setEditingId(idx)}
-                                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                                className="px-3 py-1.5 bg-[#0a1210] hover:bg-brass/10 text-stone-light hover:bg-teal hover:bg-teal/90 text-charcoal rounded-sm text-sm font-mono border border-brass/20"
                             >
                                 Edit
                             </button>
                             {file.evidence.length === 0 ? (
                                 <button
                                     onClick={() => setEditingId(idx)}
-                                    className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded text-sm text-white font-bold animate-pulse"
+                                    className="px-3 py-1.5 bg-amber/10 hover:bg-amber/20 text-amber rounded-sm text-sm font-mono font-bold animate-pulse"
                                 >
-                                    Add Evidence
+                                    Add Intel
                                 </button>
                             ) : (
                                 <button
                                     onClick={() => saveLocation(idx)}
-                                    className={`px-4 py-1.5 rounded text-sm font-bold transition-colors shadow-md ${file.status === 'saved' ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
+                                    className={`px-4 py-1.5 rounded-sm text-sm font-mono font-bold transition-colors shadow-md ${file.status === 'saved' ? 'bg-amber/20 text-amber hover:bg-amber/30 border border-amber/30' : 'bg-teal hover:bg-teal/90 text-charcoal hover:bg-teal/90 border border-teal/30'}`}
                                 >
                                     {file.status === 'saved' ? 'Re-Save' : 'Save'}
                                 </button>
                             )}
-                            <button onClick={() => removeFile(idx)} className="px-2 text-gray-500 hover:text-red-400">×</button>
+                            <button onClick={() => removeFile(idx)} className="px-2 text-stone hover:text-rust text-lg font-mono">×</button>
                         </div>
                     </div>
                 ))}
             </div>
+            </div>
+        </div>
+    );
+}
 
             <EditModal editingId={editingId} files={files} setFiles={setFiles} setEditingId={setEditingId} isLoaded={isLoaded} mapSets={mapSets} onSave={saveLocation} />
 
@@ -865,43 +864,43 @@ export function ExtractionModal({ document, onConfirm, onCancel }: { document: {
 
     return (
         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
-            <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
-                <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-950">
+            <div className="bg-[#0a1210] border border-brass/30 rounded-sm w-full max-w-5xl h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+                <div className="p-4 border-b border-brass/10 flex justify-between items-center bg-[#0e1a14]">
                     <div>
-                        <h2 className="text-xl font-bold text-white">Extract Images</h2>
-                        <p className="text-sm text-gray-400">Select images/pages to import from <span className="text-blue-400 font-mono">{document.name}</span></p>
+                        <h2 className="font-heading text-xl font-black bg-teal hover:bg-teal/90 text-charcoal">Extract Images</h2>
+                        <p className="text-sm text-stone-light">Select images/pages to import from <span className="text-teal font-mono">{document.name}</span></p>
                     </div>
                     <div className="flex gap-3">
                         <button
                             onClick={() => setSelected(new Set(document.items.map((_, i) => i)))}
-                            className="px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-800 text-xs text-blue-400 font-bold transition-colors"
+                            className="px-3 py-1.5 rounded-sm border border-brass/30 hover:bg-brass/10 text-xs text-teal font-mono uppercase tracking-widest transition-colors"
                         >
                             Select All
                         </button>
                         <button
                             onClick={() => setSelected(new Set())}
-                            className="px-3 py-1.5 rounded-lg border border-gray-700 hover:bg-gray-800 text-xs text-gray-400 font-bold transition-colors"
+                            className="px-3 py-1.5 rounded-sm border border-brass/30 hover:bg-brass/10 text-xs text-stone font-mono uppercase tracking-widest transition-colors"
                         >
                             Deselect All
                         </button>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 bg-gray-900/50 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 bg-[#0a1210]/80 custom-scrollbar">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {document.items.map((item, idx) => {
                             const isSelected = selected.has(idx);
                             return (
-                                <div 
-                                    key={idx} 
+                                <div
+                                    key={idx}
                                     onClick={() => toggle(idx)}
-                                    className={`relative rounded-xl border-2 overflow-hidden cursor-pointer transition-all aspect-square ${isSelected ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'border-gray-800 opacity-60 hover:opacity-100 hover:border-gray-600'}`}
+                                    className={`relative rounded-sm border-2 overflow-hidden cursor-pointer transition-all aspect-square ${isSelected ? 'border-teal shadow-[0_0_15px_rgba(74,155,140,0.3)]' : 'border-brass/10 opacity-60 hover:opacity-100 hover:border-brass/30'}`}
                                 >
-                                    <img src={item.url} className="w-full h-full object-cover bg-gray-800" />
+                                    <img src={item.url} className="w-full h-full object-cover bg-[#0e1a14]" />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2 pointer-events-none">
-                                        <div className="text-[10px] text-white truncate w-full">{item.name}</div>
+                                        <div className="text-[10px] bg-teal hover:bg-teal/90 text-charcoal truncate w-full">{item.name}</div>
                                     </div>
-                                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-500 bg-black/50'}`}>
+                                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-teal border-teal text-charcoal' : 'border-stone bg-[#0e1a14]/80'}`}>
                                         {isSelected && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                     </div>
                                 </div>
@@ -910,18 +909,18 @@ export function ExtractionModal({ document, onConfirm, onCancel }: { document: {
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-gray-800 bg-gray-950 flex justify-between items-center">
-                    <div className="text-sm font-bold text-gray-400">
-                        <span className="text-emerald-400">{selected.size}</span> / {document.items.length} selected
+                <div className="p-4 border-t border-brass/10 bg-[#0e1a14] flex justify-between items-center">
+                    <div className="text-sm font-mono text-stone">
+                        <span className="text-teal font-bold">{selected.size}</span> / {document.items.length} selected
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={onCancel} className="px-5 py-2 rounded-lg bg-gray-800 text-white hover:bg-gray-700 font-bold transition-colors">
+                        <button onClick={onCancel} className="px-5 py-2 rounded-sm bg-[#0a1210] bg-teal hover:bg-teal/90 text-charcoal hover:bg-brass/10 font-mono uppercase tracking-widest transition-colors border border-brass/20">
                             Cancel
                         </button>
-                        <button 
+                        <button
                             onClick={() => onConfirm(Array.from(selected))}
                             disabled={selected.size === 0}
-                            className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:bg-gray-700 text-white font-black uppercase tracking-widest transition-all shadow-[0_4px_15px_rgba(16,185,129,0.3)]"
+                            className="px-6 py-2 rounded-sm bg-teal hover:bg-teal/90 disabled:opacity-50 disabled:bg-[#0a1210] text-charcoal font-mono font-black uppercase tracking-widest transition-all shadow-[0_4px_15px_rgba(74,155,140,0.3)]"
                         >
                             Import Selected
                         </button>
@@ -1206,25 +1205,25 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
 
     return (
         <div className={isMulti ? 'w-full shrink-0 flex flex-col snap-center h-full' : 'w-full h-full flex flex-col'}>
-            <div className={isMulti ? 'bg-gray-900 rounded-2xl w-full h-[85vh] shrink-0 flex flex-col border border-gray-700 shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden' : 'bg-gray-900 rounded-2xl w-full h-full flex flex-col border border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden'}>
+            <div className={isMulti ? 'bg-[#0a1210] rounded-sm w-full h-[85vh] shrink-0 flex flex-col border border-brass/30 shadow-[0_10px_40px_rgba(0,0,0,0.8)] overflow-hidden' : 'bg-[#0a1210] rounded-sm w-full h-full flex flex-col border border-brass/20 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden'}>
                 {/* Header */}
-                <div className="flex justify-between items-center p-3 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md sticky top-0 z-10">
+                <div className="flex justify-between items-center p-3 border-b border-brass/10 bg-[#0e1a14]/50 backdrop-blur-md sticky top-0 z-10">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                            <span className="p-1 bg-blue-600/20 rounded-lg text-blue-400 text-sm">#{editingId + 1}</span>
-                            <span className="text-blue-400 font-mono text-sm">{item.file?.name || item.photographer || "Unnamed"}</span>
+                        <h2 className="text-lg font-heading font-bold bg-teal hover:bg-teal/90 text-charcoal flex items-center gap-2">
+                            <span className="p-1 bg-brass/20 rounded-sm text-brass text-sm font-mono">#{editingId + 1}</span>
+                            <span className="text-teal font-mono text-sm">{item.file?.name || item.photographer || "Unnamed"}</span>
                         </h2>
                     </div>
 
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setIsEvidenceFullscreen(!isEvidenceFullscreen)}
-                            className={`px-3 py-1.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all border flex items-center gap-2 ${isEvidenceFullscreen
-                                    ? "bg-amber-600/20 border-amber-500/50 text-amber-400 hover:bg-amber-600/30"
-                                    : "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white"
+                            className={`px-3 py-1.5 rounded-sm font-mono font-bold text-xs uppercase tracking-widest transition-all border flex items-center gap-2 ${isEvidenceFullscreen
+                                    ? "bg-amber/20 border-amber/50 text-amber hover:bg-amber/30"
+                                    : "bg-[#0a1210] border-brass/20 text-stone hover:bg-brass/10 hover:bg-teal hover:bg-teal/90 text-charcoal"
                                 }`}
                         >
-                            {isEvidenceFullscreen ? "⏹ Exit FS" : "⛶ Fullscreen"}
+                            {isEvidenceFullscreen ? "Exit FS" : "Fullscreen"}
                         </button>
                         <button
                             disabled={isSaving}
@@ -1233,9 +1232,9 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                 await onSave(editingId, true);
                                 setIsSaving(false);
                             }}
-                            className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all flex items-center gap-2"
+                            className="px-5 py-1.5 bg-teal hover:bg-teal/90 disabled:opacity-50 text-charcoal rounded-sm font-black text-xs uppercase tracking-widest shadow-[0_4px_15px_rgba(74,155,140,0.3)] transition-all flex items-center gap-2"
                         >
-                            {isSaving ? "SAVING..." : "💾 Save"}
+                            {isSaving ? "SAVING..." : "Save"}
                         </button>
                     </div>
                 </div>
@@ -1243,17 +1242,17 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                 <div className="flex flex-1 overflow-hidden">
                     {/* LEFT PANEL: CONTENT EDITOR */}
                     <div
-                        className={`flex-1 overflow-y-auto p-8 custom-scrollbar bg-gray-900/30 transition-all ${isEvidenceFullscreen ? 'fixed inset-0 z-[60] bg-gray-950 p-0' : ''}`}
+                        className={`flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#0e1a14]/30 transition-all ${isEvidenceFullscreen ? 'fixed inset-0 z-[60] bg-[#0a1210] p-0' : ''}`}
                         style={isEvidenceFullscreen ? {} : { width: `${100 - splitRatio}%` }}
                     >
                         <div className={`${isEvidenceFullscreen ? 'w-full h-full' : 'max-w-4xl mx-auto space-y-10 pb-20'}`}>
                             {/* Visuals Section */}
                             <div className={`${isEvidenceFullscreen ? 'w-full h-full' : 'grid grid-cols-1 gap-6'}`}>
-                                <div className={`${isEvidenceFullscreen ? 'w-full h-full rounded-none border-none' : 'bg-black rounded-2xl overflow-hidden border border-gray-700 relative h-[400px]'}`}>
+                                <div className={`${isEvidenceFullscreen ? 'w-full h-full rounded-none border-none' : 'bg-black rounded-2xl overflow-hidden border border-brass/20 relative h-[400px]'}`}>
                                     {isEvidenceFullscreen && (
                                         <button
                                             onClick={() => setIsEvidenceFullscreen(false)}
-                                            className="absolute top-6 right-6 z-[70] p-3 bg-red-600/80 hover:bg-red-600 text-white rounded-full shadow-2xl transition-all"
+                                            className="absolute top-6 right-6 z-[70] p-3 bg-red-600/80 hover:bg-red-600 bg-teal hover:bg-teal/90 text-charcoal rounded-full shadow-2xl transition-all"
                                             title="Close Fullscreen (Esc)"
                                         >
                                             <span className="text-xl font-bold">×</span>
@@ -1296,7 +1295,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                 title={ev.description}
                                             >
                                                 <button
-                                                    className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 active:scale-90"
+                                                    className="absolute -top-3 -right-3 bg-red-500 bg-teal hover:bg-teal/90 text-charcoal rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 active:scale-90"
                                                     onMouseDown={(e) => e.stopPropagation()}
                                                     onTouchStart={(e) => e.stopPropagation()}
                                                     onClick={(e) => {
@@ -1310,7 +1309,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                 >
                                                     ×
                                                 </button>
-                                                <div className="absolute bottom-full left-0 bg-black/70 text-white text-xs px-2 py-1 rounded mb-1 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">
+                                                <div className="absolute bottom-full left-0 bg-black/70 bg-teal hover:bg-teal/90 text-charcoal text-xs px-2 py-1 rounded mb-1 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none">
                                                     {ev.description}
                                                 </div>
                                             </div>
@@ -1319,11 +1318,11 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                         {/* Modal for adding description to NEW box */}
                                         {tempEvidenceBox && (
                                             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                                                <div className="bg-gray-800 p-4 rounded-xl border border-gray-600 w-64 space-y-3 shadow-xl">
+                                                <div className="bg-brass/10 p-4 rounded-xl border border-gray-600 w-64 space-y-3 shadow-xl">
                                                     <h4 className="font-bold text-sm">Describe Evidence</h4>
                                                     <textarea
                                                         autoFocus
-                                                        className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-white focus:border-blue-500 outline-none"
+                                                        className="w-full bg-[#0e1a14] border border-brass/20 rounded p-2 text-sm bg-teal hover:bg-teal/90 text-charcoal focus:border-brass/50 outline-none"
                                                         rows={3}
                                                         placeholder="e.g. Red warning sign"
                                                         value={tempEvidenceDesc}
@@ -1332,7 +1331,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                     <div className="flex gap-2">
                                                         <button
                                                             onClick={() => setTempEvidenceBox(null)}
-                                                            className="flex-1 py-1.5 bg-gray-700 text-xs rounded hover:bg-gray-600"
+                                                            className="flex-1 py-1.5 bg-brass/20 text-xs rounded hover:bg-gray-600"
                                                         >
                                                             Cancel
                                                         </button>
@@ -1348,7 +1347,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                 }
                                                             }}
                                                             disabled={!tempEvidenceDesc.trim()}
-                                                            className="flex-1 py-1.5 bg-blue-600 text-xs rounded hover:bg-blue-500 disabled:opacity-50 font-bold"
+                                                            className="flex-1 py-1.5 bg-brass/20 text-cream text-xs rounded-sm hover:bg-brass/30 disabled:opacity-50 font-bold"
                                                         >
                                                             Add
                                                         </button>
@@ -1358,7 +1357,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                         )}
                                     </EvidenceCanvas>
                                 </div>
-                                <div className="flex justify-between items-center text-xs text-gray-400">
+                                <div className="flex justify-between items-center text-xs text-stone-light">
                                     <p>💡 Click and drag to draw evidence boxes.</p>
                                     <p>{item.evidence.length} items recorded</p>
                                 </div>
@@ -1368,16 +1367,16 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                             <div className="space-y-6">
                                 {/* Map Section */}
                                 <div className="space-y-2">
-                                    <label className="block text-gray-400 text-sm font-bold uppercase tracking-wider">Location & Coordinates</label>
+                                    <label className="block text-stone-light text-sm font-bold uppercase tracking-wider">Location & Coordinates</label>
                                     <input
                                         ref={searchInputRef}
                                         type="text"
                                         placeholder="Search location (e.g. 'Tokyo Tower')"
-                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-blue-500 outline-none mb-2"
+                                        className="w-full bg-brass/10 border border-brass/20 rounded-sm px-3 py-2 text-sm focus:border-brass/50 outline-none mb-2"
                                     />
                                     {isLoaded && (
                                         <GoogleMap
-                                            mapContainerClassName="w-full h-56 rounded-xl border border-gray-700"
+                                            mapContainerClassName="w-full h-56 rounded-xl border border-brass/20"
                                             center={mapCenter}
                                             zoom={item.lat ? 16 : 11}
                                             onLoad={(map: google.maps.Map) => {
@@ -1433,7 +1432,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                             ))}
                                         </GoogleMap>
                                     )}
-                                    <div className="flex gap-2 text-xs text-gray-500 font-mono">
+                                    <div className="flex gap-2 text-xs text-stone font-mono">
                                         <span>Lat: {item.lat?.toFixed(6) || "N/A"}</span>
                                         <span>Lng: {item.lng?.toFixed(6) || "N/A"}</span>
                                     </div>
@@ -1443,17 +1442,17 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                 <div className="space-y-4">
                                     <div>
                                         <div className="flex justify-between items-center mb-1">
-                                            <label className="block text-gray-400 text-sm font-bold uppercase tracking-wider">Description</label>
+                                            <label className="block text-stone-light text-sm font-bold uppercase tracking-wider">Description</label>
                                             <button
                                                 onClick={handleAutoGenerateDetails}
                                                 disabled={isChatting}
-                                                className="text-[10px] font-black text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                                                className="text-[10px] font-black text-teal hover:text-brass transition-colors uppercase tracking-widest flex items-center gap-1 active:scale-95 disabled:opacity-50"
                                             >
                                                 <span>✨ Auto-Generate Details</span>
                                             </button>
                                         </div>
                                         <textarea
-                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 outline-none"
+                                            className="w-full bg-brass/10 border border-brass/20 rounded-sm p-3 text-sm bg-teal hover:bg-teal/90 text-charcoal focus:border-brass/50 outline-none"
                                             rows={3}
                                             value={item.description}
                                             onChange={(e) => setFiles((prev: any[]) => {
@@ -1468,9 +1467,9 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                     <div className="grid grid-cols-2 gap-4">
                                         {/* Photographer */}
                                         <div>
-                                            <label className="block text-gray-400 text-sm font-bold uppercase tracking-wider mb-1">Photographer</label>
+                                            <label className="block text-stone-light text-sm font-bold uppercase tracking-wider mb-1">Photographer</label>
                                             <input
-                                                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
+                                                className="w-full bg-brass/10 border border-brass/20 rounded-sm p-2 text-sm bg-teal hover:bg-teal/90 text-charcoal focus:border-brass/50 outline-none"
                                                 value={item.photographer}
                                                 onChange={(e) => setFiles((prev: any[]) => {
                                                     const cp = [...prev];
@@ -1481,11 +1480,11 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                         </div>
                                         {/* Difficulty */}
                                         <div>
-                                            <label className="block text-gray-400 text-sm font-bold uppercase tracking-wider mb-1">Difficulty (1-10)</label>
+                                            <label className="block text-stone-light text-sm font-bold uppercase tracking-wider mb-1">Difficulty (1-10)</label>
                                             <input
                                                 type="number"
                                                 min="1" max="10" step="0.5"
-                                                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
+                                                className="w-full bg-brass/10 border border-brass/20 rounded-sm p-2 text-sm bg-teal hover:bg-teal/90 text-charcoal focus:border-brass/50 outline-none"
                                                 value={item.difficulty}
                                                 onChange={(e) => setFiles((prev: any[]) => {
                                                     const cp = [...prev];
@@ -1498,9 +1497,9 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
 
                                     {/* Dataset Selection */}
                                     <div>
-                                        <label className="block text-gray-400 text-sm font-bold uppercase tracking-wider mb-1">Add to Map Set (Optional)</label>
+                                        <label className="block text-stone-light text-sm font-bold uppercase tracking-wider mb-1">Add to Map Set (Optional)</label>
                                         <select
-                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-sm text-white focus:border-blue-500 outline-none"
+                                            className="w-full bg-brass/10 border border-brass/20 rounded-sm p-2 text-sm bg-teal hover:bg-teal/90 text-charcoal focus:border-brass/50 outline-none"
                                             value={item.addToSet || ""}
                                             onChange={(e) => setFiles((prev: any[]) => {
                                                 const cp = [...prev];
@@ -1518,14 +1517,14 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                     {/* Hints Editor */}
                                     <div>
                                         <div className="flex justify-between items-center mb-2">
-                                            <label className="block text-gray-400 text-sm font-bold uppercase tracking-wider">Hints</label>
+                                            <label className="block text-stone-light text-sm font-bold uppercase tracking-wider">Hints</label>
                                             <button
                                                 onClick={() => setFiles((prev: any[]) => {
                                                     const cp = [...prev];
                                                     cp[editingId].hints.push("");
                                                     return cp;
                                                 })}
-                                                className="text-xs text-blue-400 hover:text-blue-300 font-bold"
+                                                className="text-xs text-teal hover:text-brass font-bold"
                                             >
                                                 + ADD HINT
                                             </button>
@@ -1534,7 +1533,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                             {item.hints.map((hint: string, hIdx: number) => (
                                                 <div key={hIdx} className="flex gap-2">
                                                     <input
-                                                        className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm focus:border-blue-500 outline-none"
+                                                        className="flex-1 bg-brass/10 border border-brass/20 rounded px-2 py-1 text-sm focus:border-brass/50 outline-none"
                                                         value={hint}
                                                         onChange={(e) => setFiles((prev: any[]) => {
                                                             const cp = [...prev];
@@ -1549,7 +1548,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                             cp[editingId].hints = cp[editingId].hints.filter((_: any, i: number) => i !== hIdx);
                                                             return cp;
                                                         })}
-                                                        className="text-gray-500 hover:text-red-400 px-1"
+                                                        className="text-stone hover:text-red-400 px-1"
                                                     >
                                                         ×
                                                     </button>
@@ -1566,42 +1565,42 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                     {!isEvidenceFullscreen && (
                         <div
                             onMouseDown={() => setIsResizing(true)}
-                            className={`w-1.5 hover:w-2.5 bg-blue-500/5 hover:bg-blue-500/30 cursor-col-resize transition-all relative group z-20 flex items-center justify-center ${isResizing ? 'bg-blue-500/50 w-2.5' : ''}`}
+                            className={`w-1.5 hover:w-2.5 bg-teal/10 hover:bg-teal/30 cursor-col-resize transition-all relative group z-20 flex items-center justify-center ${isResizing ? 'bg-teal/100 w-2.5' : ''}`}
                         >
-                            <div className="h-10 w-1 bg-gray-700/50 rounded-full group-hover:bg-blue-400/50 transition-colors" />
+                            <div className="h-10 w-1 bg-brass/20 rounded-full group-hover:bg-teal/50 transition-colors" />
                             {/* Visual grab handle lines */}
                             <div className="absolute flex flex-col gap-1 items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="w-0.5 h-0.5 bg-blue-400 rounded-full" />
-                                <div className="w-0.5 h-0.5 bg-blue-400 rounded-full" />
-                                <div className="w-0.5 h-0.5 bg-blue-400 rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-brass rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-brass rounded-full" />
+                                <div className="w-0.5 h-0.5 bg-brass rounded-full" />
                             </div>
                         </div>
                     )}
 
                     {/* RIGHT PANEL: AI COPILOT */}
                     {!isEvidenceFullscreen && (
-                        <div className="bg-gray-950 flex flex-col h-full border-l border-gray-800 flex-shrink-0" style={{ width: `${splitRatio}%` }}>
-                            <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-black/40">
-                                <h3 className="text-sm font-black bg-gradient-to-r from-blue-400 to-purple-400 text-transparent bg-clip-text uppercase tracking-widest flex items-center gap-2">
+                        <div className="bg-[#0a1210] flex flex-col h-full border-l border-brass/10 flex-shrink-0" style={{ width: `${splitRatio}%` }}>
+                            <div className="p-4 border-b border-brass/10 flex items-center justify-between bg-black/40">
+                                <h3 className="text-sm font-black bg-gradient-to-r from-brass to-amber text-transparent bg-clip-text uppercase tracking-widest flex items-center gap-2">
                                     <span>✨</span> AI Copilot (v2.2)
                                 </h3>
                                 <div className="flex items-center gap-3">
                                     <button
                                         onClick={handleAutoDetectEvidence}
                                         disabled={isChatting}
-                                        className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 text-[10px] font-black px-2.5 py-1 rounded-lg border border-emerald-500/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                                        className="bg-teal/20 hover:bg-teal/40 text-brass text-[10px] font-black px-2.5 py-1 rounded-sm border border-teal/30 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
                                         title="Auto-Detect Evidence"
                                     >
                                         <span className={isChatting ? "animate-pulse" : ""}>✨</span>
                                         {isChatting ? "DETECTING..." : "AUTO-DETECT"}
                                     </button>
-                                    <div className="text-[10px] text-gray-500 font-mono">Panel</div>
+                                    <div className="text-[10px] text-stone font-mono">Panel</div>
                                 </div>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar scroll-smooth">
                                 {chatHistory.length === 0 ? (
-                                    <div className="text-center text-gray-500 my-auto pt-20 flex flex-col items-center gap-4">
+                                    <div className="text-center text-stone my-auto pt-20 flex flex-col items-center gap-4">
                                         <div className="space-y-2">
                                             <p>Ask the AI copilot to generate descriptions, suggest hints, or identify landmarks!</p>
                                             <p className="text-xs">Example: "Generate a creepy description based on the evidence boxes."</p>
@@ -1610,7 +1609,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                 ) : (
                                     chatHistory.map((msg, i) => (
                                         <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                                            <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-200 border border-gray-700'}`}>
+                                            <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${msg.role === 'user' ? 'bg-teal hover:bg-teal/90 text-charcoal' : 'bg-brass/10 text-gray-200 border border-brass/20'}`}>
                                                 <p className="whitespace-pre-wrap text-sm">{msg.content.replace(/```json[\s\S]*?```/g, "").trim()}</p>
                                             </div>
                                             {/* Parse actions from message */}
@@ -1637,17 +1636,17 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                 const desc = action.data?.description || action.description;
                                                                 const hnts = action.data?.hints || action.hints;
                                                                 return (
-                                                                    <div key={mIdx} className="bg-slate-900 border-2 border-indigo-500/50 rounded-2xl p-4 shadow-2xl relative overflow-hidden group">
+                                                                    <div key={mIdx} className="bg-slate-900 border-2 border-amber/50 rounded-2xl p-4 shadow-2xl relative overflow-hidden group">
                                                                         <div className="absolute top-0 right-0 p-2 opacity-20 text-[10px] font-mono">v2.2</div>
                                                                         <div className="flex items-center gap-2 mb-4">
-                                                                            <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400">✨</div>
-                                                                            <h4 className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em]">Full Metadata Suggestion</h4>
+                                                                            <div className="p-1.5 bg-amber/20 rounded-sm text-amber">✨</div>
+                                                                            <h4 className="text-xs font-black text-amber uppercase tracking-[0.2em]">Full Metadata Suggestion</h4>
                                                                         </div>
 
                                                                         <div className="space-y-4 mb-5">
                                                                             <div className="p-3 bg-white/5 rounded-xl border border-white/5">
                                                                                 <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Refined Description:</p>
-                                                                                <p className="text-sm text-slate-200 leading-relaxed italic border-l-2 border-indigo-500/30 pl-3">"{desc}"</p>
+                                                                                <p className="text-sm text-slate-200 leading-relaxed italic border-l-2 border-brass/30 pl-3">"{desc}"</p>
                                                                             </div>
                                                                             <div className="p-3 bg-white/5 rounded-xl border border-white/5">
                                                                                 <p className="text-[9px] font-bold text-slate-500 uppercase mb-2">Subtle Hints:</p>
@@ -1662,7 +1661,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                                 if (hnts) cp[editingId].hints = Array.isArray(hnts) ? hnts : [hnts];
                                                                                 return cp;
                                                                             })}
-                                                                            className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-black px-4 py-3.5 rounded-xl shadow-[0_5px_15px_rgba(99,102,241,0.4)] transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
+                                                                            className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 bg-teal hover:bg-teal/90 text-charcoal text-xs font-black px-4 py-3.5 rounded-xl shadow-[0_5px_15px_rgba(99,102,241,0.4)] transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
                                                                         >
                                                                             🚀 APPLY FULL REFINEMENT
                                                                         </button>
@@ -1672,10 +1671,10 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
 
                                                             if (action.action === "setHints") {
                                                                 return (
-                                                                    <div key={mIdx} className="bg-slate-900 border-2 border-purple-500/50 rounded-2xl p-4 shadow-xl">
+                                                                    <div key={mIdx} className="bg-slate-900 border-2 border-brass/50 rounded-2xl p-4 shadow-xl">
                                                                         <div className="flex items-center gap-2 mb-4">
-                                                                            <div className="p-1.5 bg-purple-500/20 rounded-lg text-purple-400">📝</div>
-                                                                            <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest">Hints Suggestion (v2.2)</h4>
+                                                                            <div className="p-1.5 bg-brass/20 rounded-sm text-brass">📝</div>
+                                                                            <h4 className="text-xs font-black text-brass uppercase tracking-widest">Hints Suggestion (v2.2)</h4>
                                                                         </div>
                                                                         <div className="text-sm text-slate-200 mb-5 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
                                                                             {renderPreview(action.data)}
@@ -1686,7 +1685,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                                 cp[editingId].hints = Array.isArray(action.data) ? action.data : [action.data];
                                                                                 return cp;
                                                                             })}
-                                                                            className="w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-lg active:scale-95"
+                                                                            className="w-full bg-brass hover:bg-brass/90 bg-teal hover:bg-teal/90 text-charcoal text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-lg active:scale-95"
                                                                         >
                                                                             Apply Hints
                                                                         </button>
@@ -1695,10 +1694,10 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                             }
                                                             if (action.action === "setDescription") {
                                                                 return (
-                                                                    <div key={mIdx} className="bg-slate-900 border-2 border-blue-500/50 rounded-2xl p-4 shadow-xl">
+                                                                    <div key={mIdx} className="bg-slate-900 border-2 border-teal/50 rounded-2xl p-4 shadow-xl">
                                                                         <div className="flex items-center gap-2 mb-4">
-                                                                            <div className="p-1.5 bg-blue-500/20 rounded-lg text-blue-400">📖</div>
-                                                                            <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest">Description Suggestion (v2.2)</h4>
+                                                                            <div className="p-1.5 bg-brass/20 rounded-sm text-teal">📖</div>
+                                                                            <h4 className="text-xs font-black text-teal uppercase tracking-widest">Description Suggestion (v2.2)</h4>
                                                                         </div>
                                                                         <div className="text-sm text-slate-200 mb-5 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5 italic">
                                                                             "{renderPreview(action.data)}"
@@ -1709,7 +1708,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                                                                 cp[editingId].description = action.data;
                                                                                 return cp;
                                                                             })}
-                                                                            className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-lg active:scale-95"
+                                                                            className="w-full bg-brass hover:bg-brass/80 bg-teal hover:bg-teal/90 text-charcoal text-xs font-bold px-4 py-3 rounded-xl transition-all shadow-lg active:scale-95"
                                                                         >
                                                                             Apply Description
                                                                         </button>
@@ -1732,7 +1731,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                 )}
                                 {isChatting && (
                                     <div className="flex justify-start">
-                                        <div className="bg-gray-800 text-gray-400 rounded-2xl px-4 py-2 text-sm border border-gray-700 flex items-center gap-2">
+                                        <div className="bg-brass/10 text-stone-light rounded-2xl px-4 py-2 text-sm border border-brass/20 flex items-center gap-2">
                                             <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
                                             <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-75"></div>
                                             <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-150"></div>
@@ -1741,10 +1740,10 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                 )}
                                 <div ref={chatEndRef} />
                             </div>
-                            <form onSubmit={handleChat} className="p-3 bg-gray-900 border-t border-gray-800 flex gap-2">
+                            <form onSubmit={handleChat} className="p-3 bg-[#0e1a14] border-t border-brass/10 flex gap-2">
                                 <input
                                     type="text"
-                                    className="flex-1 bg-gray-800 border-none rounded-lg px-4 py-2 text-sm text-white focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-500"
+                                    className="flex-1 bg-brass/10 border-none rounded-sm px-4 py-2 text-sm bg-teal hover:bg-teal/90 text-charcoal focus:ring-1 focus:ring-blue-500 outline-none placeholder-gray-500"
                                     placeholder="Chat with AI..."
                                     value={chatMessage}
                                     onChange={(e) => setChatMessage(e.target.value)}
@@ -1753,7 +1752,7 @@ export const SingleLocationEditor = memo(function SingleLocationEditor({ item, e
                                 <button
                                     type="submit"
                                     disabled={isChatting || !chatMessage.trim()}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:bg-gray-700 text-white font-bold rounded-lg transition-colors text-sm"
+                                    className="px-4 py-2 bg-brass hover:bg-brass/80 disabled:opacity-50 disabled:bg-brass/20 bg-teal hover:bg-teal/90 text-charcoal font-bold rounded-sm transition-colors text-sm"
                                 >
                                     Send
                                 </button>
@@ -1779,30 +1778,30 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
     return (
         <div className="fixed inset-0 bg-black/90 z-50 flex flex-col overflow-hidden">
             {/* Sticky top bar */}
-            <div className="shrink-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-[60] px-6 py-3 flex justify-between items-center shadow-2xl">
+            <div className="shrink-0 bg-[#0e1a14]/95 backdrop-blur-md border-b border-brass/10 z-[60] px-6 py-3 flex justify-between items-center shadow-2xl">
                 <div className="flex items-center gap-6">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <span className="p-1.5 bg-blue-600/20 rounded-lg text-blue-400">🚀</span>
+                    <h2 className="text-xl font-bold bg-teal hover:bg-teal/90 text-charcoal flex items-center gap-2">
+                        <span className="p-1.5 bg-brass/20 rounded-sm text-teal">🚀</span>
                         {renderMode === 'all'
                             ? `Editing ${files.length} Locations Concurrently`
                             : `Edit Location: ${activeItems[0]?.item?.file?.name || activeItems[0]?.item?.photographer || "Unnamed"}`}
                     </h2>
                     {renderMode !== 'all' && (
-                        <div className="flex items-center bg-gray-800 rounded-lg border border-gray-700 overflow-hidden shadow-inner">
+                        <div className="flex items-center bg-brass/10 rounded-sm border border-brass/20 overflow-hidden shadow-inner">
                             <button
                                 onClick={() => setEditingId(Math.max(0, (editingId as number) - 1))}
                                 disabled={editingId === 0}
-                                className="px-4 py-2 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold border-r border-gray-700 transition-colors"
+                                className="px-4 py-2 hover:bg-brass/20 disabled:opacity-20 text-xs font-bold border-r border-brass/20 transition-colors"
                             >
                                 ← PREV
                             </button>
-                            <span className="px-4 py-2 text-xs font-mono text-gray-400 bg-black/20">
+                            <span className="px-4 py-2 text-xs font-mono text-stone-light bg-black/20">
                                 {(editingId as number) + 1} / {files.length}
                             </span>
                             <button
                                 onClick={() => setEditingId(Math.min(files.length - 1, (editingId as number) + 1))}
                                 disabled={editingId === files.length - 1}
-                                className="px-4 py-2 hover:bg-gray-700 disabled:opacity-20 text-xs font-bold transition-colors"
+                                className="px-4 py-2 hover:bg-brass/20 disabled:opacity-20 text-xs font-bold transition-colors"
                             >
                                 NEXT →
                             </button>
@@ -1811,13 +1810,13 @@ export function EditModal({ editingId, files, setFiles, setEditingId, isLoaded, 
                 </div>
                 <div className="flex items-center gap-4">
                     {renderMode === 'all' && (
-                        <span className="text-xs text-gray-400 font-mono bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
+                        <span className="text-xs text-stone-light font-mono bg-brass/10 px-3 py-1.5 rounded-sm border border-brass/20">
                             Scroll ↕ to switch between locations
                         </span>
                     )}
                     <button
                         onClick={() => setEditingId(null)}
-                        className="px-6 py-2 bg-red-600/20 hover:bg-red-600 hover:text-white rounded-lg text-red-400 font-black border border-red-500/50 text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95 flex items-center gap-2"
+                        className="px-6 py-2 bg-red-600/20 hover:bg-red-600 hover:bg-teal hover:bg-teal/90 text-charcoal rounded-sm text-red-400 font-black border border-red-500/50 text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95 flex items-center gap-2"
                     >
                         <span>×</span> Exit Editor
                     </button>

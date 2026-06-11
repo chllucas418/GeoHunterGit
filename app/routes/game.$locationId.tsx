@@ -223,7 +223,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
             polylineRef.current = new google.maps.Polyline({
                 path: [guess, actualCoord],
                 geodesic: true,
-                strokeColor: "#60a5fa", // Blue-400
+                strokeColor: "#4a9b8c", // Teal
                 strokeOpacity: 0.8,
                 strokeWeight: 4,
                 map: mapInstance
@@ -260,7 +260,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                                 path: [guess, location.geoPoint],
                                 map: mapInstance,
                                 geodesic: true,
-                                strokeColor: "#3b82f6", // Blue-500
+                                strokeColor: "#c9a84c", // Brass
                                 strokeOpacity: 0.8,
                                 strokeWeight: 4,
                                 icons: [{
@@ -296,22 +296,22 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
 
     if (isLoading) {
         return (
-            <div className="h-[100dvh] w-screen flex flex-col items-center justify-center bg-black text-white relative overflow-hidden">
-                <div className="absolute inset-0 bg-blue-900/10 animate-pulse" />
+            <div className="h-[100dvh] w-screen flex flex-col items-center justify-center bg-[#0e1a14] text-cream relative overflow-hidden">
+                <div className="absolute inset-0 bg-[#1a3a2f]/20 animate-pulse" />
                 <div className="z-10 flex flex-col items-center gap-6">
-                    <div className="w-16 h-16 border-4 border-t-blue-500 border-r-transparent border-b-blue-500 border-l-transparent rounded-full animate-spin" />
+                    <div className="w-16 h-16 border-4 border-t-brass border-r-transparent border-b-brass border-l-transparent rounded-full animate-spin" />
                     <h2 className="text-2xl font-black uppercase tracking-widest animate-pulse">Establishing Uplink...</h2>
-                    <p className="text-xs font-mono text-blue-400/60">Decrypting satellite telemetry</p>
+                    <p className="text-xs font-mono text-brass/60">Decrypting satellite telemetry</p>
                 </div>
             </div>
         )
     }
 
     return (
-        <div className="h-[100dvh] w-screen relative overflow-hidden bg-black text-white flex flex-col md:flex-row transition-all duration-700 ease-in-out">
+        <div className="h-[100dvh] w-screen relative overflow-hidden bg-[#0e1a14] text-cream flex flex-col md:flex-row transition-all duration-700 ease-in-out">
 
             {/* --- COLUMN 1: IMAGE EVIDENCE --- */}
-            <div className={`relative h-full transition-all duration-700 ease-in-out border-r border-white/10 overflow-hidden
+            <div className={`relative h-full transition-all duration-700 ease-in-out border-r border-brass/10 overflow-hidden
                 ${layoutMode === "result" ? "w-full md:w-[40%]" : "w-full md:w-1/2"}`
             }
             >
@@ -320,7 +320,7 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                 <div className="absolute top-0 inset-x-0 z-[60] pt-[max(env(safe-area-inset-top),16px)] px-4 safe-top">
                     {/* Header Row: Back button + Target ID */}
                     <div className="flex justify-between items-start">
-                        <Link to="/" className="px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-xs font-bold transition-all border border-white/10 touch-target">
+                        <Link to="/" className="px-4 py-2 bg-brass/10 hover:bg-brass/20 backdrop-blur-md rounded-full text-xs font-bold transition-all border border-brass/20 text-cream touch-target">
                             ← ABORT MISSION
                         </Link>
                         <div className="text-right">
@@ -333,10 +333,10 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                         <div className="w-max mx-auto flex flex-col items-center gap-2 mt-2">
                             <div className="flex items-center gap-3 px-6 py-2 rounded-full bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-in slide-in-from-top-10 duration-1000 fade-in">
                                 <div className="relative w-2 h-2">
-                                    <span className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></span>
-                                    <span className="relative block w-2 h-2 rounded-full bg-blue-500"></span>
+                                    <span className="absolute inset-0 rounded-full bg-teal animate-ping opacity-75"></span>
+                                    <span className="relative block w-2 h-2 rounded-full bg-teal-light"></span>
                                 </div>
-                                <span className="text-xs font-black text-white/90 tracking-[0.2em] uppercase">
+                                <span className="text-xs font-black text-cream/90 tracking-[0.2em] uppercase">
                                     {totalEvidence} Intel Items Hidden
                                 </span>
                             </div>
@@ -344,13 +344,13 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             {/* Timer / Hint Progress */}
                             {visibleHints.length < hintList.length && (
                                 <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-700 delay-300">
-                                    <div className="w-32 h-1 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm shadow-inner">
+                                    <div className="w-32 h-1 bg-brass/10 rounded-full overflow-hidden backdrop-blur-sm shadow-inner">
                                         <div
-                                            className="h-full bg-yellow-400 transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(250,204,21,0.5)]"
+                                            className="h-full bg-amber transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(212,130,42,0.5)]"
                                             style={{ width: `${progress}%` }}
                                         />
                                     </div>
-                                    <span className="text-[10px] font-mono text-yellow-400 font-bold tracking-tight">
+                                    <span className="text-[10px] font-mono text-amber font-bold tracking-tight">
                                         HINT IN {Math.ceil(timeUntilNext)}s
                                     </span>
                                 </div>
@@ -366,14 +366,14 @@ export default function GameRoute({ loaderData }: Route.ComponentProps) {
                             onClick={() => setIsEvidenceMode(!isEvidenceMode)}
                             className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-widest border transition-all shadow-xl backdrop-blur-md touch-target
                                 ${isEvidenceMode
-                                    ? 'bg-green-500/20 text-green-400 border-green-500/50 hover:bg-green-500/30'
-                                    : 'bg-white/10 text-white border-white/10 hover:bg-white/20'
+                                    ? 'bg-teal/20 text-teal border-teal/50 hover:bg-teal/30'
+                                    : 'bg-brass/10 text-cream border-brass/20 hover:bg-brass/20'
                                 }`}
                         >
                             {isEvidenceMode ? "Scanning Mode Active" : "Enable Scanner"}
                         </button>
                         {evidenceList.length > 0 && (
-                            <div className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-xs font-mono text-green-400 animate-in slide-in-from-right">
+                            <div className="bg-[#0e1a14]/60 backdrop-blur-md px-3 py-1 rounded-lg border border-brass/10 text-xs font-mono text-teal animate-in slide-in-from-right">
                                 {evidenceList.length} Clues Logged
                             </div>
                         )}

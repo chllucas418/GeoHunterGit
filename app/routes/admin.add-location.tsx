@@ -127,8 +127,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
             let analyses: any[] = [];
             if (evidenceList.length > 0) {
                 try {
-                    console.log("[AddLocation API] Generating AI analyses for evidence...", finalImageUrl);
-                    analyses = await batchAnalyzeOfficialEvidence(
+                                        analyses = await batchAnalyzeOfficialEvidence(
                         finalImageUrl,
                         evidenceList.map((ev: any, idx: number) => ({
                             id: String(idx),

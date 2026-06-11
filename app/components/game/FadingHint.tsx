@@ -11,10 +11,9 @@ export function FadingHint({ hint, index, totalHints, isIntelCorrupted }: Fading
     const [visible, setVisible] = useState(true);
 
     useEffect(() => {
-        // Automatically hide the hint completely after 12 seconds
         const timer = setTimeout(() => {
             setVisible(false);
-        }, 12000); // 12 seconds total duration (matches css animation duration)
+        }, 12000);
 
         return () => clearTimeout(timer);
     }, [hint]);
@@ -23,46 +22,45 @@ export function FadingHint({ hint, index, totalHints, isIntelCorrupted }: Fading
 
     return (
         <div
-            className={`relative group bg-black/65 backdrop-blur-xl border border-white/10 p-3.5 rounded-r-xl rounded-bl-xl border-l-4 ${
+            className={`relative group bg-[#0e1a14]/90 backdrop-blur-xl border p-3.5 rounded-r rounded-bl-xl text-xs shadow-[0_4px_20px_rgba(0,0,0,0.5)] hint-fade-card pointer-events-auto transition-all duration-300 ${
                 isIntelCorrupted
-                    ? "border-l-purple-600 bg-purple-950/50"
-                    : "border-l-yellow-400"
-            } text-xs font-medium text-white shadow-[0_8px_32px_rgba(0,0,0,0.4)] hint-fade-card pointer-events-auto transition-all duration-300`}
+                    ? "border-rust/60 bg-[#1a1a18]/80"
+                    : "border-teal/40"
+            }`}
         >
-            {/* Header / Meta */}
+            {/* Header */}
             <div className="flex items-center justify-between mb-1.5 pr-6">
                 <div className="flex items-center gap-1.5">
-                    {/* Pulsing indicator */}
-                    <span className="relative flex h-2 w-2">
-                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isIntelCorrupted ? 'bg-purple-400' : 'bg-yellow-400'}`}></span>
-                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isIntelCorrupted ? 'bg-purple-500' : 'bg-yellow-500'}`}></span>
+                    <span className={`relative flex h-2 w-2`}>
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isIntelCorrupted ? 'bg-rust' : 'bg-teal'}`}></span>
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isIntelCorrupted ? 'bg-rust' : 'bg-teal'}`}></span>
                     </span>
-                    <span className={`text-[10px] font-black tracking-widest uppercase ${isIntelCorrupted ? 'text-purple-400' : 'text-yellow-400'}`}>
+                    <span className={`text-[9px] font-black tracking-[0.2em] uppercase ${isIntelCorrupted ? 'text-rust' : 'text-teal'}`}>
                         {isIntelCorrupted ? (
-                            "SYSTEM MALFUNCTION"
+                            "System Malfunction"
                         ) : (
-                            totalHints 
-                                ? `Transmission #0${index + 1} / 0${totalHints}` 
-                                : `Transmission #0${index + 1}`
+                            totalHints
+                                ? `Signal #0${index + 1} / 0${totalHints}`
+                                : `Signal #0${index + 1}`
                         )}
                     </span>
                 </div>
             </div>
 
-            {/* Manual Dismiss Button */}
+            {/* Dismiss */}
             <button
                 onClick={() => setVisible(false)}
-                className="absolute top-2.5 right-2.5 text-white/40 hover:text-white/90 bg-white/5 hover:bg-white/10 w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold transition-all duration-200 cursor-pointer"
-                title="Dismiss Hint"
+                className="absolute top-2.5 right-2.5 text-stone/40 hover:text-cream/90 bg-white/5 hover:bg-white/10 w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold transition-all duration-200 cursor-pointer"
+                title="Dismiss"
             >
                 ✕
             </button>
 
-            {/* Hint Content */}
-            <div className="leading-relaxed">
+            {/* Content */}
+            <div className="leading-relaxed text-stone-light">
                 {isIntelCorrupted ? (
-                    <span className="font-mono text-purple-300 font-bold tracking-widest line-through decoration-wavy opacity-90 blur-[0.5px]">
-                        👾 ████ ENCRYPTED: PAYLOAD CORRUPTED ████
+                    <span className="font-mono text-rust/80 font-bold tracking-widest line-through decoration-wavy">
+                        ████ ENCRYPTED: PAYLOAD CORRUPTED ████
                     </span>
                 ) : (
                     hint

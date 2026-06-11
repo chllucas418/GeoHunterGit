@@ -7,8 +7,25 @@
 	"name": "geohuntgit",
 	"compatibility_date": "2025-04-04",
 	"main": "./workers/app.ts",
+	"routes": [
+		{
+			"pattern": "edu.hkgeohunter.com",
+			"zone_name": "hkgeohunter.com",
+			"custom_domain": true
+		}
+	],
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS"
+	},
 	"vars": {
-		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare"
+		"VALUE_FROM_CLOUDFLARE": "Hello from Cloudflare",
+		"GOOGLE_MAPS_API_KEY": "AIzaSyCfON_uNUnUCn5EodiAuMaJPM2Ew8vvEuI",
+		"GOOGLE_DRIVE_API_KEY": "AIzaSyCP2SVs_s3JuWAzpcciAHLG3X8LVT9Oio4",
+		"GOOGLE_DRIVE_CLIENT_ID": "52030790032-9mmh9ru8mphtee6k514hbbe85q59nt00.apps.googleusercontent.com",
+		"DEVELOPER_PASSWORD": "Chllucas2010418@4@18&3&16",
+		"DEVELOPER_REGISTRATION_KEY": "GEOHUNTER_DEV_2026",
+		"GEMINI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/c83bdd5223424a2d1658b0c2d191c550/geohunter-proxy/google-ai-studio"
 	},
 	"d1_databases": [
 		{
@@ -45,25 +62,4 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	]
-	/**
-	 * Smart Placement
-	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-	 */
-	// "placement": {  "mode": "smart" }
-	/**
-	 * Bindings
-	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-	 * databases, object storage, AI inference, real-time communication and more.
-	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-	 */
-	/**
-	 * Static Assets
-	 * https://developers.cloudflare.com/workers/static-assets/binding/
-	 */
-	// "assets": {  "directory": "./public/",  "binding": "ASSETS" }
-	/**
-	 * Service Bindings (communicate between multiple Workers)
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
-	 */
-	// "services": [  {   "binding": "MY_SERVICE",   "service": "my-service"  } ]
 }

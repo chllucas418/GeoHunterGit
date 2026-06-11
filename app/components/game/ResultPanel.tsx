@@ -2,68 +2,75 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
     if (!result || layoutMode !== "result") return null;
 
     return (
-        <div className="w-full md:w-[20%] bg-slate-900 border-l border-white/10 overflow-y-auto">
+        <div className="w-full md:w-[20%] bg-[#0e1a14] border-l border-brass/15 overflow-y-auto">
             {result.score !== undefined ? (
-                <div className="p-6">
-                    <h2 className="text-5xl font-black text-white">{result.score || 0}</h2>
-                    <p className="text-xs text-green-400 uppercase tracking-widest">Total Score</p>
-                    
-                    <div className="mt-4 bg-black/20 rounded-lg p-3 border border-white/5 space-y-2 text-[10px] md:text-xs">
-                        <div className="flex justify-between items-center text-slate-300">
-                            <span className="uppercase tracking-wider">📍 Base Alignment</span>
-                            <span className="font-mono font-bold text-white">{result.baseDistanceScore || 0}</span>
+                <div className="p-5">
+                    {/* Field Report Header */}
+                    <div className="mb-5 pb-4 border-b border-brass/20">
+                        <div className="text-[9px] font-mono text-stone uppercase tracking-[0.3em] mb-1">Expedition Report</div>
+                        <h2 className="font-heading text-4xl font-black text-brass">{result.score || 0}</h2>
+                        <p className="text-[10px] text-teal uppercase tracking-widest mt-1">Total Points</p>
+                    </div>
+
+                    {/* Score Breakdown — Field Ledger Style */}
+                    <div className="space-y-1.5 text-[10px] md:text-xs">
+                        <div className="flex justify-between items-center text-stone-light py-2 border-b border-brass/10">
+                            <span className="uppercase tracking-wider text-stone">Base Alignment</span>
+                            <span className="font-mono font-bold text-cream">{result.baseDistanceScore || 0}</span>
                         </div>
                         {(result.baseTimeMultiplier !== undefined && room.game_mode === 'time_attack') && (
-                            <div className="flex justify-between items-center text-orange-300">
-                                <span className="uppercase tracking-wider">⏱️ Sub Time Multiplier</span>
-                                <span className="font-mono font-bold text-white">x{Number(result.baseTimeMultiplier).toFixed(2)}</span>
+                            <div className="flex justify-between items-center text-amber py-2 border-b border-brass/10">
+                                <span className="uppercase tracking-wider text-stone">Sub Time Multiplier</span>
+                                <span className="font-mono font-bold text-cream">x{Number(result.baseTimeMultiplier).toFixed(2)}</span>
                             </div>
                         )}
                         {result.powerupActive && (
-                            <div className="flex justify-between items-center text-pink-400">
-                                <span className="uppercase tracking-wider">🔥 Overclock Bonus</span>
-                                <span className="font-mono font-bold text-white">x1.5</span>
+                            <div className="flex justify-between items-center text-rust py-2 border-b border-brass/10">
+                                <span className="uppercase tracking-wider text-stone">Overclock Bonus</span>
+                                <span className="font-mono font-bold text-cream">x1.5</span>
                             </div>
                         )}
-                        <div className="flex justify-between items-center text-green-300 border-t border-white/10 pt-2 mt-2">
-                            <span className="uppercase tracking-wider">🎯 Final Alignment Score</span>
-                            <span className="font-mono font-bold text-white">+{result.distanceScore || 0}</span>
+                        <div className="flex justify-between items-center text-teal py-2 border-b border-brass/10">
+                            <span className="uppercase tracking-wider text-stone">Final Alignment Score</span>
+                            <span className="font-mono font-bold text-cream">+{result.distanceScore || 0}</span>
                         </div>
 
-                        <div className="flex justify-between items-center text-blue-300 pt-2">
-                            <span className="uppercase tracking-wider">🔍 Evidence Bonus</span>
-                            <span className="font-mono font-bold text-white">+{result.evidenceScore || 0}</span>
+                        <div className="flex justify-between items-center text-brass py-2 border-b border-brass/10">
+                            <span className="uppercase tracking-wider text-stone">Evidence Bonus</span>
+                            <span className="font-mono font-bold text-cream">+{result.evidenceScore || 0}</span>
                         </div>
-                        <div className="flex justify-between items-center text-indigo-300">
-                            <span className="uppercase tracking-wider">⚡ Speed Flat Bonus</span>
-                            <span className="font-mono font-bold text-white">+{result.timeScore || 0}</span>
+                        <div className="flex justify-between items-center text-teal-dark py-2 border-b border-brass/10">
+                            <span className="uppercase tracking-wider text-stone">Speed Flat Bonus</span>
+                            <span className="font-mono font-bold text-cream">+{result.timeScore || 0}</span>
                         </div>
                         {result.difficultyMulti > 1 && (
-                            <div className="flex justify-between items-center text-yellow-400 border-t border-white/10 pt-2 mt-2">
-                                <span className="uppercase tracking-wider">⭐ Hard Mode Ext.</span>
-                                <span className="font-mono font-black text-white">x{result.difficultyMulti}</span>
+                            <div className="flex justify-between items-center text-amber py-2 border-b border-brass/10">
+                                <span className="uppercase tracking-wider text-stone">Hard Mode Extension</span>
+                                <span className="font-mono font-black text-cream">x{result.difficultyMulti}</span>
                             </div>
                         )}
                     </div>
 
-                    <hr className="border-white/10 my-6" />
-
-                    <div className="text-xl font-black text-slate-200">
-                        {result.distance !== undefined && !isNaN(result.distance)
-                            ? `${Math.round(result.distance)}m`
-                            : "-- m"}
+                    {/* Deviation */}
+                    <div className="mt-6 pt-4 border-t border-brass/20">
+                        <div className="font-mono text-lg font-bold text-cream">
+                            {result.distance !== undefined && !isNaN(result.distance)
+                                ? `${Math.round(result.distance)}m`
+                                : "-- m"}
+                        </div>
+                        <p className="text-[10px] text-stone uppercase tracking-widest mt-1">Deviation from Target</p>
                     </div>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Deviation</p>
 
-                    <div className="mt-8 space-y-4">
-                        <h3 className="text-xs uppercase text-slate-400 mb-2">Evidence Analysis</h3>
+                    {/* Evidence Analysis — Field Notes */}
+                    <div className="mt-8">
+                        <h3 className="text-[10px] uppercase text-stone mb-3 flex items-center gap-2">
+                            <span className="text-brass">▸</span> Field Analysis
+                        </h3>
 
-                        {/* Compute categorized evidence using IoU spatial overlap */}
                         {(() => {
                             const officialList = result?.officialEvidence || currentRound?.evidence || [];
                             const aiResults = result?.aiFeedback?.results || [];
 
-                            // Helper: compute overlap between two boxes
                             const boxesOverlap = (sBox: any, oBox: any) => {
                                 const ax1 = sBox.x, ay1 = sBox.y, ax2 = sBox.x + sBox.w, ay2 = sBox.y + sBox.h;
                                 const bx1 = oBox.x, by1 = oBox.y, bx2 = oBox.x + oBox.w, by2 = oBox.y + oBox.h;
@@ -79,14 +86,12 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                 return iou >= 0.15 || coverageOfOfficial >= 0.3;
                             };
 
-                            // Parse official bounding boxes
                             const parsedOfficials = officialList.map((ev: any) => {
                                 let box = null;
                                 try { box = typeof ev.bounding_box === 'string' ? JSON.parse(ev.bounding_box) : ev.bounding_box; } catch {}
                                 return { ...ev, box };
                             });
 
-                            // Categorize student evidence
                             const foundEvidence: { userIndex: number; official: any; aiItem: any }[] = [];
                             const novelEvidence: { userIndex: number; aiItem: any }[] = [];
                             const matchedOfficialIds = new Set<string>();
@@ -111,23 +116,22 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                 }
                             });
 
-                            // Missed = official evidence not matched by any student box
                             const missedEvidence = parsedOfficials.filter((oe: any) => oe.box && !matchedOfficialIds.has(oe.id));
 
                             return (
                                 <>
-                                    {/* ✅ FOUND EVIDENCE */}
+                                    {/* Found Evidence */}
                                     {foundEvidence.length > 0 && (
                                         <div className="space-y-2">
-                                            <h4 className="text-[10px] uppercase text-green-400 tracking-widest flex items-center gap-1">
-                                                <span>✅</span> Found ({foundEvidence.length})
+                                            <h4 className="text-[10px] uppercase text-teal tracking-widest flex items-center gap-1">
+                                                <span>✓</span> Identified ({foundEvidence.length})
                                             </h4>
                                             {foundEvidence.map((item, i) => (
-                                                <div key={i} className="text-xs text-slate-300 border-l-2 border-green-500/50 pl-3 py-1">
-                                                    <span className="font-bold text-green-400 block mb-1">
+                                                <div key={i} className="text-xs text-stone-light border-l-2 border-teal/50 pl-3 py-2 bg-[#1a3a2f]/30 rounded-r">
+                                                    <span className="font-bold text-teal-light block mb-1">
                                                         {item.official.description || item.aiItem?.description || `Evidence #${item.userIndex + 1}`}
                                                     </span>
-                                                    <p className="opacity-80 leading-snug text-green-200/80">
+                                                    <p className="opacity-80 leading-snug text-stone">
                                                         {item.aiItem?.explanation || (item.official.ai_analysis && item.official.ai_analysis !== "Real-time analysis active." ? item.official.ai_analysis : "Correctly identified this landmark feature.")}
                                                     </p>
                                                 </div>
@@ -135,15 +139,15 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                         </div>
                                     )}
 
-                                    {/* 🔵 NOVEL DISCOVERIES */}
+                                    {/* Novel Discoveries */}
                                     {novelEvidence.length > 0 && (
                                         <div className="space-y-2 mt-3">
-                                            <h4 className="text-[10px] uppercase text-blue-400 tracking-widest flex items-center gap-1">
-                                                <span>🔍</span> Additional Observations ({novelEvidence.length})
+                                            <h4 className="text-[10px] uppercase text-brass tracking-widest flex items-center gap-1">
+                                                <span>★</span> Additional Observations ({novelEvidence.length})
                                             </h4>
                                             {novelEvidence.map((item, i) => (
-                                                <div key={i} className="text-xs text-slate-300 border-l-2 border-blue-500/50 pl-3 py-1">
-                                                    <span className="font-bold text-blue-400 block mb-1">
+                                                <div key={i} className="text-xs text-stone-light border-l-2 border-brass/50 pl-3 py-2 bg-[#1a3a2f]/20 rounded-r">
+                                                    <span className="font-bold text-brass block mb-1">
                                                         {item.aiItem?.description || `Observation #${item.userIndex + 1}`}
                                                     </span>
                                                     <p className="opacity-80 leading-snug">
@@ -154,11 +158,11 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                         </div>
                                     )}
 
-                                    {/* ❌ MISSED INTEL */}
+                                    {/* Missed Intel */}
                                     {missedEvidence.length > 0 && (
                                         <div className="space-y-2 mt-3">
-                                            <h4 className="text-[10px] uppercase text-red-400 tracking-widest flex items-center gap-1">
-                                                <span>❌</span> Missed Intel ({missedEvidence.length})
+                                            <h4 className="text-[10px] uppercase text-rust tracking-widest flex items-center gap-1">
+                                                <span>—</span> Missed Intel ({missedEvidence.length})
                                             </h4>
                                             {missedEvidence.map((ev: any) => {
                                                 let personalizedExplanation = null;
@@ -167,11 +171,11 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                                     if (AIExplanation?.explanation) personalizedExplanation = AIExplanation.explanation;
                                                 }
                                                 return (
-                                                    <div key={ev.id} className="text-xs text-slate-400 border-l-2 border-red-500/30 pl-3 py-1">
-                                                        <span className="font-bold text-red-300 block mb-1">{ev.description}</span>
+                                                    <div key={ev.id} className="text-xs text-stone/70 border-l-2 border-rust/30 pl-3 py-2 bg-[#1a1a18]/40 rounded-r">
+                                                        <span className="font-bold text-rust/80 block mb-1">{ev.description}</span>
                                                         {(() => {
-                                                            const displayExpl = (personalizedExplanation && personalizedExplanation !== "Real-time analysis active.") 
-                                                                ? personalizedExplanation 
+                                                            const displayExpl = (personalizedExplanation && personalizedExplanation !== "Real-time analysis active.")
+                                                                ? personalizedExplanation
                                                                 : (ev.ai_analysis && ev.ai_analysis !== "Real-time analysis active." ? ev.ai_analysis : null);
                                                             return displayExpl ? (
                                                                 <p className="opacity-70 leading-snug">{displayExpl}</p>
@@ -183,37 +187,38 @@ export function ResultPanel({ result, layoutMode, room, currentRound, evidenceLi
                                         </div>
                                     )}
 
-                                    {/* Summary if AI feedback has a summary */}
+                                    {/* Summary */}
                                     {result.aiFeedback?.summary_explanation && (
-                                        <div className="mt-3 p-3 bg-slate-800/50 rounded border border-white/5">
-                                            <p className="text-xs text-slate-400 leading-relaxed italic">{result.aiFeedback.summary_explanation}</p>
+                                        <div className="mt-3 p-3 bg-[#1a3a2f]/30 rounded border border-brass/10">
+                                            <p className="text-xs text-stone leading-relaxed italic">{result.aiFeedback.summary_explanation}</p>
                                         </div>
                                     )}
 
-                                    {/* No evidence at all */}
+                                    {/* No evidence */}
                                     {foundEvidence.length === 0 && novelEvidence.length === 0 && missedEvidence.length === 0 && (
-                                        <p className="text-xs text-slate-500 italic">No evidence data available for this round.</p>
+                                        <p className="text-xs text-stone/50 italic">No evidence data available for this round.</p>
                                     )}
                                 </>
                             );
                         })()}
 
-                        {/* Matched Evidence Summary */}
+                        {/* Intel Bonus Summary */}
                         {result.evidenceScore > 0 && (
-                            <div className="mt-2 py-2 px-3 bg-green-500/20 rounded border border-green-500/30 flex justify-between">
-                                <span className="text-green-400 text-xs font-bold">Intel Bonus</span>
-                                <span className="text-white text-xs font-bold">+{result.evidenceScore}</span>
+                            <div className="mt-3 py-2 px-3 bg-teal/10 rounded border border-teal/30 flex justify-between">
+                                <span className="text-teal text-xs font-bold">Intel Bonus</span>
+                                <span className="text-cream text-xs font-bold">+{result.evidenceScore}</span>
                             </div>
                         )}
                     </div>
 
-                    <div className="mt-8">
-                        <h3 className="text-xs uppercase text-slate-400 mb-2">Waiting for next round...</h3>
+                    <div className="mt-8 pt-4 border-t border-brass/10">
+                        <p className="text-[10px] text-stone/50 uppercase tracking-widest">Awaiting next sector assignment...</p>
                     </div>
                 </div>
             ) : (
-                <div className="p-6 text-center text-slate-500 italic">
-                    {result.message || "Analysis Complete. Data Encrypted. Waiting for HQ Reveal..."}
+                <div className="p-5 text-center">
+                    <div className="text-stone/40 text-sm font-mono">Analysis Complete</div>
+                    <div className="text-[9px] text-stone/30 uppercase tracking-widest mt-2">Data Encrypted — Awaiting HQ Reveal</div>
                 </div>
             )}
         </div>

@@ -1,4 +1,4 @@
-import { Form, useActionData, useNavigation, redirect } from "react-router";
+import { Form, useActionData, useNavigation, redirect, Link } from "react-router";
 import { requireUser } from "~/lib/auth.server";
 
 export async function loader({ request }: any) {
@@ -14,15 +14,10 @@ export async function action({ request, context }: any) {
     const env = context.cloudflare.env as any;
     const db = env.DB as D1Database;
 
-    // Check if room exists
     const room = await db.prepare("SELECT * FROM rooms WHERE code = ?").bind(code).first();
     if (!room) {
         return { error: "Mission ID Invalid. Check clearance code." };
     }
-
-    // Call internal join API or just insert here
-    // Let's call the join logic directly or via fetch? 
-    // Direct DB insert is faster/easer server-side
 
     try {
         await db.prepare(
@@ -41,51 +36,74 @@ export default function JoinGame() {
     const isSubmitting = navigation.state === "submitting";
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-6 relative z-10 bg-slate-950">
-            <div className="max-w-md w-full glass-panel p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-20%] w-64 h-64 bg-blue-500/20 rounded-full blur-[80px]" />
+        <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
+            <div className="w-full max-w-md">
+                {/* Header */}
+                <div className="text-center mb-12">
+                    <div className="inline-flex items-center gap-3 mb-6">
+                        <div className="w-2 h-2 rounded-full bg-teal animate-pulse" />
+                        <span className="text-[9px] font-mono text-teal uppercase tracking-[0.4em]">Secure Channel</span>
+                    </div>
+                    <h1 className="font-heading text-4xl font-black text-cream tracking-tight mb-2">Enter Mission</h1>
+                    <p className="text-sm font-body text-stone-light">Awaiting command authorization...</p>
+                </div>
 
-                <div className="relative z-10 text-center">
-                    <h1 className="text-4xl font-black text-white tracking-tighter mb-2">
-                        ENTER MISSION ID
-                    </h1>
-                    <p className="text-blue-200/60 font-mono text-sm mb-8">
-                        Awaiting command authorization...
-                    </p>
+                {/* Terminal card */}
+                <div className="bg-[#0a1210] border border-brass/20 rounded-sm overflow-hidden">
+                    <div className="px-4 py-3 bg-[#0e1a14] border-b border-brass/10 flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full bg-rust/60" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber/60" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-teal/60" />
+                        <span className="text-[9px] font-mono text-stone/40 uppercase tracking-widest ml-2">mission.exe</span>
+                    </div>
 
-                    <Form method="post" className="space-y-6">
-                        <input
-                            name="code"
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            maxLength={6}
-                            required
-                            className="w-full bg-black/40 border border-white/20 rounded-3xl px-6 py-6 text-center text-4xl font-black font-mono tracking-[0.5em] text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/10"
-                            placeholder="000000"
-                            autoComplete="off"
-                        />
-
-                        {actionData?.error && (
-                            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-2xl">
-                                {actionData.error}
+                    <div className="p-8">
+                        <Form method="post" className="space-y-6">
+                            <div>
+                                <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-3 text-center">Mission ID</label>
+                                <input
+                                    name="code"
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={6}
+                                    required
+                                    className="w-full bg-[#0e1a14] border border-brass/20 px-6 py-5 text-center text-3xl font-mono font-black tracking-[0.3em] text-brass focus:border-brass focus:outline-none placeholder-stone/20"
+                                    placeholder="000000"
+                                    autoComplete="off"
+                                />
                             </div>
-                        )}
 
-                        <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="w-full py-5 bg-white text-black font-black uppercase tracking-widest rounded-2xl hover:bg-blue-50 transition-all shadow-lg active:scale-[0.98] mt-4"
-                        >
-                            {isSubmitting ? "Connecting..." : "Join Mission"}
-                        </button>
-                    </Form>
+                            {actionData?.error && (
+                                <div className="p-3 bg-rust/10 border border-rust/20 text-rust text-xs font-mono text-center">
+                                    {actionData.error}
+                                </div>
+                            )}
 
-                    <Form action="/logout" method="post" className="mt-8">
-                        <button type="submit" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-red-400 transition-colors">
-                            SIGN OUT OF TERMINAL
-                        </button>
-                    </Form>
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="w-full py-4 bg-brass text-charcoal font-mono text-sm font-black uppercase tracking-widest hover:bg-brass/90 transition-all"
+                            >
+                                {isSubmitting ? "Connecting..." : "Join Mission"}
+                            </button>
+                        </Form>
+
+                        <div className="mt-8 pt-6 border-t border-brass/10 text-center">
+                            <Form action="/logout" method="post">
+                                <button type="submit" className="text-[9px] font-mono text-stone/30 hover:text-rust uppercase tracking-widest transition-colors">
+                                    Disconnect Terminal
+                                </button>
+                            </Form>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Back link */}
+                <div className="text-center mt-8">
+                    <Link to="/" className="text-[9px] font-mono text-stone/30 hover:text-stone/60 uppercase tracking-widest transition-colors">
+                        ← Return to Base
+                    </Link>
                 </div>
             </div>
         </div>

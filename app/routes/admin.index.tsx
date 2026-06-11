@@ -9,93 +9,73 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function AdminDashboard() {
     return (
-        <div className="min-h-screen p-6 md:p-12 relative z-10 bg-slate-950">
-            <div className="max-w-7xl mx-auto">
-                <header className="mb-12">
-                    <Link to="/" className="text-blue-300 hover:text-white text-xs uppercase tracking-widest font-bold mb-4 inline-block transition-colors">
-                        ← Return to Base
+        <div className="min-h-screen relative z-10">
+            {/* Header */}
+            <header className="bg-[#0e1a14]/95 backdrop-blur-xl border-b border-brass/10">
+                <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
+                    <div>
+                        <div className="flex items-center gap-3 mb-1">
+                            <div className="w-2 h-2 rounded-full bg-rust animate-pulse" />
+                            <span className="text-[9px] font-mono text-rust uppercase tracking-[0.4em]">Developer Mode</span>
+                        </div>
+                        <h1 className="font-heading text-3xl font-black text-cream tracking-tight">Command Center</h1>
+                        <p className="text-[10px] font-mono text-stone/50 uppercase tracking-widest mt-1">System Administration</p>
+                    </div>
+                    <Link to="/" className="px-4 py-2 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass text-[10px] font-mono uppercase tracking-widest transition-all">
+                        ← Base
                     </Link>
-                    <h1 className="text-5xl font-black text-white tracking-tighter text-glow">
-                        Command Center
-                    </h1>
-                    <p className="text-blue-200/60 font-mono mt-2">Administrative controls and system diagnostics.</p>
-                </header>
+                </div>
+            </header>
 
+            <div className="max-w-7xl mx-auto px-6 py-10">
+                {/* Quick Actions Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* Location Management */}
-                    <Link to="/admin/locations" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-emerald-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            M
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Locations</h3>
-                            <p className="text-sm text-white/50">Manage geographic data points, edit coordinates, and verify AI assets.</p>
-                        </div>
+                    {/* Deploy Location - Primary */}
+                    <Link to="/admin/mass-add" className="group p-8 bg-[#0a1210] border border-brass/30 hover:border-brass/50 rounded-sm transition-all">
+                        <div className="w-14 h-14 rounded-sm bg-brass/20 border border-brass/30 flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform">📍</div>
+                        <h3 className="font-heading text-2xl font-black text-cream mb-2">Deploy Targets</h3>
+                        <p className="text-sm text-stone-light">Batch upload locations with AI analysis</p>
+                        <div className="mt-4 text-[9px] font-mono text-brass uppercase tracking-widest">Bulk Import →</div>
                     </Link>
 
-                    {/* User Management */}
-                    <Link to="/admin/users" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-purple-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            A
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Agents</h3>
-                            <p className="text-sm text-white/50">Manage user accounts, roles, and revoke clearances.</p>
-                        </div>
+                    {/* Manage Locations */}
+                    <Link to="/admin/locations" className="group p-8 bg-[#0a1210] border border-brass/10 hover:border-teal/30 rounded-sm transition-all">
+                        <div className="w-14 h-14 rounded-sm bg-teal/20 border border-teal/30 flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform">🗺️</div>
+                        <h3 className="font-heading text-2xl font-black text-cream mb-2">Locations</h3>
+                        <p className="text-sm text-stone-light">Manage coordinates, quality, and settings</p>
+                        <div className="mt-4 text-[9px] font-mono text-teal uppercase tracking-widest">Manage →</div>
                     </Link>
 
-                    {/* Dataset Management */}
-                    <Link to="/admin/datasets" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-pink-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-pink-500/20 text-pink-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            D
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Datasets</h3>
-                            <p className="text-sm text-white/50">Organize loose locations into categorized map sets.</p>
-                        </div>
+                    {/* Datasets */}
+                    <Link to="/admin/datasets" className="group p-8 bg-[#0a1210] border border-brass/10 hover:border-amber/30 rounded-sm transition-all">
+                        <div className="w-14 h-14 rounded-sm bg-amber/20 border border-amber/30 flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform">📦</div>
+                        <h3 className="font-heading text-2xl font-black text-cream mb-2">Collections</h3>
+                        <p className="text-sm text-stone-light">Organize locations into training sets</p>
+                        <div className="mt-4 text-[9px] font-mono text-amber uppercase tracking-widest">Manage →</div>
+                    </Link>
+
+                    {/* Users */}
+                    <Link to="/admin/users" className="group p-8 bg-[#0a1210] border border-brass/10 hover:border-purple-500/30 rounded-sm transition-all">
+                        <div className="w-14 h-14 rounded-sm bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform">👥</div>
+                        <h3 className="font-heading text-2xl font-black text-cream mb-2">Agents</h3>
+                        <p className="text-sm text-stone-light">Manage accounts, roles, and access</p>
+                        <div className="mt-4 text-[9px] font-mono text-purple-400 uppercase tracking-widest">Manage →</div>
                     </Link>
 
                     {/* Create Teacher */}
-                    <Link to="/admin/create-teacher" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-yellow-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-yellow-500/20 text-yellow-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            T
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Provision Teacher</h3>
-                            <p className="text-sm text-white/50">Create restricted access accounts for classroom sessions.</p>
-                        </div>
+                    <Link to="/admin/create-teacher" className="group p-8 bg-[#0a1210] border border-brass/10 hover:border-teal/30 rounded-sm transition-all">
+                        <div className="w-14 h-14 rounded-sm bg-teal/20 border border-teal/30 flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform">🎓</div>
+                        <h3 className="font-heading text-2xl font-black text-cream mb-2">Teachers</h3>
+                        <p className="text-sm text-stone-light">Create teacher accounts for sessions</p>
+                        <div className="mt-4 text-[9px] font-mono text-teal uppercase tracking-widest">Provision →</div>
                     </Link>
 
-                    {/* Teacher Dashboard Access */}
-                    <Link to="/teacher/dashboard" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-blue-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            S
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Live Sessions</h3>
-                            <p className="text-sm text-white/50">Mission Control: Initiate rooms, control simulations, and monitor participants.</p>
-                        </div>
-                    </Link>
-
-                    {/* Add New Location */}
-                    <Link to="/admin/add-location" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-emerald-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            +
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Add Location</h3>
-                            <p className="text-sm text-white/50">Add a single location manually to the database.</p>
-                        </div>
-                    </Link>
-
-                    <Link to="/admin/mass-add" className="glass-card p-8 rounded-3xl hover:bg-white/5 transition-all group flex flex-col h-64 justify-between border border-white/5 hover:border-blue-500/30">
-                        <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-300 flex items-center justify-center text-2xl font-black mb-4 group-hover:scale-110 transition-transform">
-                            U
-                        </div>
-                        <div>
-                            <h3 className="text-2xl font-black text-white mb-2">Mass Upload</h3>
-                            <p className="text-sm text-white/50">Batch import locations using drag-and-drop.</p>
-                        </div>
+                    {/* Live Sessions */}
+                    <Link to="/teacher/dashboard" className="group p-8 bg-[#0a1210] border border-brass/10 hover:border-teal/30 rounded-sm transition-all">
+                        <div className="w-14 h-14 rounded-sm bg-teal/20 border border-teal/30 flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform">🎮</div>
+                        <h3 className="font-heading text-2xl font-black text-cream mb-2">Sessions</h3>
+                        <p className="text-sm text-stone-light">Launch and control live simulations</p>
+                        <div className="mt-4 text-[9px] font-mono text-teal uppercase tracking-widest">Control →</div>
                     </Link>
                 </div>
             </div>

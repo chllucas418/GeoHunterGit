@@ -322,7 +322,7 @@ export function ClassroomImportModal({ accessToken, onClose, onAddFile, onAddExt
                         <div>
                             <div className="flex justify-between items-center mb-3">
                                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest">2. Select Assignment</h3>
-                                <button onClick={() => setSelectedCourse(null)} className="text-xs text-blue-400 hover:underline">← Back to Courses</button>
+                                <button onClick={() => setSelectedCourse(null)} className="text-xs text-teal hover:underline">← Back to Courses</button>
                             </div>
                             <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto custom-scrollbar">
                                 {assignments.map(a => (

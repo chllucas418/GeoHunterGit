@@ -6,10 +6,8 @@ import { hashPassword, createSession, validatePassword } from "~/lib/auth.server
 export async function action({ request, context }: ActionFunctionArgs) {
     const formData = await request.formData();
     const loginType = formData.get("loginType") as string;
-    
-    // Redirect Google Login to the central handler in login.tsx or implement here
+
     if (loginType === "google") {
-        // For consistency, we'll handle Google Login exactly as in login.tsx
         const googleCredential = formData.get("googleCredential") as string;
         const env = context.cloudflare.env as any;
         const db = env.DB as D1Database;
@@ -24,7 +22,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
             if (!res.ok) throw new Error("Invalid Google token");
             const payload = await res.json() as any;
             const { email, name, picture, sub: googleId } = payload;
-            
+
             const nameRegex = /^\((?<class>\d[A-Za-z])(?<number>\d+)\)\s*(?<name>.+)$/i;
             const match = name.match(nameRegex);
             let classGrade = null, classNumber = null, displayName = name;
@@ -163,102 +161,172 @@ export default function Register({ loaderData }: any) {
 
     return (
         <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
-            <div className="w-full max-w-md glass-panel p-10 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-20%] w-64 h-64 bg-blue-500/20 rounded-full blur-[80px]" />
-                <div className="absolute bottom-[-20%] left-[-20%] w-64 h-64 bg-purple-500/20 rounded-full blur-[80px]" />
+            <div className="w-full max-w-md">
+                {/* Header */}
+                <div className="text-center mb-10">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-2 h-2 rounded-full bg-teal animate-pulse" />
+                        <span className="text-[9px] font-mono text-teal uppercase tracking-[0.4em]">Secure Channel</span>
+                    </div>
+                    <h1 className="font-heading text-4xl font-black text-cream tracking-tight mb-2">Initialize Protocol</h1>
+                    <p className="text-sm font-body text-stone-light">Create your agent identity</p>
+                </div>
 
-                <div className="relative z-10">
-                    <header className="mb-8 text-center">
-                        <Link to="/" className="inline-block mb-6 px-4 py-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest text-white/60 transition-all">
-                            ← Return to Base
-                        </Link>
-                        <h1 className="text-4xl font-black text-white tracking-tighter mb-2 text-glow">
-                            Initialize Protocol
-                        </h1>
-                        <p className="text-sm text-blue-200/60 font-mono">Create your agent identity</p>
-                    </header>
-
-                    <Form method="post" className="space-y-5">
-                        <input type="hidden" name="loginType" value="manual" />
-                        <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Codename</label>
-                            <input name="displayName" type="text" required className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20" placeholder="Agent X" />
-                        </div>
-
-                        {!isDevMode && (
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Class</label>
-                                    <select name="classGrade" className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all appearance-none cursor-pointer hover:bg-white/5" required>
-                                        <option value="" disabled selected>--</option>
-                                        <option value="2A">2A</option><option value="2B">2B</option><option value="2C">2C</option><option value="2D">2D</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Class No.</label>
-                                    <input name="classNumber" type="number" min="1" max="40" required className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20" placeholder="#" />
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">{isDevMode ? "Any Email Address" : "Institutional Email"}</label>
-                            <input name="email" type="email" required className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20" placeholder={isDevMode ? "dev@example.com" : "student@makopan.edu.hk"} />
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-black tracking-widest text-blue-300 ml-4">Security Key</label>
-                            <input name="password" type="password" required className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 focus:bg-black/60 outline-none transition-all placeholder-white/20" placeholder="••••••••" />
-                        </div>
-
-                        <div className="pt-2">
-                            <div className="flex items-start gap-3 p-4 bg-blue-500/5 rounded-2xl border border-white/5 hover:border-blue-500/20 transition-all group">
-                                <input 
-                                    type="checkbox" 
-                                    name="agreeToTerms" 
-                                    id="agreeToTerms"
-                                    className="mt-1 w-4 h-4 rounded border-white/10 bg-black/40 text-blue-600 focus:ring-blue-500 transition-all cursor-pointer"
-                                    required
-                                />
-                                <label htmlFor="agreeToTerms" className="text-[11px] text-slate-400 leading-relaxed cursor-pointer group-hover:text-slate-200 transition-colors">
-                                    I hereby acknowledge and irrevocably commit to the <Link to="/privacy" className="text-blue-400 underline decoration-blue-500/30 underline-offset-4 hover:text-white transition-colors">Global Legal Instrument</Link>, encompassing the ToS, Universal Privacy Policy, and EULA under International Digital Law.
-                                </label>
-                            </div>
-                        </div>
-
-                        <div className="pt-2">
-                            <div className="flex justify-end mb-2">
-                                <button type="button" onClick={() => setIsDevMode(!isDevMode)} className={`text-[9px] font-black uppercase tracking-widest border-b border-dashed ${isDevMode ? "text-yellow-400 border-yellow-400" : "text-white/20 border-white/20 hover:text-white/40"}`}>
-                                    {isDevMode ? "⚠ Developer Override Active" : "Developer Access"}
-                                </button>
-                            </div>
-                            {isDevMode && (
-                                <div className="space-y-2 animate-in slide-in-from-top-2 fade-in">
-                                    <input name="developerKey" type="password" className="w-full bg-yellow-400/10 border border-yellow-400/50 rounded-2xl px-6 py-3 text-sm text-yellow-200 focus:bg-yellow-400/20 outline-none transition-all placeholder-yellow-400/30" placeholder="Enter Override Key" />
-                                </div>
-                            )}
-                        </div>
-
-                        {actionData?.error && (
-                            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-300 text-xs font-bold rounded-2xl text-center">{actionData.error}</div>
-                        )}
-
-                        <button type="submit" disabled={isSubmitting} className="w-full py-5 bg-white text-black font-black uppercase tracking-widest rounded-2xl hover:bg-blue-50 transition-all shadow-lg active:scale-[0.98] mt-2">
-                            {isSubmitting ? "Establishing Uplink..." : "Activate Agent Profile"}
-                        </button>
-                    </Form>
-
-                    <div className="mt-6 space-y-4">
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-white/10"></span></div>
-                            <div className="relative flex justify-center text-[10px] uppercase font-black tracking-tighter"><span className="bg-[#0e121b] px-4 text-white/40">Secure Uplink</span></div>
-                        </div>
-                        <div ref={googleButtonRef} className="w-full"></div>
+                {/* Terminal card */}
+                <div className="bg-[#0a1210] border border-brass/20 rounded-sm overflow-hidden">
+                    <div className="px-4 py-3 bg-[#0e1a14] border-b border-brass/10 flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full bg-rust/60" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber/60" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-teal/60" />
+                        <span className="text-[9px] font-mono text-stone/40 uppercase tracking-widest ml-2">register.exe</span>
                     </div>
 
-                    <footer className="mt-8 text-center">
-                        <p className="text-xs text-white/40 font-bold">Already active? <Link to="/login" className="text-blue-400 hover:text-white transition-colors underline decoration-blue-500/30 underline-offset-4">Access Terminal</Link></p>
-                    </footer>
+                    <div className="p-8">
+                        <Form method="post" className="space-y-5">
+                            <input type="hidden" name="loginType" value="manual" />
+
+                            <div>
+                                <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Codename</label>
+                                <input
+                                    name="displayName"
+                                    type="text"
+                                    required
+                                    className="w-full bg-[#0e1a14] border border-brass/10 px-4 py-3 text-cream text-sm font-mono focus:border-brass focus:outline-none placeholder-stone/30"
+                                    placeholder="Agent X"
+                                />
+                            </div>
+
+                            {!isDevMode && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Class</label>
+                                        <select
+                                            name="classGrade"
+                                            className="w-full bg-[#0e1a14] border border-brass/10 px-4 py-3 text-cream text-sm font-mono focus:border-brass focus:outline-none appearance-none cursor-pointer"
+                                            required
+                                        >
+                                            <option value="" disabled selected>--</option>
+                                            <option value="2A">2A</option>
+                                            <option value="2B">2B</option>
+                                            <option value="2C">2C</option>
+                                            <option value="2D">2D</option>
+                                            <option value="3A">3A</option>
+                                            <option value="3B">3B</option>
+                                            <option value="3C">3C</option>
+                                            <option value="3D">3D</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Class No.</label>
+                                        <input
+                                            name="classNumber"
+                                            type="number"
+                                            min="1"
+                                            max="40"
+                                            required
+                                            className="w-full bg-[#0e1a14] border border-brass/10 px-4 py-3 text-cream text-sm font-mono focus:border-brass focus:outline-none placeholder-stone/30"
+                                            placeholder="#"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">
+                                    {isDevMode ? "Email Address" : "Institutional Email"}
+                                </label>
+                                <input
+                                    name="email"
+                                    type="email"
+                                    required
+                                    className="w-full bg-[#0e1a14] border border-brass/10 px-4 py-3 text-cream text-sm font-mono focus:border-brass focus:outline-none placeholder-stone/30"
+                                    placeholder={isDevMode ? "dev@example.com" : "student@makopan.edu.hk"}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Security Key</label>
+                                <input
+                                    name="password"
+                                    type="password"
+                                    required
+                                    className="w-full bg-[#0e1a14] border border-brass/10 px-4 py-3 text-cream text-sm font-mono focus:border-brass focus:outline-none placeholder-stone/30"
+                                    placeholder="••••••••"
+                                />
+                            </div>
+
+                            <div className="flex items-start gap-3 p-4 bg-brass/5 border border-brass/10 rounded-sm">
+                                <input
+                                    type="checkbox"
+                                    name="agreeToTerms"
+                                    id="agreeToTerms"
+                                    className="mt-0.5 w-4 h-4 rounded border-brass/30 bg-[#0e1a14] text-brass focus:ring-brass cursor-pointer"
+                                    required
+                                />
+                                <label htmlFor="agreeToTerms" className="text-[10px] text-stone-light leading-relaxed cursor-pointer">
+                                    I acknowledge the <Link to="/privacy" className="text-brass hover:text-cream transition-colors underline decoration-brass/30 underline-offset-2">Legal Instrument</Link> and commit to the protocol.
+                                </label>
+                            </div>
+
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsDevMode(!isDevMode)}
+                                    className={`text-[9px] font-mono uppercase tracking-widest border-b border-dashed pb-0.5 ${
+                                        isDevMode ? "text-amber border-amber" : "text-stone/30 border-stone/30 hover:text-stone/60"
+                                    }`}
+                                >
+                                    {isDevMode ? "⚠ Developer Override Active" : "Developer Access →"}
+                                </button>
+                                {isDevMode && (
+                                    <div className="mt-3 animate-in slide-in-from-top-2 fade-in">
+                                        <input
+                                            name="developerKey"
+                                            type="password"
+                                            className="w-full bg-amber/10 border border-amber/30 px-4 py-3 text-amber text-sm font-mono focus:border-amber focus:outline-none placeholder-amber/30"
+                                            placeholder="Enter Override Key"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {actionData?.error && (
+                                <div className="p-3 bg-rust/10 border border-rust/20 text-rust text-xs font-mono text-center">
+                                    {actionData.error}
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="w-full py-4 bg-brass text-charcoal font-mono text-sm font-black uppercase tracking-widest hover:bg-brass/90 transition-all mt-4"
+                            >
+                                {isSubmitting ? "Establishing Uplink..." : "Activate Agent Profile"}
+                            </button>
+                        </Form>
+
+                        <div className="mt-6">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="flex-1 h-px bg-brass/10" />
+                                <span className="text-[9px] font-mono text-stone/30 uppercase tracking-widest">Secure Uplink</span>
+                                <div className="flex-1 h-px bg-brass/10" />
+                            </div>
+                            <div ref={googleButtonRef} className="w-full"></div>
+                        </div>
+
+                        <div className="mt-6 pt-6 border-t border-brass/10 text-center">
+                            <p className="text-[10px] text-stone/40">
+                                Already active?{" "}
+                                <Link to="/login" className="text-brass hover:text-cream transition-colors">Access Terminal</Link>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="text-center mt-8">
+                    <Link to="/" className="text-[9px] font-mono text-stone/30 hover:text-stone/60 uppercase tracking-widest transition-colors">
+                        ← Return to Base
+                    </Link>
                 </div>
             </div>
         </div>

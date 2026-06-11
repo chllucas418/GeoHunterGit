@@ -72,20 +72,20 @@ export function PowersGuide({ availablePowers, onDismiss }: PowersGuideProps) {
 
     return (
         <div
-            className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-2xl flex flex-col items-center justify-center p-4 md:p-8 animate-in fade-in zoom-in-95 duration-300"
+            className="fixed inset-0 z-[110] bg-[#0e1a14]/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 md:p-8 animate-in fade-in zoom-in-95 duration-300"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
         >
             {/* Header */}
             <div className="text-center mb-6">
-                <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-widest mb-2">⚡ Your Powers</h2>
-                <p className="text-sm text-slate-400 font-medium">
+                <h2 className="text-2xl md:text-3xl font-heading font-black text-cream uppercase tracking-widest mb-2">⚡ Field Abilities</h2>
+                <p className="text-sm text-stone-light font-body">
                     {availablePowerList.length} abilities available — swipe to explore
                 </p>
             </div>
 
             {/* Swipe instruction */}
-            <div className="flex items-center gap-2 mb-4 text-slate-500">
+            <div className="flex items-center gap-2 mb-4 text-stone">
                 <span className="text-xl">👆</span>
                 <span className="text-xs font-mono uppercase tracking-widest">Swipe to browse</span>
             </div>
@@ -93,16 +93,16 @@ export function PowersGuide({ availablePowers, onDismiss }: PowersGuideProps) {
             {/* Power Card */}
             <div className="w-full max-w-sm">
                 <div
-                    className={`relative p-6 rounded-3xl border-2 backdrop-blur-xl transition-all duration-300
+                    className={`relative p-6 rounded-sm border-2 backdrop-blur-xl transition-all duration-300
                         ${currentPower.type === "offensive"
-                            ? "bg-red-500/10 border-red-500/40"
-                            : "bg-blue-500/10 border-blue-500/40"
+                            ? "bg-[#1a1a18]/90 border-rust/40"
+                            : "bg-[#1a3a2f]/80 border-teal/40"
                         }`}
                 >
                     {/* Type Badge */}
-                    <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest
-                        ${currentPower.type === "offensive" ? "bg-red-500 text-white" : "bg-blue-500 text-white"}`}>
-                        {currentPower.type === "offensive" ? "⚔️ Offensive" : "🛡️ Defensive"}
+                    <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-sm text-[10px] font-black uppercase tracking-widest
+                        ${currentPower.type === "offensive" ? "bg-rust/80 text-cream" : "bg-teal/80 text-cream"}`}>
+                        {currentPower.type === "offensive" ? "⚔ Offensive" : "🛡 Defensive"}
                     </div>
 
                     {/* Emoji Icon */}
@@ -110,19 +110,19 @@ export function PowersGuide({ availablePowers, onDismiss }: PowersGuideProps) {
 
                     {/* Name & Cost */}
                     <div className="text-center mb-3">
-                        <h3 className="text-2xl font-black text-white mb-1">{currentPower.name}</h3>
-                        <div className="inline-flex items-center gap-1 bg-yellow-500/20 border border-yellow-500/40 px-3 py-1 rounded-full">
-                            <span className="text-yellow-400 font-black text-sm">{currentPower.cost}</span>
-                            <span className="text-yellow-400/60 text-xs font-mono">⚡</span>
+                        <h3 className="text-2xl font-heading font-black text-cream mb-1">{currentPower.name}</h3>
+                        <div className="inline-flex items-center gap-1 bg-amber/20 border border-amber/40 px-3 py-1 rounded-sm">
+                            <span className="text-amber font-black text-sm font-mono">{currentPower.cost}</span>
+                            <span className="text-amber/60 text-xs">⚡</span>
                         </div>
                     </div>
 
                     {/* Description */}
-                    <p className="text-sm text-slate-300 text-center leading-relaxed">{currentPower.description}</p>
+                    <p className="text-sm text-stone-light text-center leading-relaxed font-body">{currentPower.description}</p>
 
                     {/* Cast instruction */}
                     <div className="mt-4 flex justify-center">
-                        <div className="bg-white/10 border border-white/20 px-4 py-2 rounded-full text-xs font-black text-white/80 uppercase tracking-widest">
+                        <div className="bg-brass/10 border border-brass/30 px-4 py-2 rounded-sm text-xs font-black text-brass uppercase tracking-widest">
                             Double-tap action bar to cast
                         </div>
                     </div>
@@ -134,7 +134,7 @@ export function PowersGuide({ availablePowers, onDismiss }: PowersGuideProps) {
                 {availablePowerList.map((_, i) => (
                     <div
                         key={i}
-                        className={`h-2 rounded-full transition-all duration-300 ${i === currentIndex ? "w-6 bg-blue-400" : "w-2 bg-white/20"}`}
+                        className={`h-2 rounded-full transition-all duration-300 ${i === currentIndex ? "w-6 bg-brass" : "w-2 bg-brass/20"}`}
                     />
                 ))}
             </div>
@@ -145,10 +145,10 @@ export function PowersGuide({ availablePowers, onDismiss }: PowersGuideProps) {
                 <button
                     onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
                     disabled={isFirstCard}
-                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-lg transition-all
+                    className={`w-12 h-12 rounded-sm border-2 flex items-center justify-center text-lg transition-all font-mono
                         ${isFirstCard
-                            ? "border-white/10 text-white/20 cursor-not-allowed"
-                            : "border-white/30 text-white hover:bg-white/10 hover:scale-105 active:scale-95"
+                            ? "border-brass/10 text-stone/30 cursor-not-allowed"
+                            : "border-brass/30 text-brass hover:bg-brass/10 hover:scale-105 active:scale-95"
                         }`}
                 >
                     ←
@@ -158,15 +158,15 @@ export function PowersGuide({ availablePowers, onDismiss }: PowersGuideProps) {
                 <div className="flex-1 flex gap-2">
                     <button
                         onClick={onDismiss}
-                        className="flex-1 py-3 bg-white/10 border border-white/20 rounded-xl text-xs font-bold text-white/60 uppercase tracking-widest hover:bg-white/20 transition-all"
+                        className="flex-1 py-3 bg-[#1a1a18]/80 border border-brass/20 rounded-sm text-xs font-bold text-stone uppercase tracking-widest hover:bg-[#1a1a18] transition-all font-mono"
                     >
                         Skip
                     </button>
                     <button
                         onClick={onDismiss}
-                        className="flex-1 py-3 bg-blue-600 rounded-xl text-xs font-black text-white uppercase tracking-widest hover:bg-blue-500 transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)]"
+                        className="flex-1 py-3 bg-gradient-to-r from-brass/90 to-amber/80 rounded-sm text-xs font-black text-charcoal uppercase tracking-widest hover:from-brass hover:to-amber transition-all shadow-[0_0_15px_rgba(201,168,76,0.3)] font-mono"
                     >
-                        {isLastCard ? "Got it! 🚀" : "Next"}
+                        {isLastCard ? "Got it!" : "Next →"}
                     </button>
                 </div>
 
@@ -174,10 +174,10 @@ export function PowersGuide({ availablePowers, onDismiss }: PowersGuideProps) {
                 <button
                     onClick={() => setCurrentIndex(prev => Math.min(availablePowerList.length - 1, prev + 1))}
                     disabled={isLastCard}
-                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-lg transition-all
+                    className={`w-12 h-12 rounded-sm border-2 flex items-center justify-center text-lg transition-all font-mono
                         ${isLastCard
-                            ? "border-white/10 text-white/20 cursor-not-allowed"
-                            : "border-white/30 text-white hover:bg-white/10 hover:scale-105 active:scale-95"
+                            ? "border-brass/10 text-stone/30 cursor-not-allowed"
+                            : "border-brass/30 text-brass hover:bg-brass/10 hover:scale-105 active:scale-95"
                         }`}
                 >
                     →

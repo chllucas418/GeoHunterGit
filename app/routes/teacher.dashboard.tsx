@@ -12,26 +12,35 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const url = new URL(request.url);
     const page = parseInt(url.searchParams.get("page") || "1");
     const search = url.searchParams.get("search") || "";
-    const limit = 6; // Compact grid for the integrated view
+    const limit = 9;
     const offset = (page - 1) * limit;
 
     // Fetch Map Sets with item counts
     const { results: mapSets } = await db.prepare(
-        `SELECT ms.*, COUNT(msi.location_id) as item_count 
-         FROM map_sets ms 
-         LEFT JOIN map_set_items msi ON ms.id = msi.set_id 
-         GROUP BY ms.id 
+        `SELECT ms.*, COUNT(msi.location_id) as item_count
+         FROM map_sets ms
+         LEFT JOIN map_set_items msi ON ms.id = msi.set_id
+         GROUP BY ms.id
          ORDER BY ms.created_at DESC`
     ).all<any>();
 
     // Fetch Active Rooms for this teacher with map set names
     const { results: activeRooms } = await db.prepare(
-        `SELECT r.*, ms.name as map_set_name 
-         FROM rooms r 
-         LEFT JOIN map_sets ms ON r.map_set_id = ms.id 
-         WHERE r.host_id = ? AND r.status != 'PODIUM' 
+        `SELECT r.*, ms.name as map_set_name
+         FROM rooms r
+         LEFT JOIN map_sets ms ON r.map_set_id = ms.id
+         WHERE r.host_id = ? AND r.status != 'PODIUM'
          ORDER BY r.created_at DESC`
     ).bind(userId).all<any>();
+
+    // Fetch stats
+    const statsPromise = db.prepare(`
+        SELECT
+            COUNT(*) as totalLocations,
+            AVG(quality_score) as avgQuality,
+            SUM(CASE WHEN is_default_simulation = 1 THEN 1 ELSE 0 END) as defaultSims
+        FROM locations
+    `).first<any>();
 
     // Fetch locations with optional search filtering
     let locationsQuery = "SELECT id, lat, lng, difficulty_rating, quality_score, created_at, is_default_simulation FROM locations";
@@ -55,7 +64,7 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
     const totalLocations = countResult ? countResult.count : 0;
     const totalPages = Math.ceil(totalLocations / limit);
 
-    return { mapSets, activeRooms, locations, page, totalPages, search, userId };
+    return { mapSets, activeRooms, locations, page, totalPages, search, userId, statsPromise };
 }
 
 export async function action({ request, context }: ActionFunctionArgs) {
@@ -69,7 +78,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
     if (intent === "create_default_set") {
         const setId = crypto.randomUUID();
-        const setName = "Master Collection (All Locations)";
+        const setName = "Master Collection";
         await db.prepare(
             "INSERT INTO map_sets (id, name, description, created_by) VALUES (?, ?, ?, ?)"
         ).bind(setId, setName, "Auto-generated collection of all available locations.", userId).run();
@@ -80,7 +89,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
         if (batch.length > 0) {
             await db.batch(batch);
         }
-        return { success: true, message: "Default Map Set created!" };
+        return { success: true };
     }
 
     if (intent === "create_set") {
@@ -94,14 +103,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
             "INSERT INTO map_sets (id, name, description, created_by) VALUES (?, ?, ?, ?)"
         ).bind(id, name, description, userId).run();
 
-        return { success: true, message: "Map set created!" };
+        return { success: true };
     }
 
     if (intent === "delete_set") {
         const id = formData.get("id") as string;
         await db.prepare("DELETE FROM map_set_items WHERE set_id = ?").bind(id).run();
         await db.prepare("DELETE FROM map_sets WHERE id = ?").bind(id).run();
-        return { success: true, message: "Map set deleted!" };
+        return { success: true };
     }
 
     if (intent === "create_room") {
@@ -166,13 +175,9 @@ export default function TeacherDashboard() {
     const [searchParams, setSearchParams] = useSearchParams();
     const fetcher = useFetcher();
 
-    const activeTab = searchParams.get("tab") || "simulation";
+    const activeTab = searchParams.get("tab") || "overview";
     const isSubmitting = navigation.state === "submitting";
-
-    // Track which locations have their inline editor active
     const [editingLocId, setEditingLocId] = useState<string | null>(null);
-
-    // Track form inputs for the active editing location
     const [editLat, setEditLat] = useState("");
     const [editLng, setEditLng] = useState("");
     const [editDiff, setEditDiff] = useState("");
@@ -194,392 +199,281 @@ export default function TeacherDashboard() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-950 text-white p-6 md:p-12 font-sans relative overflow-hidden">
-            {/* Ambient Lighting Gradients */}
-            <div className="absolute inset-0 z-0 pointer-events-none opacity-20">
-                <div className="absolute top-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-indigo-900/30 rounded-full blur-[140px]" />
-                <div className="absolute bottom-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-blue-950/40 rounded-full blur-[120px]" />
-            </div>
-
-            <div className="max-w-7xl mx-auto relative z-10">
-                {/* Dashboard Header */}
-                <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
-                    <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-black uppercase tracking-widest border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
-                                Instructor Space
-                            </span>
-                            <span className="text-xs font-mono text-slate-500">System ID: {userId.slice(0, 8)}</span>
+        <div className="min-h-screen relative">
+            {/* Header bar */}
+            <header className="sticky top-0 z-50 bg-[#0e1a14]/95 backdrop-blur-xl border-b border-brass/10">
+                <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div>
+                            <h1 className="font-heading text-2xl font-black text-cream tracking-tight">Command Center</h1>
+                            <p className="text-[10px] font-mono text-stone/50 uppercase tracking-widest">Field Operations</p>
                         </div>
-                        <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-white mb-2 text-glow">
-                            Mission Control
-                        </h1>
-                        <p className="text-slate-400 max-w-xl text-md md:text-lg">
-                            Simplify classroom operations, manage geo-intelligence assets, and deploy training simulations.
-                        </p>
+                        <nav className="hidden md:flex items-center gap-1 ml-8">
+                            <button onClick={() => switchTab("overview")} className={`px-4 py-2 text-[10px] font-mono uppercase tracking-widest transition-all ${activeTab === "overview" ? "text-brass bg-brass/10" : "text-stone hover:text-cream"}`}>Overview</button>
+                            <button onClick={() => switchTab("simulation")} className={`px-4 py-2 text-[10px] font-mono uppercase tracking-widest transition-all ${activeTab === "simulation" ? "text-brass bg-brass/10" : "text-stone hover:text-cream"}`}>Simulation</button>
+                            <button onClick={() => switchTab("datasets")} className={`px-4 py-2 text-[10px] font-mono uppercase tracking-widest transition-all ${activeTab === "datasets" ? "text-brass bg-brass/10" : "text-stone hover:text-cream"}`}>Collections</button>
+                            <button onClick={() => switchTab("locations")} className={`px-4 py-2 text-[10px] font-mono uppercase tracking-widest transition-all ${activeTab === "locations" ? "text-brass bg-brass/10" : "text-stone hover:text-cream"}`}>Locations</button>
+                        </nav>
                     </div>
-                    <div className="flex gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 text-[9px] font-mono text-teal">
+                            <div className="w-2 h-2 rounded-full bg-teal animate-pulse" />
+                            Online
+                        </div>
                         <Form method="post" action="/logout">
-                            <button className="px-6 py-3.5 rounded-xl border border-white/10 hover:border-red-500/30 hover:bg-red-500/10 text-xs font-bold uppercase tracking-widest transition-all duration-300">
-                                Terminate Session
+                            <button className="px-4 py-2 text-[10px] font-mono text-stone hover:text-rust uppercase tracking-widest transition-colors border border-brass/10 hover:border-rust/30">
+                                Exit
                             </button>
                         </Form>
                     </div>
-                </header>
-
-                {/* Glassmorphic Navigation Tabs */}
-                <div className="glass-panel p-2 rounded-2xl flex flex-wrap gap-2 mb-10 border border-white/5 bg-slate-900/40 backdrop-blur-md relative">
-                    <button
-                        onClick={() => switchTab("simulation")}
-                        className={`flex-1 min-w-[150px] py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
-                            activeTab === "simulation"
-                                ? "bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]"
-                                : "text-slate-400 hover:text-white hover:bg-white/5"
-                        }`}
-                    >
-                        <span>📡</span>
-                        <span>Simulation Control</span>
-                    </button>
-                    <button
-                        onClick={() => switchTab("datasets")}
-                        className={`flex-1 min-w-[150px] py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
-                            activeTab === "datasets"
-                                ? "bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]"
-                                : "text-slate-400 hover:text-white hover:bg-white/5"
-                        }`}
-                    >
-                        <span>📦</span>
-                        <span>Datasets Registry</span>
-                    </button>
-                    <button
-                        onClick={() => switchTab("locations")}
-                        className={`flex-1 min-w-[150px] py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
-                            activeTab === "locations"
-                                ? "bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]"
-                                : "text-slate-400 hover:text-white hover:bg-white/5"
-                        }`}
-                    >
-                        <span>📍</span>
-                        <span>Geolocation Logistics</span>
-                    </button>
                 </div>
+            </header>
 
-                {/* Dashboard Tabs Content */}
-                <main className="min-h-[400px]">
-                    {/* TAB 1: SIMULATION CONTROL */}
-                    {activeTab === "simulation" && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                            {/* Active Rooms */}
-                            <div className="lg:col-span-1 space-y-6">
-                                <h2 className="text-lg font-black uppercase tracking-widest text-slate-300 flex items-center gap-2">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                                    Active Classroom Sessions
-                                </h2>
-
-                                {activeRooms.length === 0 ? (
-                                    <div className="p-8 rounded-3xl border border-dashed border-white/10 bg-white/5 text-center flex flex-col items-center justify-center h-64">
-                                        <p className="text-sm text-slate-400 font-bold mb-2">No Active Simulacrums</p>
-                                        <p className="text-xs text-slate-500 max-w-xs">
-                                            Create and launch a classroom room using one of the available datasets.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {activeRooms.map((room: any) => (
-                                            <div
-                                                key={room.code}
-                                                className="glass-panel p-6 rounded-2xl border border-white/10 relative group bg-gradient-to-b from-white/5 to-transparent hover:border-blue-500/20 transition-all duration-300"
-                                            >
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div>
-                                                        <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1">
-                                                            Classroom Code
-                                                        </div>
-                                                        <div className="text-3xl font-black font-mono text-blue-400 tracking-widest">
-                                                            {room.code}
-                                                        </div>
-                                                    </div>
-                                                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase rounded-full border border-emerald-500/20">
-                                                        {room.status}
-                                                    </span>
-                                                </div>
-
-                                                <div className="space-y-2 mb-6">
-                                                    <div className="text-xs text-slate-400">
-                                                        <strong className="text-slate-300">Dataset:</strong>{" "}
-                                                        {room.map_set_name || "Unknown"}
-                                                    </div>
-                                                    <div className="text-xs text-slate-400">
-                                                        <strong className="text-slate-300">Time Limit:</strong>{" "}
-                                                        {room.time_limit}s | <strong className="text-slate-300">Hints:</strong> every {room.hint_interval}s
-                                                    </div>
-                                                    {room.curriculum_focus !== "None" && (
-                                                        <div className="text-xs text-slate-400">
-                                                            <strong className="text-slate-300">Curriculum:</strong>{" "}
-                                                            <span className="text-indigo-400">{room.curriculum_focus}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex gap-2">
-                                                    <Link
-                                                        to={`/teacher/room/${room.code}`}
-                                                        className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest text-center transition-all duration-300 hover:shadow-[0_0_15px_rgba(37,99,235,0.4)]"
-                                                    >
-                                                        Reconnect Control
-                                                    </Link>
-                                                    <fetcher.Form method="post" className="contents">
-                                                        <input type="hidden" name="intent" value="delete_room" />
-                                                        <input type="hidden" name="code" value={room.code} />
-                                                        <button
-                                                            onClick={(e) =>
-                                                                !confirm("Terminate classroom room?") && e.preventDefault()
-                                                            }
-                                                            className="px-4 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl border border-red-500/20 transition-all duration-300"
-                                                            title="Terminate Room"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    </fetcher.Form>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+            <div className="max-w-7xl mx-auto px-6 py-8">
+                {/* OVERVIEW TAB */}
+                {activeTab === "overview" && (
+                    <div className="space-y-8">
+                        {/* Stats grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="p-6 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                <div className="text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Active Rooms</div>
+                                <div className="text-4xl font-heading font-black text-teal">{activeRooms.length}</div>
                             </div>
-
-                            {/* Deploy Section */}
-                            <div className="lg:col-span-2 space-y-6">
-                                <div className="flex items-center justify-between">
-                                    <h2 className="text-lg font-black uppercase tracking-widest text-slate-300">
-                                        Deploy New Training Simulation
-                                    </h2>
-                                    {mapSets.length === 0 && (
-                                        <fetcher.Form method="post">
-                                            <input type="hidden" name="intent" value="create_default_set" />
-                                            <button
-                                                disabled={isSubmitting}
-                                                className="text-xs font-bold text-blue-400 hover:text-white transition-colors uppercase tracking-wider"
-                                            >
-                                                + Generate Master Set
-                                            </button>
-                                        </fetcher.Form>
-                                    )}
-                                </div>
-
-                                {mapSets.length === 0 ? (
-                                    <div className="p-8 rounded-3xl border border-dashed border-white/10 bg-white/5 text-center flex flex-col items-center justify-center h-64">
-                                        <p className="text-sm text-slate-400 font-bold mb-2">No Datasets Found</p>
-                                        <p className="text-xs text-slate-500 mb-4 max-w-sm">
-                                            Generate the master collection of all locations or go to the Datasets Registry tab to build one.
-                                        </p>
-                                        <fetcher.Form method="post">
-                                            <input type="hidden" name="intent" value="create_default_set" />
-                                            <button
-                                                type="submit"
-                                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300"
-                                            >
-                                                Auto-Generate Master Dataset
-                                            </button>
-                                        </fetcher.Form>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {mapSets.map((set: any) => (
-                                            <div
-                                                key={set.id}
-                                                className="glass-card p-6 rounded-[2rem] border border-white/5 bg-gradient-to-br from-white/5 to-transparent hover:from-white/10 hover:border-white/10 transition-all duration-500 group flex flex-col justify-between"
-                                            >
-                                                <div>
-                                                    <div className="flex justify-between items-start mb-4">
-                                                        <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[9px] font-mono border border-white/5">
-                                                            {set.item_count} location{set.item_count === 1 ? "" : "s"}
-                                                        </span>
-                                                    </div>
-                                                    <h3 className="text-xl font-black text-white mb-2 leading-tight group-hover:text-blue-400 transition-colors">
-                                                        {set.name}
-                                                    </h3>
-                                                    <p className="text-xs text-slate-400 leading-relaxed line-clamp-3 mb-6">
-                                                        {set.description || "No description provided."}
-                                                    </p>
-                                                </div>
-
-                                                <Form method="post" className="space-y-4">
-                                                    <input type="hidden" name="intent" value="create_room" />
-                                                    <input type="hidden" name="setId" value={set.id} />
-
-                                                    {/* Config Drawer */}
-                                                    <div className="bg-slate-950/80 border border-white/5 rounded-2xl p-4 space-y-3">
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div>
-                                                                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">
-                                                                    Timer (Sec)
-                                                                </label>
-                                                                <input
-                                                                    type="number"
-                                                                    name="timeLimit"
-                                                                    defaultValue={120}
-                                                                    min={30}
-                                                                    max={600}
-                                                                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">
-                                                                    Hints (Sec)
-                                                                </label>
-                                                                <input
-                                                                    type="number"
-                                                                    name="hintInterval"
-                                                                    defaultValue={30}
-                                                                    min={10}
-                                                                    max={120}
-                                                                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-blue-500 focus:outline-none"
-                                                                />
-                                                            </div>
-                                                        </div>
-
-                                                        <div>
-                                                            <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">
-                                                                Curriculum Focus
-                                                            </label>
-                                                            <select
-                                                                name="curriculumFocus"
-                                                                className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold focus:border-blue-500 focus:outline-none"
-                                                            >
-                                                                <option value="None">None (Default Rules)</option>
-                                                                <option value="Architecture & Estates">Architecture & Estates</option>
-                                                                <option value="Transport & LRT">Transport & LRT</option>
-                                                                <option value="History & Culture">History & Culture</option>
-                                                                <option value="Environment & Nature">Environment & Nature</option>
-                                                            </select>
-                                                        </div>
-
-                                                        <div className="pt-1">
-                                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    name="hasGuidedPlaythrough"
-                                                                    className="form-checkbox text-blue-500 rounded bg-slate-900 border-white/10 cursor-pointer"
-                                                                    defaultChecked
-                                                                />
-                                                                <span className="text-[9px] uppercase font-bold text-emerald-400">
-                                                                    Include Guided Practice
-                                                                </span>
-                                                            </label>
-                                                        </div>
-                                                    </div>
-
-                                                    <button
-                                                        type="submit"
-                                                        disabled={isSubmitting}
-                                                        className="w-full py-3.5 bg-white text-black rounded-xl font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 transition-all duration-300 shadow-lg active:scale-[0.98] flex items-center justify-center gap-2 group-hover:shadow-[0_0_20px_rgba(59,130,246,0.15)]"
-                                                    >
-                                                        <span>Deploy Simulation</span>
-                                                        <span className="text-sm">→</span>
-                                                    </button>
-                                                </Form>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                            <div className="p-6 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                <div className="text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Collections</div>
+                                <div className="text-4xl font-heading font-black text-brass">{mapSets.length}</div>
+                            </div>
+                            <div className="p-6 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                <div className="text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Locations</div>
+                                <div className="text-4xl font-heading font-black text-amber">{(locations.length > 0 ? Math.max(...locations.map((l: any) => 0)) : 0) || 0}</div>
+                            </div>
+                            <div className="p-6 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                <div className="text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Quality Index</div>
+                                <div className="text-4xl font-heading font-black text-cream">--</div>
                             </div>
                         </div>
-                    )}
 
-                    {/* TAB 2: DATASETS REGISTRY */}
-                    {activeTab === "datasets" && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                            {/* Create Dataset Form */}
-                            <div className="lg:col-span-1 space-y-6">
-                                <h2 className="text-lg font-black uppercase tracking-widest text-slate-300">
-                                    Create Custom Dataset
-                                </h2>
-                                <Form method="post" className="glass-panel p-6 rounded-2xl border border-white/10 space-y-4">
+                        {/* Quick actions */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="p-8 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 rounded-sm bg-teal/20 border border-teal/30 flex items-center justify-center text-xl">🎯</div>
+                                    <div>
+                                        <h3 className="font-heading text-lg font-black text-cream">Launch Simulation</h3>
+                                        <p className="text-[10px] font-mono text-stone/50 uppercase tracking-widest">Create new training session</p>
+                                    </div>
+                                </div>
+                                {mapSets.length === 0 ? (
+                                    <fetcher.Form method="post">
+                                        <input type="hidden" name="intent" value="create_default_set" />
+                                        <button className="w-full py-4 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass font-mono text-sm font-bold uppercase tracking-widest transition-all">
+                                            Generate Master Collection
+                                        </button>
+                                    </fetcher.Form>
+                                ) : (
+                                    <Link to="?tab=simulation" onClick={() => switchTab("simulation")} className="block w-full py-4 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass font-mono text-sm font-bold uppercase tracking-widest text-center transition-all">
+                                        Select Collection →
+                                    </Link>
+                                )}
+                            </div>
+
+                            <div className="p-8 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 rounded-sm bg-brass/20 border border-brass/30 flex items-center justify-center text-xl">📍</div>
+                                    <div>
+                                        <h3 className="font-heading text-lg font-black text-cream">Deploy Location</h3>
+                                        <p className="text-[10px] font-mono text-stone/50 uppercase tracking-widest">Add new target coordinates</p>
+                                    </div>
+                                </div>
+                                <Link to="/admin/mass-add" className="block w-full py-4 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass font-mono text-sm font-bold uppercase tracking-widest text-center transition-all">
+                                    Open Deploy Panel →
+                                </Link>
+                            </div>
+                        </div>
+
+                        {/* Active rooms summary */}
+                        {activeRooms.length > 0 && (
+                            <div>
+                                <h2 className="font-heading text-xl font-black text-cream mb-4">Active Sessions</h2>
+                                <div className="space-y-3">
+                                    {activeRooms.slice(0, 3).map((room: any) => (
+                                        <div key={room.code} className="flex items-center justify-between p-4 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-3 h-3 rounded-full bg-teal animate-pulse" />
+                                                <div>
+                                                    <div className="font-mono text-lg font-black text-brass">{room.code}</div>
+                                                    <div className="text-[10px] font-mono text-stone/50">{room.map_set_name || "Unknown"}</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-[9px] font-mono text-teal uppercase tracking-widest">{room.status}</span>
+                                                <Link to={`/teacher/room/${room.code}`} className="px-4 py-2 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass text-[10px] font-mono uppercase tracking-widest transition-all">
+                                                    Control
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* SIMULATION TAB */}
+                {activeTab === "simulation" && (
+                    <div className="space-y-8">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="font-heading text-2xl font-black text-cream">Deploy Simulation</h2>
+                                <p className="text-[10px] font-mono text-stone/50 uppercase tracking-widest mt-1">Select a collection to launch</p>
+                            </div>
+                            {mapSets.length === 0 && (
+                                <fetcher.Form method="post">
+                                    <input type="hidden" name="intent" value="create_default_set" />
+                                    <button className="px-4 py-2 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass text-[10px] font-mono uppercase tracking-widest transition-all">
+                                        + Generate Master
+                                    </button>
+                                </fetcher.Form>
+                            )}
+                        </div>
+
+                        {mapSets.length === 0 ? (
+                            <div className="p-12 border border-dashed border-brass/20 rounded-sm text-center">
+                                <div className="text-4xl mb-4">📦</div>
+                                <p className="text-stone mb-4">No collections available</p>
+                                <fetcher.Form method="post">
+                                    <input type="hidden" name="intent" value="create_default_set" />
+                                    <button className="px-6 py-3 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass font-mono text-sm font-bold uppercase tracking-widest transition-all">
+                                        Create Master Collection
+                                    </button>
+                                </fetcher.Form>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {mapSets.map((set: any) => (
+                                    <div key={set.id} className="p-6 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <span className="px-2 py-1 bg-brass/10 border border-brass/20 text-brass text-[9px] font-mono uppercase tracking-widest">{set.item_count} targets</span>
+                                        </div>
+                                        <h3 className="font-heading text-xl font-black text-cream mb-2">{set.name}</h3>
+                                        <p className="text-sm text-stone-light mb-6 line-clamp-2">{set.description || "No description"}</p>
+
+                                        <Form method="post" className="space-y-4">
+                                            <input type="hidden" name="intent" value="create_room" />
+                                            <input type="hidden" name="setId" value={set.id} />
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-1">Timer (s)</label>
+                                                    <input type="number" name="timeLimit" defaultValue={120} min={30} max={600} className="w-full bg-[#0e1a14] border border-brass/10 px-3 py-2 text-cream text-sm font-mono focus:border-brass focus:outline-none" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-1">Hints (s)</label>
+                                                    <input type="number" name="hintInterval" defaultValue={30} min={10} max={120} className="w-full bg-[#0e1a14] border border-brass/10 px-3 py-2 text-cream text-sm font-mono focus:border-brass focus:outline-none" />
+                                                </div>
+                                            </div>
+
+                                            <select name="curriculumFocus" className="w-full bg-[#0e1a14] border border-brass/10 px-3 py-2 text-cream text-xs font-mono focus:border-brass focus:outline-none">
+                                                <option value="None">Default Rules</option>
+                                                <option value="Architecture">Architecture</option>
+                                                <option value="Transport">Transport</option>
+                                                <option value="History">History</option>
+                                                <option value="Environment">Environment</option>
+                                            </select>
+
+                                            <button type="submit" disabled={isSubmitting} className="w-full py-3 bg-brass text-charcoal font-mono text-sm font-black uppercase tracking-widest hover:bg-brass/90 transition-all">
+                                                Launch Mission
+                                            </button>
+                                        </Form>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Active rooms */}
+                        {activeRooms.length > 0 && (
+                            <div>
+                                <h3 className="font-heading text-lg font-black text-cream mb-4">Active Sessions</h3>
+                                <div className="space-y-3">
+                                    {activeRooms.map((room: any) => (
+                                        <div key={room.code} className="flex items-center justify-between p-4 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                            <div className="flex items-center gap-6">
+                                                <div className="w-3 h-3 rounded-full bg-teal animate-pulse" />
+                                                <div>
+                                                    <div className="font-mono text-2xl font-black text-brass">{room.code}</div>
+                                                    <div className="text-[10px] font-mono text-stone/50">{room.map_set_name}</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="px-2 py-1 bg-teal/10 border border-teal/20 text-teal text-[9px] font-mono uppercase">{room.status}</span>
+                                                <Link to={`/teacher/room/${room.code}`} className="px-4 py-2 bg-teal/10 hover:bg-teal/20 border border-teal/30 text-teal text-[10px] font-mono uppercase tracking-widest transition-all">
+                                                    Control
+                                                </Link>
+                                                <fetcher.Form method="post" className="contents">
+                                                    <input type="hidden" name="intent" value="delete_room" />
+                                                    <input type="hidden" name="code" value={room.code} />
+                                                    <button onClick={(e) => !confirm("End session?") && e.preventDefault()} className="px-3 py-2 bg-rust/10 hover:bg-rust/20 border border-rust/30 text-rust text-[10px] font-mono uppercase tracking-widest transition-all">
+                                                        End
+                                                    </button>
+                                                </fetcher.Form>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* DATASETS TAB */}
+                {activeTab === "datasets" && (
+                    <div className="space-y-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* Create form */}
+                            <div className="lg:col-span-1">
+                                <h2 className="font-heading text-xl font-black text-cream mb-4">New Collection</h2>
+                                <Form method="post" className="p-6 bg-[#0a1210] border border-brass/10 rounded-sm space-y-4">
                                     <input type="hidden" name="intent" value="create_set" />
                                     <div>
-                                        <label className="block text-xs uppercase font-bold text-slate-400 mb-1.5">
-                                            Dataset Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="name"
-                                            required
-                                            placeholder="e.g. Tuen Mun Architecture"
-                                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-blue-500 focus:outline-none placeholder-slate-600 font-bold"
-                                        />
+                                        <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Name</label>
+                                        <input type="text" name="name" required placeholder="e.g. Hong Kong Heritage" className="w-full bg-[#0e1a14] border border-brass/10 px-4 py-3 text-cream text-sm focus:border-brass focus:outline-none placeholder-stone/30" />
                                     </div>
                                     <div>
-                                        <label className="block text-xs uppercase font-bold text-slate-400 mb-1.5">
-                                            Detailed Description
-                                        </label>
-                                        <textarea
-                                            name="description"
-                                            rows={4}
-                                            placeholder="Provide notes on the learning intent, difficulty level, or regional mapping target."
-                                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-blue-500 focus:outline-none placeholder-slate-600 leading-relaxed"
-                                        />
+                                        <label className="block text-[9px] font-mono text-stone/50 uppercase tracking-widest mb-2">Description</label>
+                                        <textarea name="description" rows={3} placeholder="Learning objectives..." className="w-full bg-[#0e1a14] border border-brass/10 px-4 py-3 text-cream text-sm focus:border-brass focus:outline-none placeholder-stone/30 leading-relaxed" />
                                     </div>
-                                    <button
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                        className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 hover:shadow-[0_0_15px_rgba(37,99,235,0.4)]"
-                                    >
-                                        Establish Dataset Registry
+                                    <button type="submit" disabled={isSubmitting} className="w-full py-3 bg-brass text-charcoal font-mono text-sm font-black uppercase tracking-widest hover:bg-brass/90 transition-all">
+                                        Create Collection
                                     </button>
                                 </Form>
                             </div>
 
-                            {/* Dataset Grid List */}
-                            <div className="lg:col-span-2 space-y-6">
-                                <h2 className="text-lg font-black uppercase tracking-widest text-slate-300">
-                                    Active Collections
-                                </h2>
+                            {/* Collections list */}
+                            <div className="lg:col-span-2">
+                                <h2 className="font-heading text-xl font-black text-cream mb-4">Collections</h2>
                                 {mapSets.length === 0 ? (
-                                    <div className="p-8 rounded-3xl border border-dashed border-white/10 bg-white/5 text-center flex flex-col items-center justify-center h-64">
-                                        <p className="text-sm text-slate-400 font-bold">No Collections Established</p>
+                                    <div className="p-8 border border-dashed border-brass/20 rounded-sm text-center text-stone/50">
+                                        No collections created yet
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-3">
                                         {mapSets.map((set: any) => (
-                                            <div
-                                                key={set.id}
-                                                className="glass-card p-6 rounded-[2rem] border border-white/5 bg-gradient-to-br from-white/5 to-transparent hover:border-white/10 flex flex-col justify-between group transition-all duration-300"
-                                            >
-                                                <div>
-                                                    <div className="flex justify-between items-center mb-4">
-                                                        <span className="px-3 py-1 bg-blue-500/10 text-blue-300 text-[10px] font-bold uppercase rounded-full border border-blue-500/20">
-                                                            {set.item_count} locations
-                                                        </span>
-                                                        <span className="text-[10px] font-mono text-slate-500">
-                                                            ID: {set.id.slice(0, 8)}
-                                                        </span>
+                                            <div key={set.id} className="flex items-center justify-between p-4 bg-[#0a1210] border border-brass/10 rounded-sm">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-sm bg-brass/10 border border-brass/20 flex items-center justify-center font-mono text-brass text-lg">📦</div>
+                                                    <div>
+                                                        <h4 className="font-heading text-lg font-black text-cream">{set.name}</h4>
+                                                        <p className="text-[10px] font-mono text-stone/50">{set.item_count} locations</p>
                                                     </div>
-                                                    <h3 className="text-2xl font-black text-white mb-2 leading-tight group-hover:text-blue-400 transition-colors">
-                                                        {set.name}
-                                                    </h3>
-                                                    <p className="text-xs text-slate-400 leading-relaxed mb-6">
-                                                        {set.description || "No description provided."}
-                                                    </p>
                                                 </div>
-
-                                                <div className="flex gap-2 mt-auto">
-                                                    <Link
-                                                        to={`/admin/datasets/${set.id}`}
-                                                        className="flex-1 py-3 bg-white/10 hover:bg-white/20 border border-white/5 hover:border-white/10 rounded-xl text-xs font-bold uppercase tracking-widest text-center text-white transition-all duration-300"
-                                                    >
-                                                        Edit Details & Items
+                                                <div className="flex items-center gap-2">
+                                                    <Link to={`/admin/datasets/${set.id}`} className="px-4 py-2 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass text-[10px] font-mono uppercase tracking-widest transition-all">
+                                                        Edit
                                                     </Link>
                                                     <fetcher.Form method="post" className="contents">
                                                         <input type="hidden" name="intent" value="delete_set" />
                                                         <input type="hidden" name="id" value={set.id} />
-                                                        <button
-                                                            onClick={(e) =>
-                                                                !confirm("Decommission this collection? All locations mapped to this set will be unlinked.") && e.preventDefault()
-                                                            }
-                                                            className="px-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl transition-all duration-300"
-                                                            title="Delete Dataset"
-                                                        >
+                                                        <button onClick={(e) => !confirm("Delete collection?") && e.preventDefault()} className="px-3 py-2 bg-rust/10 hover:bg-rust/20 border border-rust/30 text-rust text-[10px] font-mono uppercase tracking-widest transition-all">
                                                             ✕
                                                         </button>
                                                     </fetcher.Form>
@@ -590,294 +484,93 @@ export default function TeacherDashboard() {
                                 )}
                             </div>
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {/* TAB 3: GEOLOCATION LOGISTICS */}
-                    {activeTab === "locations" && (
-                        <div className="space-y-8 animate-slide-in">
-                            {/* Toolbar Panel */}
-                            <div className="glass-panel p-6 rounded-3xl border border-white/10 bg-slate-900/60 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                                {/* Search Form */}
-                                <Form method="get" className="flex items-center gap-2 flex-grow max-w-lg">
-                                    <input type="hidden" name="tab" value="locations" />
-                                    <input
-                                        type="text"
-                                        name="search"
-                                        defaultValue={search}
-                                        placeholder="Search by ID, Lat, or Lng..."
-                                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:outline-none placeholder-slate-600"
-                                    />
-                                    <button
-                                        type="submit"
-                                        className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300"
-                                    >
-                                        Search
-                                    </button>
-                                    {search && (
-                                        <Link
-                                            to="?tab=locations"
-                                            className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold uppercase transition-all duration-300"
-                                        >
-                                            Clear
-                                        </Link>
-                                    )}
-                                </Form>
-
-                                {/* Export & Import Commands */}
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <a
-                                        href="/api/admin/export-locations"
-                                        download
-                                        className="px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300"
-                                    >
-                                        ⬇ Export CSV
-                                    </a>
-                                    <a
-                                        href="/api/admin/export-sessions"
-                                        download
-                                        className="px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300"
-                                    >
-                                        ⬇ Session CSV
-                                    </a>
-                                    <Link
-                                        to="/admin/mass-add"
-                                        className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300 shadow-md shadow-indigo-600/20"
-                                    >
-                                        📂 Bulk Import
-                                    </Link>
-                                    <Link
-                                        to="/admin/add-location"
-                                        className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 hover:scale-105 shadow-md shadow-emerald-600/20"
-                                    >
-                                        + Manual Deploy
-                                    </Link>
-                                </div>
-                            </div>
-
-                            {/* Locations Listing */}
-                            {locations.length === 0 ? (
-                                <div className="p-12 rounded-[2.5rem] border border-dashed border-white/10 bg-white/5 text-center flex flex-col items-center justify-center">
-                                    <p className="text-sm text-slate-400 font-bold mb-1">No Location Assets Deployed</p>
-                                    <p className="text-xs text-slate-500 max-w-sm">
-                                        Begin mapping regional structures by deploying a location manual asset or performing bulk uploads.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {locations.map((loc: any) => {
-                                        const isEditingThis = editingLocId === loc.id;
-                                        return (
-                                            <div
-                                                key={loc.id}
-                                                className="glass-card rounded-[2rem] overflow-hidden flex flex-col group relative border border-white/5 hover:border-blue-500/20 bg-gradient-to-b from-white/5 to-transparent hover:to-white/10 transition-all duration-500"
-                                            >
-                                                {/* Card Image */}
-                                                <div className="h-44 relative overflow-hidden">
-                                                    <img
-                                                        src={`/resources/image/${loc.id}`}
-                                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                                                        alt="Map Coordinate preview"
-                                                        loading="lazy"
-                                                    />
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                                                    <div className="absolute bottom-3 left-4 font-mono text-[10px] text-slate-400">
-                                                        ID: {loc.id.slice(0, 8)}...
-                                                    </div>
-                                                    <div className="absolute top-3 right-4 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md border border-white/10 bg-slate-950/60 text-indigo-300">
-                                                        Diff: {loc.difficulty_rating.toFixed(2)}
-                                                    </div>
-                                                </div>
-
-                                                {/* Content Panel */}
-                                                <div className="p-5 flex-grow flex flex-col justify-between space-y-4">
-                                                    {isEditingThis ? (
-                                                        <fetcher.Form
-                                                            method="post"
-                                                            onSubmit={() => setEditingLocId(null)}
-                                                            className="space-y-3"
-                                                        >
-                                                            <input type="hidden" name="intent" value="edit_location" />
-                                                            <input type="hidden" name="locId" value={loc.id} />
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                                <div>
-                                                                    <label className="block text-[8px] uppercase font-bold text-slate-400 mb-1">
-                                                                        Latitude
-                                                                    </label>
-                                                                    <input
-                                                                        type="text"
-                                                                        name="lat"
-                                                                        value={editLat}
-                                                                        onChange={(e) => setEditLat(e.target.value)}
-                                                                        className="w-full bg-slate-950 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-blue-500 focus:outline-none"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-[8px] uppercase font-bold text-slate-400 mb-1">
-                                                                        Longitude
-                                                                    </label>
-                                                                    <input
-                                                                        type="text"
-                                                                        name="lng"
-                                                                        value={editLng}
-                                                                        onChange={(e) => setEditLng(e.target.value)}
-                                                                        className="w-full bg-slate-950 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-blue-500 focus:outline-none"
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                                <div>
-                                                                    <label className="block text-[8px] uppercase font-bold text-slate-400 mb-1">
-                                                                        Difficulty
-                                                                    </label>
-                                                                    <input
-                                                                        type="number"
-                                                                        name="diff"
-                                                                        step="0.01"
-                                                                        min="1"
-                                                                        max="10"
-                                                                        value={editDiff}
-                                                                        onChange={(e) => setEditDiff(e.target.value)}
-                                                                        className="w-full bg-slate-950 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-blue-500 focus:outline-none"
-                                                                    />
-                                                                </div>
-                                                                <div>
-                                                                    <label className="block text-[8px] uppercase font-bold text-slate-400 mb-1">
-                                                                        Signal Quality
-                                                                    </label>
-                                                                    <input
-                                                                        type="number"
-                                                                        name="quality"
-                                                                        min="0"
-                                                                        max="100"
-                                                                        value={editQuality}
-                                                                        onChange={(e) => setEditQuality(e.target.value)}
-                                                                        className="w-full bg-slate-950 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-blue-500 focus:outline-none"
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex gap-1.5 pt-2">
-                                                                <button
-                                                                    type="submit"
-                                                                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[10px] font-bold uppercase text-white transition-colors border border-emerald-500/20"
-                                                                >
-                                                                    Save Changes
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setEditingLocId(null)}
-                                                                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-[10px] font-bold uppercase text-slate-300 transition-colors border border-white/5"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                            </div>
-                                                        </fetcher.Form>
-                                                    ) : (
-                                                        <>
-                                                            {/* Coords & Metrics grid */}
-                                                            <div className="grid grid-cols-2 gap-3">
-                                                                <div className="p-3 rounded-xl bg-slate-950/60 border border-white/5">
-                                                                    <p className="text-[8px] uppercase font-bold text-slate-500 mb-0.5">
-                                                                        Quality Score
-                                                                    </p>
-                                                                    <p className="text-lg font-black text-slate-100">
-                                                                        {loc.quality_score}%
-                                                                    </p>
-                                                                </div>
-                                                                <div className="p-3 rounded-xl bg-slate-950/60 border border-white/5">
-                                                                    <p className="text-[8px] uppercase font-bold text-slate-500 mb-0.5">
-                                                                        Coordinates
-                                                                    </p>
-                                                                    <p
-                                                                        className="text-[10px] font-mono text-slate-300 truncate"
-                                                                        title={`${loc.lat}, ${loc.lng}`}
-                                                                    >
-                                                                        {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Modification operations */}
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    onClick={() => startEditing(loc)}
-                                                                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-wider text-center text-white transition-colors"
-                                                                >
-                                                                    Modify
-                                                                </button>
-                                                                <fetcher.Form method="post" className="contents">
-                                                                    <input
-                                                                        type="hidden"
-                                                                        name="intent"
-                                                                        value="delete_location"
-                                                                    />
-                                                                    <input type="hidden" name="locId" value={loc.id} />
-                                                                    <button
-                                                                        onClick={(e) =>
-                                                                            !confirm(
-                                                                                "WARNING: Decommission this geolocation asset permanently?"
-                                                                            ) && e.preventDefault()
-                                                                        }
-                                                                        className="px-3 py-2.5 bg-red-500/10 hover:bg-red-500/25 border border-red-500/10 hover:border-red-500/20 text-red-400 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors"
-                                                                    >
-                                                                        Purge
-                                                                    </button>
-                                                                </fetcher.Form>
-                                                            </div>
-
-                                                            {/* Default Simulation Toggler */}
-                                                            <button
-                                                                onClick={() => {
-                                                                    const fd = new FormData();
-                                                                    fd.append("intent", "setDefaultSim");
-                                                                    fd.append("locId", loc.id);
-                                                                    fetcher.submit(fd, { method: "post" });
-                                                                }}
-                                                                className={`w-full py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border ${
-                                                                    loc.is_default_simulation
-                                                                        ? "bg-blue-600/90 border-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]"
-                                                                        : "bg-white/5 border-white/5 hover:bg-white/10 text-slate-300 hover:text-white"
-                                                                }`}
-                                                            >
-                                                                {loc.is_default_simulation
-                                                                    ? "★ Default Simulation Active"
-                                                                    : "Set as Default Sim"}
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {/* Pagination Controls */}
-                            {totalPages > 1 && (
-                                <div className="flex justify-center items-center gap-4 pt-6">
-                                    <Link
-                                        to={`?tab=locations&page=${Math.max(1, page - 1)}&search=${search}`}
-                                        className={`px-4 py-2.5 bg-slate-900 border border-white/10 rounded-xl text-xs font-bold hover:bg-slate-800 transition ${
-                                            page === 1 ? "opacity-40 pointer-events-none" : ""
-                                        }`}
-                                    >
-                                        Previous
-                                    </Link>
-                                    <span className="text-xs font-mono text-slate-500">
-                                        Page {page} of {totalPages}
-                                    </span>
-                                    <Link
-                                        to={`?tab=locations&page=${Math.min(totalPages, page + 1)}&search=${search}`}
-                                        className={`px-4 py-2.5 bg-slate-900 border border-white/10 rounded-xl text-xs font-bold hover:bg-slate-800 transition ${
-                                            page >= totalPages ? "opacity-40 pointer-events-none" : ""
-                                        }`}
-                                    >
-                                        Next
-                                    </Link>
-                                </div>
-                            )}
+                {/* LOCATIONS TAB */}
+                {activeTab === "locations" && (
+                    <div className="space-y-6">
+                        {/* Toolbar */}
+                        <div className="flex flex-wrap items-center gap-4">
+                            <Form method="get" className="flex items-center gap-2 flex-grow max-w-md">
+                                <input type="hidden" name="tab" value="locations" />
+                                <input type="text" name="search" defaultValue={search} placeholder="Search coordinates..." className="flex-grow bg-[#0a1210] border border-brass/10 px-4 py-2 text-cream text-sm font-mono focus:border-brass focus:outline-none placeholder-stone/30" />
+                                <button type="submit" className="px-4 py-2 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass text-[10px] font-mono uppercase tracking-widest transition-all">Search</button>
+                            </Form>
+                            {search && <Link to="?tab=locations" className="px-4 py-2 bg-rust/10 hover:bg-rust/20 border border-rust/30 text-rust text-[10px] font-mono uppercase tracking-widest transition-all">Clear</Link>}
+                            <div className="flex-1" />
+                            <a href="/api/admin/export-locations" download className="px-4 py-2 bg-[#0a1210] border border-brass/10 text-stone text-[10px] font-mono uppercase tracking-widest transition-all hover:border-brass/30">Export CSV</a>
+                            <Link to="/admin/mass-add" className="px-4 py-2 bg-[#0a1210] border border-brass/10 text-stone text-[10px] font-mono uppercase tracking-widest transition-all hover:border-brass/30">Bulk Import</Link>
+                            <Link to="/admin/add-location" className="px-5 py-2 bg-brass text-charcoal text-[10px] font-mono font-black uppercase tracking-widest transition-all hover:bg-brass/90">+ Deploy</Link>
                         </div>
-                    )}
-                </main>
+
+                        {/* Locations grid */}
+                        {locations.length === 0 ? (
+                            <div className="p-12 border border-dashed border-brass/20 rounded-sm text-center text-stone/50">
+                                No locations deployed yet
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {locations.map((loc: any) => {
+                                    const isEditingThis = editingLocId === loc.id;
+                                    return (
+                                        <div key={loc.id} className="bg-[#0a1210] border border-brass/10 rounded-sm overflow-hidden group">
+                                            <div className="h-32 relative overflow-hidden">
+                                                <img src={`/resources/image/${loc.id}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="" loading="lazy" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-[#0a1210] via-transparent to-transparent" />
+                                                <div className="absolute top-3 right-3 px-2 py-1 bg-[#0e1a14]/80 border border-brass/20 text-brass text-[9px] font-mono">{loc.difficulty_rating.toFixed(1)}</div>
+                                            </div>
+                                            <div className="p-4">
+                                                {isEditingThis ? (
+                                                    <fetcher.Form method="post" onSubmit={() => setEditingLocId(null)} className="space-y-3">
+                                                        <input type="hidden" name="intent" value="edit_location" />
+                                                        <input type="hidden" name="locId" value={loc.id} />
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <input type="text" name="lat" value={editLat} onChange={(e) => setEditLat(e.target.value)} placeholder="Lat" className="bg-[#0e1a14] border border-brass/10 px-2 py-1 text-cream text-xs font-mono" />
+                                                            <input type="text" name="lng" value={editLng} onChange={(e) => setEditLng(e.target.value)} placeholder="Lng" className="bg-[#0e1a14] border border-brass/10 px-2 py-1 text-cream text-xs font-mono" />
+                                                            <input type="text" name="diff" value={editDiff} onChange={(e) => setEditDiff(e.target.value)} placeholder="Diff" className="bg-[#0e1a14] border border-brass/10 px-2 py-1 text-cream text-xs font-mono" />
+                                                            <input type="text" name="quality" value={editQuality} onChange={(e) => setEditQuality(e.target.value)} placeholder="Quality" className="bg-[#0e1a14] border border-brass/10 px-2 py-1 text-cream text-xs font-mono" />
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button type="submit" className="flex-1 py-1.5 bg-teal/20 border border-teal/30 text-teal text-[10px] font-mono">Save</button>
+                                                            <button type="button" onClick={() => setEditingLocId(null)} className="flex-1 py-1.5 bg-stone/10 border border-stone/20 text-stone text-[10px] font-mono">Cancel</button>
+                                                        </div>
+                                                    </fetcher.Form>
+                                                ) : (
+                                                    <>
+                                                        <div className="grid grid-cols-2 gap-2 mb-3">
+                                                            <div className="text-[9px] font-mono text-stone/50 uppercase">Quality</div>
+                                                            <div className="text-lg font-heading font-black text-cream">{loc.quality_score}%</div>
+                                                            <div className="text-[9px] font-mono text-stone/50 uppercase">Coords</div>
+                                                            <div className="text-[10px] font-mono text-stone-light">{loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</div>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => startEditing(loc)} className="flex-1 py-2 bg-brass/10 hover:bg-brass/20 border border-brass/30 text-brass text-[10px] font-mono uppercase tracking-widest transition-all">Edit</button>
+                                                            <fetcher.Form method="post" className="contents">
+                                                                <input type="hidden" name="intent" value="delete_location" />
+                                                                <input type="hidden" name="locId" value={loc.id} />
+                                                                <button onClick={(e) => !confirm("Delete location?") && e.preventDefault()} className="px-3 py-2 bg-rust/10 hover:bg-rust/20 border border-rust/30 text-rust text-[10px] font-mono transition-all">✕</button>
+                                                            </fetcher.Form>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                            <div className="flex justify-center items-center gap-4 pt-4">
+                                <Link to={`?tab=locations&page=${Math.max(1, page - 1)}&search=${search}`} className={`px-4 py-2 bg-[#0a1210] border border-brass/10 text-stone text-[10px] font-mono uppercase tracking-widest transition-all ${page === 1 ? "opacity-30 pointer-events-none" : ""}`}>Prev</Link>
+                                <span className="text-[10px] font-mono text-stone/50">Page {page} / {totalPages}</span>
+                                <Link to={`?tab=locations&page=${Math.min(totalPages, page + 1)}&search=${search}`} className={`px-4 py-2 bg-[#0a1210] border border-brass/10 text-stone text-[10px] font-mono uppercase tracking-widest transition-all ${page >= totalPages ? "opacity-30 pointer-events-none" : ""}`}>Next</Link>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

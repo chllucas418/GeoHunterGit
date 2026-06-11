@@ -1459,11 +1459,11 @@ export default function StudentLiveGame() {
             <Compass showCompass={showCompass} location={location} mapInstance={mapInstance} />
 
             {/* Logout Button */}
-            < div className="absolute top-4 left-4 z-50" >
-                <Link to="/join" className="px-4 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500/50 backdrop-blur-md rounded-lg text-red-400 text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
+            <div className="absolute top-4 left-4 z-50">
+                <Link to="/join" className="px-4 py-2 bg-rust/15 hover:bg-rust/30 border border-rust/40 backdrop-blur-md rounded-sm text-rust text-[10px] font-mono font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 flex items-center gap-2">
                     <span>⚠</span> ABORT MISSION
                 </Link>
-            </div >
+            </div>
 
             {/* WebSocket Connection Status Indicator */}
             <div className={`absolute top-4 right-4 z-50 ws-status ${
@@ -1492,37 +1492,37 @@ export default function StudentLiveGame() {
                         if (!focusedItem) return null;
 
                         return (
-                            <div className="absolute inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
-                                <div className="bg-slate-900 border-2 border-yellow-500 rounded-2xl max-w-2xl w-full p-8 shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col md:flex-row gap-8">
+                            <div className="absolute inset-0 z-[100] bg-[#0e1a14]/95 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
+                                <div className="bg-[#0e1a14] border-2 border-brass/50 rounded-sm max-w-2xl w-full p-8 shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col md:flex-row gap-8">
                                     {/* Scanline Effect */}
-                                    <div className="absolute inset-0 pointer-events-none rounded-2xl overflow-hidden opacity-20">
+                                    <div className="absolute inset-0 pointer-events-none rounded-sm overflow-hidden opacity-10">
                                         <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_50%)] bg-[length:100%_4px]" />
                                     </div>
 
                                     {/* Content */}
                                     <div className="flex-1">
-                                        <div className="text-yellow-400 text-xs font-black uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
-                                            <span className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                        <div className="text-brass text-xs font-black uppercase tracking-[0.2em] mb-2 flex items-center gap-2 font-mono">
+                                            <span className="w-2 h-2 bg-brass rounded-full animate-pulse" />
                                             Intel Revealed
                                         </div>
-                                        <h2 className="text-2xl md:text-4xl font-black text-white mb-6 uppercase tracking-tighter leading-none">
+                                        <h2 className="text-2xl md:text-4xl font-heading font-black text-cream mb-6 uppercase tracking-tighter leading-none">
                                             {focusedItem.description}
                                         </h2>
 
-                                        <div className="bg-white/5 border border-white/10 rounded-xl p-6 relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
-                                            <h3 className="text-blue-300 text-[10px] font-bold uppercase tracking-widest mb-3">AI Analysis</h3>
-                                            <p className="text-slate-300 text-sm md:text-base leading-relaxed font-medium">
+                                        <div className="bg-[#1a1a18]/60 border border-brass/20 rounded-sm p-6 relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-brass" />
+                                            <h3 className="text-teal text-[10px] font-bold uppercase tracking-widest mb-3 font-mono">Analysis</h3>
+                                            <p className="text-stone-light text-sm md:text-base leading-relaxed font-body">
                                                 {focusedItem.ai_analysis && focusedItem.ai_analysis !== "Real-time analysis active." ? focusedItem.ai_analysis : "No analysis data available."}
                                             </p>
                                         </div>
                                     </div>
 
                                     {/* Minimap Loop? Or just decorative icon */}
-                                    <div className="w-full md:w-1/3 flex items-center justify-center border border-white/10 rounded-xl bg-black/40 p-4">
+                                    <div className="w-full md:w-1/3 flex items-center justify-center border border-brass/20 rounded-sm bg-[#1a1a18]/40 p-4">
                                         <div className="text-center">
                                             <div className="text-6xl mb-2">🔭</div>
-                                            <div className="text-[10px] text-slate-500 uppercase tracking-widest">Visual Verified</div>
+                                            <div className="text-[10px] text-stone uppercase tracking-widest">Visual Verified</div>
                                         </div>
                                     </div>
                                 </div>
@@ -1536,10 +1536,10 @@ export default function StudentLiveGame() {
             <ResultPanel result={result} layoutMode={layoutMode} room={room} currentRound={currentRound} evidenceList={evidenceList} />
 
             {isEmpBlackout && (
-                <div className="fixed inset-0 z-[9999] bg-black bg-opacity-95 pointer-events-none flex flex-col items-center justify-center animate-pulse backdrop-blur-3xl">
-                    <div className="text-red-500 font-mono text-4xl md:text-6xl font-black mb-2 animate-bounce uppercase tracking-tighter drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]">⚡ SYSTEM FAILURE ⚡</div>
-                    <div className="text-red-400 font-mono text-xl md:text-2xl tracking-widest text-center uppercase">Critical EMP Overload Detected</div>
-                    <div className="text-red-500/50 text-[10px] uppercase font-bold tracking-[0.5em] mt-8 opacity-50">NO SIGNAL DETECTED</div>
+                <div className="fixed inset-0 z-[9999] bg-[#0e1a14] bg-opacity-95 pointer-events-none flex flex-col items-center justify-center animate-pulse backdrop-blur-3xl">
+                    <div className="text-rust font-mono text-4xl md:text-6xl font-black mb-2 animate-bounce uppercase tracking-tighter drop-shadow-[0_0_20px_rgba(183,71,42,0.8)]">⚡ SYSTEM FAILURE ⚡</div>
+                    <div className="text-rust/80 font-mono text-xl md:text-2xl tracking-widest text-center uppercase">Critical EMP Overload Detected</div>
+                    <div className="text-rust/30 text-[10px] uppercase font-bold tracking-[0.5em] mt-8 opacity-50">NO SIGNAL DETECTED</div>
                 </div>
             )}
         </div >

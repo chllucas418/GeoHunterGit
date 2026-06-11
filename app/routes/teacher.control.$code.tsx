@@ -55,6 +55,8 @@ export default function TeacherControlPanel() {
 
     const [ws, setWs] = useState<WebSocket | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
+    const wsReconnectAttemptRef = useRef(0);
+    const [wsStatus, setWsStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
     const mapRef = useRef<HTMLDivElement>(null);
     const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
     const laserMarkerRef = useRef<google.maps.Marker | null>(null);
@@ -77,7 +79,10 @@ export default function TeacherControlPanel() {
         const connect = () => {
             if (typeof WebSocket === "undefined") return;
             socket = new WebSocket(wsUrl);
-            socket.onopen = () => console.log("Control WS Connected");
+            socket.onopen = () => {
+                setWsStatus('connected');
+                wsReconnectAttemptRef.current = 0;
+            };
 
             socket.onmessage = (event) => {
                 try {
@@ -106,8 +111,11 @@ export default function TeacherControlPanel() {
             };
 
             socket.onclose = () => {
-                console.log("Control WS Closed, reconnecting...");
-                reconnectTimer = setTimeout(connect, 3000);
+                setWsStatus('reconnecting');
+                // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+                const delay = Math.min(1000 * Math.pow(2, wsReconnectAttemptRef.current), 30000);
+                wsReconnectAttemptRef.current++;
+                reconnectTimer = setTimeout(connect, delay);
             };
 
             setWs(socket);
@@ -406,31 +414,40 @@ export default function TeacherControlPanel() {
     }, []);
 
     return (
-        <div className="h-[100dvh] w-screen bg-black flex flex-col font-sans overflow-hidden">
-            <header className="bg-slate-900 border-b border-white/10 p-4 flex justify-between items-center z-10">
+        <div className="h-[100dvh] w-screen bg-[#0e1a14] flex flex-col font-sans overflow-hidden">
+            <header className="bg-[#0e1a14] border-b border-brass/10 p-4 flex justify-between items-center z-10">
                 <div>
-                    <h1 className="text-xl font-black text-white uppercase tracking-wider">Mission Control Pad</h1>
-                    <p className="text-xs font-mono text-slate-400 mt-1">Room {code} • Laser & Broadcast Ink Live</p>
+                    <h1 className="text-xl font-heading font-black text-cream uppercase tracking-wider">Mission Control Pad</h1>
+                    <p className="text-xs font-mono text-stone mt-1">Room {code} • Laser & Broadcast Ink Live</p>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-4 items-center">
+                    {/* WebSocket Status Indicator */}
+                    <div className={`ws-status ${
+                        wsStatus === 'connected' ? 'ws-status-connected' :
+                        wsStatus === 'reconnecting' ? 'ws-status-reconnecting' :
+                        'ws-status-disconnected'
+                    }`}>
+                        <span className="ws-status-dot" />
+                        <span>{wsStatus === 'connected' ? 'LIVE' : wsStatus === 'reconnecting' ? 'SYNCING' : 'OFFLINE'}</span>
+                    </div>
                     <button
                         onClick={() => setDrawMode(!drawMode)}
-                        className={`px-6 py-2 border rounded font-bold uppercase tracking-widest transition-all ${drawMode
-                            ? 'bg-green-500/40 border-green-400 text-green-300'
-                            : 'bg-slate-700/40 border-slate-500 text-slate-300'
+                        className={`px-6 py-2 border rounded-sm font-mono font-bold uppercase tracking-widest transition-all ${drawMode
+                            ? 'bg-teal/30 border-teal text-teal'
+                            : 'bg-[#1a1a18]/60 border-brass/30 text-stone'
                             }`}
                     >
-                        {drawMode ? '✏️ Drawing ON' : '✏️ Draw Mode'}
+                        {drawMode ? '✏ Drawing ON' : '✏ Draw Mode'}
                     </button>
                     <button
                         onClick={clearDrawingBox}
-                        className="px-6 py-2 bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500 rounded text-yellow-400 font-bold uppercase tracking-widest transition-all"
+                        className="px-6 py-2 bg-amber/15 hover:bg-amber/30 border border-amber/40 rounded-sm text-amber font-mono font-bold uppercase tracking-widest transition-all"
                     >
                         Clear Ink
                     </button>
                     <button
                         onClick={togglePause}
-                        className="px-6 py-2 bg-red-500/20 hover:bg-red-500/40 border border-red-500 rounded text-red-400 font-bold uppercase tracking-widest transition-all"
+                        className="px-6 py-2 bg-rust/15 hover:bg-rust/30 border border-rust/40 rounded-sm text-rust font-mono font-bold uppercase tracking-widest transition-all"
                     >
                         Toggle Freeze Ray
                     </button>
@@ -441,10 +458,10 @@ export default function TeacherControlPanel() {
             <div className="flex-1 flex w-full relative">
 
                 {/* Visual Intel Output (Image view) */}
-                <div className="w-1/2 relative border-r border-white/10 bg-slate-950 flex flex-col">
-                    <div className="p-3 bg-slate-900 border-b border-white/5 text-xs font-mono text-slate-400 uppercase tracking-widest z-10 flex justify-between items-center">
+                <div className="w-1/2 relative border-r border-brass/10 bg-[#0a1210] flex flex-col">
+                    <div className="p-3 bg-[#0e1a14] border-b border-brass/5 text-[10px] font-mono text-stone uppercase tracking-widest z-10 flex justify-between items-center">
                         <span>Primary Target Intel</span>
-                        <span className="text-red-400 font-bold mix-blend-screen bg-black/50 px-2 py-1 rounded">
+                        <span className="text-rust font-bold mix-blend-screen bg-[#0e1a14]/50 px-2 py-1 rounded">
                             DRAW TO BROADCAST
                         </span>
                     </div>
@@ -471,24 +488,24 @@ export default function TeacherControlPanel() {
                                 />
                             </>
                         ) : (
-                            <div className="flex items-center justify-center h-full text-slate-600 font-mono">LOADING VISUAL DATA...</div>
+                            <div className="flex items-center justify-center h-full text-stone/40 font-mono">LOADING VISUAL DATA...</div>
                         )}
                     </div>
                 </div>
 
                 {/* Map Interface */}
-                <div className="w-1/2 relative bg-black flex flex-col">
-                    <div className="p-3 bg-slate-900 border-b border-white/5 text-xs font-mono text-slate-400 uppercase tracking-widest z-10 flex justify-between items-center">
+                <div className="w-1/2 relative bg-[#0a1210] flex flex-col">
+                    <div className="p-3 bg-[#0e1a14] border-b border-brass/5 text-[10px] font-mono text-stone uppercase tracking-widest z-10 flex justify-between items-center">
                         <span>Tactical Sat-Link</span>
-                        <span className="text-blue-400 animate-pulse">● LIVE</span>
+                        <span className="text-teal animate-pulse">● LIVE</span>
                     </div>
                     <div className="relative flex-1">
                         <div ref={mapRef} className="absolute inset-0 z-0" />
 
                         {/* DRAWING LAYER IS NOW HANDLED BY MAP INSTANCE */}
                     </div>
-                    <div className="absolute bottom-4 left-4 bg-black/80 backdrop-blur-md px-4 py-2 rounded shadow border border-white/10 text-[10px] font-mono pointer-events-none z-30">
-                        <span className="text-red-400 font-bold block mb-1">Toggle DRAW MODE</span> to draw on screen. Normal click fires Laser.
+                    <div className="absolute bottom-4 left-4 bg-[#0e1a14]/80 backdrop-blur-md px-4 py-2 rounded-sm shadow border border-brass/10 text-[10px] font-mono pointer-events-none z-30">
+                        <span className="text-brass font-bold block mb-1">Toggle DRAW MODE</span> to draw on screen. Normal click fires Laser.
                     </div>
                 </div>
             </div>
